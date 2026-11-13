@@ -63,7 +63,7 @@ fn startup_log(event: &str, detail: &str) {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or_default();
-    let safe_detail = detail.replace(['\\r', '\\n'], " ");
+    let safe_detail = detail.replace('\\r', " ").replace('\\n', " ");
 
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(file, "{timestamp} [{event}] {safe_detail}");
