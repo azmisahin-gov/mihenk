@@ -58,6 +58,8 @@ jobs:
             patchelf
       - name: Bağımlılıkları kilitli kur
         run: npm ci --no-audit --no-fund
+      - name: Kare uygulama simgelerini üret
+        run: npx tauri icon src-tauri/icons/mihenk.svg --output src-tauri/icons
       - name: Önizleme sürümünü ve imza anahtarlarını hazırla
         shell: bash
         run: |
