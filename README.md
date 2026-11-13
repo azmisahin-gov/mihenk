@@ -120,3 +120,14 @@ Tauri güncelleme imzası Windows Authenticode yayıncı sertifikasının veya U
 ### Test ve yayın güvenliği
 
 GitHub Actions PR aşamasında kilitli bağımlılıkları, ön yüz derlemesini ve Windows/Linux masaüstü başlatma kontrollerini yürütür. Bu kontroller kurulum paketinin yayımlandığını, otomatik güncellemenin çalıştığını veya uygulamanın bilirkişi iş akışı için hazır olduğunu kanıtlamaz. Gerçek dağıtım, kalıcı/şifreli çalışma kasası, yerel ASR ve uçtan uca kullanıcı testleri tamamlanmadan ürün hazır ilan edilmeyecektir.
+
+## Geliştirme ve yayın akışı
+
+- Varsayılan geliştirme dalı `main`'dir. Yeni işler `feat/*` veya `fix/*` gibi kısa ömürlü dallarda yapılır.
+- Değişiklikler PR ile `main` dalına gelir. PR doğrulaması birim testleri, TypeScript/üretim derlemesi ve Linux/Windows masaüstü derleme denetimlerini çalıştırır.
+- `main` güncellendiğinde geliştirme önizlemesi otomatik hazırlanır. Tek bir taslak GitHub Release kaydı kullanılır; Linux ve Windows paketleri ile imzaları aynı kayda yüklenir. Her iki yayın ikilisi açılış testini geçip gerekli dosyalar doğrulanmadan önizleme yayımlanmaz.
+- Kararlı sürüm, `vX.Y.Z` etiketiyle başlatılır. Paket sürümleri birbiriyle karşılaştırılır; Linux ve Windows kurulumları/imzaları ile yayın ikilisi açılış testleri tamamlanınca taslak Release yayımlanır.
+- Bir PR birleştirilince aynı depodaki çalışma dalı otomatik silinir. Eski dalların ilk temizliği de tamamlanmıştır.
+
+**Depo yönetişimi notu:** PR doğrulaması otomatik çalışır; ancak GitHub `main` dalında zorunlu durum denetimi kuralı henüz etkinleştirilmemiştir. Üretim disiplini için `main` dalına PR zorunluluğu ve üç CI denetiminin zorunlu olması repo ayarlarında ayrıca etkinleştirilmelidir.
+
