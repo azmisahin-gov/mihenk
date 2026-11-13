@@ -168,8 +168,8 @@ finally {
             }
 
             if (-not $pointsToTestInstall -and $entry.DisplayIcon) {
-                $iconPath = ($entry.DisplayIcon -replace '^"', '') -replace '",\d+
-, ''
+                $iconPath = $entry.DisplayIcon -replace ',[0-9]+$', ''
+                $iconPath = $iconPath.Trim('"')
                 $testAppPath = Join-Path $installDir "mihenk.exe"
                 $pointsToTestInstall = $iconPath.Equals($testAppPath, [System.StringComparison]::OrdinalIgnoreCase)
             }
@@ -185,3 +185,4 @@ finally {
         Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+
