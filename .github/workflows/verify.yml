@@ -59,10 +59,53 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            xvfb
       - name: Kilitli JavaScript bağımlılıklarını kur
         run: npm ci --no-audit --no-fund
       - name: Ön yüzü derle
         run: npm run build
       - name: Kilitli Tauri Rust bağımlılıklarını denetle
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+      - name: Masaüstü ikilisini derle
+        run: cargo build --locked --manifest-path src-tauri/Cargo.toml
+      - name: Linux sanal ekranda uygulamayı başlat
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a bash -lc '
+            ./src-tauri/target/debug/mihenk &
+            app_pid=$!
+            cleanup() {
+              kill "$app_pid" 2>/dev/null || true
+              wait "$app_pid" 2>/dev/null || true
+            }
+            trap cleanup EXIT
+            for attempt in $(seq 1 20); do
+              if ! kill -0 "$app_pid" 2>/dev/null; then
+                wait "$app_pid"
+                exit 1
+              fi
+              sleep 1
+            done
+            kill -0 "$app_pid"
+          '
+      - name: Windows uygulamasını başlatma denetimi
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $app = Join-Path $PWD "src-tauri/target/debug/mihenk.exe"
+          $process = Start-Process -FilePath $app -PassThru
+          try {
+            Start-Sleep -Seconds 10
+            $process.Refresh()
+            if ($process.HasExited) {
+              throw "MİHENK masaüstü süreci 10 saniyelik açılış kontrolü tamamlanmadan kapandı."
+            }
+          }
+          finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
