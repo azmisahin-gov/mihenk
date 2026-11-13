@@ -52,7 +52,7 @@ export function buildTranscriptText(record: AudioRecord): string {
         ? " [UZMAN KONTROLÜ]"
         : "";
     const content = segment.text.trim() || "[Metin girilmedi]";
-    lines.push(`[${formatTime(segment.startSeconds)}] ${segment.speaker}${status}: ${content}`);
+    lines.push(`[${formatTime(segment.startSeconds)}${segment.endSeconds === null ? "" : ` – ${formatTime(segment.endSeconds)}`}] ${segment.speaker}${status}: ${content}`);
   }
 
   return lines.join("\n") + "\n";
