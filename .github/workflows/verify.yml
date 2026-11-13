@@ -21,8 +21,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22.16.0"
-      - name: Bağımlılıkları kur
-        run: npm install --no-audit --no-fund
+      - name: Kilitli JavaScript bağımlılıklarını kur
+        run: npm ci --no-audit --no-fund
       - name: TypeScript denetimi
         run: npm run check
       - name: Üretim ön yüzünü derle
@@ -58,9 +58,9 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
-      - name: JavaScript bağımlılıklarını kur
-        run: npm install --no-audit --no-fund
+      - name: Kilitli JavaScript bağımlılıklarını kur
+        run: npm ci --no-audit --no-fund
       - name: Ön yüzü derle
         run: npm run build
-      - name: Tauri Rust kabuğunu denetle
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+      - name: Kilitli Tauri Rust bağımlılıklarını denetle
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
