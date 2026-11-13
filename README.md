@@ -67,3 +67,49 @@ Depo herkese açık olsa da kaynak kod için henüz açık kaynak lisansı veril
 ## Katkı ve dil
 
 README, issue, pull request başlık/açıklamaları ve commit mesajları Türkçe tutulur. Teknik tanımlayıcılar, standart kod isimleri ve kütüphane/API adları özgün biçimlerinde kalabilir.
+
+
+## Kurulum ve otomatik güncelleme
+
+### Kullanıcı indirmeleri
+
+Yayımlanan kurulum paketleri GitHub Releases bölümünde bulunur:
+
+- **Windows:** NSIS kurulum dosyası (.exe) ve MSI paketi.
+- **Pardus / Debian tabanlı Linux:** .deb paketi.
+- **Linux:** AppImage paketi.
+
+Kararlı sürümler: https://github.com/azmisahin-gov/mihenk/releases/latest
+
+Geliştirme önizlemeleri, ayrı bir önizleme (prerelease) kanalında yayımlanır. Önizleme sürümü kuran kullanıcılar yalnızca bu kanaldan güncelleme alır; kararlı sürüm kullanıcıları önizleme koduna otomatik geçirilmez.
+
+### Otomatik güncelleme güvenliği
+
+Güncellemeler Tauri imza doğrulamasıyla denetlenir. İmza doğrulanmadan bir güncelleme yüklenmez. Özel anahtar yalnızca GitHub Actions secret olarak tutulur; kaynak koduna, commit'e, artifact'e veya log'a eklenmez.
+
+Bir defalık depo yapılandırması:
+
+1. Yerel bilgisayarda `npm ci` çalıştırın.
+2. `npm run tauri signer generate -- -w ~/.tauri/mihenk.key` ile imza anahtarı üretin. Komutun gösterdiği **public key** değerini kaydedin.
+3. GitHub deposunda `Settings > Secrets and variables > Actions` bölümünde:
+   - Repository variable: `TAURI_UPDATER_PUBLIC_KEY` = komutun ürettiği public key.
+   - Repository secret: `TAURI_SIGNING_PRIVATE_KEY` = `~/.tauri/mihenk.key` dosyasının içeriği.
+   - Anahtar parola ile üretildiyse repository secret: `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = anahtar parolası.
+4. Özel anahtarın şifreli çevrimdışı yedeğini güvenli bir yerde saklayın. Bu anahtar kaybolursa mevcut kurulumlara imzalı güncelleme yayımlanamaz.
+
+GitHub CLI kullanıyorsanız public key ve private key değerlerini sırasıyla `gh variable set TAURI_UPDATER_PUBLIC_KEY` ve `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/mihenk.key` komutlarıyla ekleyebilirsiniz. **Private key'i issue, PR, sohbet veya dosya eki olarak paylaşmayın.**
+
+Anahtarlar ayarlanmadan sürüm iş akışları bilerek durur; imzasız güncelleme yayımlamaz.
+
+### Yayın akışı
+
+- `main` dalına birleştirilen her değişiklik, imzalı önizleme sürümünü günceller.
+- `vX.Y.Z` biçiminde sürüm etiketi yayımlandığında kararlı kurulum paketleri ve güncelleme manifesti üretilir.
+- Kararlı sürüm etiketi oluşturmadan önce `package.json`, `src-tauri/tauri.conf.json` ve `src-tauri/Cargo.toml` sürüm numaraları eşitlenmelidir.
+- Güncelleme bildirimi uygulama açıldığında kontrol edilir. Kurulum kullanıcının açık onayıyla başlar ve bu prototipte bellekte ses kaydı bulunan oturumlarda etkinleştirilmez.
+
+**Platform sınırı:** Tauri'nin Linux otomatik güncelleme paketi AppImage içindir. .deb kullanıcıları yeni .deb paketini Releases sayfasından indirerek kurmalıdır. Windows kurulumları bu ilk aşamada Authenticode sertifikasıyla imzalı değildir; Windows SmartScreen uyarısı görülebilir. Bu, Tauri güncelleme imzasından ayrı bir Windows yayıncı imzasıdır.
+
+### Test ve yayın güvenliği
+
+GitHub Actions PR aşamasında kilitli bağımlılıkları ve Linux/Windows uygulama derlemesini denetler. Kararlı dağıtım ve önizleme sürümleri yalnızca güvenilir dal/etiket tetikleyicileriyle, gerekli imza anahtarları mevcutsa yayımlanır.
