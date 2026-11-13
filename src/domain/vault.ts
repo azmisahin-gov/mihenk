@@ -511,10 +511,26 @@ export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void>
   try {
     // Kısmi/önceki bir kurtarma kalıntısının üzerine asla yazma.
     for (const path of finalPaths) {
+      if (path === saltRelativePath()) continue;
       if (await exists(path, { baseDir: BaseDirectory.AppData })) {
         throw new Error("Kasa klasöründe mevcut dosya veya önceki geri yüklemeden kalıntı var. Üzerine yazılmadı.");
       }
     }
+
+    // Stronghold eklentisi boş kurulumda Argon2 salt dosyasını snapshot'tan
+    // önce oluşturmuş olabilir. Snapshot yoksa bu salt'a bağlı bir kasa verisi yoktur.
+    const existingSalt = await exists(saltRelativePath(), { baseDir: BaseDirectory.AppData });
+    if (existingSalt) {
+      await remove(saltRelativePath(), { baseDir: BaseDirectory.AppData });
+    }
+
+    if (await exists(MATERIALS_DIR, { baseDir: BaseDirectory.AppData })) {
+      const existingMaterials = await readDir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData });
+      if (existingMaterials.length > 0) {
+        throw new Error("Materyal klasörü boş değil; geri yükleme var olan dosyaların üzerine yazmayacak.");
+      }
+    }
+
     for (const path of stagingPaths) {
       if (await exists(path, { baseDir: BaseDirectory.AppData })) {
         throw new Error("Önceki geri yüklemeden kalan geçici dosya var. Elle inceleme gerekiyor.");
