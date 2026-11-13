@@ -74,6 +74,8 @@ jobs:
             xvfb
       - name: Kilitli JavaScript bağımlılıklarını kur
         run: npm ci --no-audit --no-fund
+      - name: Kare uygulama simgelerini üret
+        run: npx tauri icon src-tauri/icons/mihenk.svg --output src-tauri/icons
       - name: Ön yüzü derle
         run: npm run build
       - name: Kilitli Tauri Rust bağımlılıklarını denetle
