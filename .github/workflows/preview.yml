@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  yayinla:
+  paketle:
     name: ${{ matrix.platform }} önizleme paketleri
     runs-on: ${{ matrix.platform }}
     strategy:
@@ -115,8 +115,51 @@ jobs:
           tagName: preview
           releaseName: MİHENK Geliştirme Önizlemesi
           releaseBody: "main dalındaki en son geliştirme yapısıdır. Deneme içindir; kararlı sürüm değildir."
-          releaseDraft: false
+          releaseDraft: true
           prerelease: true
           generateReleaseNotes: true
           updaterJsonPreferNsis: true
           args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}
+
+
+  yayina-al:
+    name: Önizleme paketlerini doğrula ve yayımla
+    needs: paketle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+      - name: Tüm platform paketlerini doğrula ve önizlemeyi yayımla
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_VERSION="$(node -p "require('./package.json').version")"
+          PREVIEW_VERSION="${BASE_VERSION}-${GITHUB_RUN_NUMBER}"
+          RELEASE_ID="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[] | select(.tag_name == "preview" and .draft == true) | [.id, .created_at] | @tsv' | sort -k2,2 | tail -n1 | cut -f1)"
+          if [[ -z "$RELEASE_ID" ]]; then
+            echo "Birleştirilecek taslak preview sürümü bulunamadı." >&2
+            exit 1
+          fi
+
+          ASSETS="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets" --jq '.[].name')"
+          REQUIRED_ASSETS=(
+            "MIHENK_${PREVIEW_VERSION}_amd64.AppImage"
+            "MIHENK_${PREVIEW_VERSION}_amd64.AppImage.sig"
+            "MIHENK_${PREVIEW_VERSION}_amd64.deb"
+            "MIHENK_${PREVIEW_VERSION}_amd64.deb.sig"
+            "MIHENK_${PREVIEW_VERSION}_x64-setup.exe"
+            "MIHENK_${PREVIEW_VERSION}_x64-setup.exe.sig"
+            "MIHENK_${PREVIEW_VERSION}_x64_tr-TR.msi"
+            "MIHENK_${PREVIEW_VERSION}_x64_tr-TR.msi.sig"
+            "latest.json"
+          )
+          for asset in "${REQUIRED_ASSETS[@]}"; do
+            if ! grep -Fqx "$asset" <<< "$ASSETS"; then
+              echo "Önizleme yayımlanmadı; gerekli dosya eksik: $asset" >&2
+              exit 1
+            fi
+          done
+
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F draft=false -F prerelease=true
