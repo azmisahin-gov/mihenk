@@ -303,7 +303,7 @@ export default function App() {
       setNotice(creating ? "Şifreli yerel kasa oluşturuldu." : "Yerel kasa açıldı.");
     } catch (error) {
       await lockLocalVault().catch(() => undefined);
-      const actualState = await getVaultState().catch(() => creating ? "not-created" : "locked");
+      const actualState = await getVaultState().catch(() => (creating ? "not-created" : "locked") as VaultState);
       setVaultState(actualState);
       setVaultError(error instanceof Error ? error.message : "Yerel kasa açılamadı.");
     } finally {
@@ -330,7 +330,7 @@ export default function App() {
       setVaultState("locked");
       setNotice("Yerel kasa kilitlendi.");
     } catch (error) {
-      const actualState = await getVaultState().catch(() => "locked");
+      const actualState = await getVaultState().catch(() => "locked" as VaultState);
       setVaultState(actualState);
       setVaultError(error instanceof Error ? error.message : "Kasa kilitlenemedi.");
       setNotice("Kasa kilitlenemedi; çalışma açık bırakıldı.");
@@ -671,7 +671,7 @@ export default function App() {
       const message = error instanceof Error ? error.message : "Güncelleme kurulamadı.";
       setUpdateError(message);
       setVaultError(message);
-      const actualState = await getVaultState().catch(() => "locked");
+      const actualState = await getVaultState().catch(() => "locked" as VaultState);
       setVaultState(actualState);
       setUpdateState("error");
     }
