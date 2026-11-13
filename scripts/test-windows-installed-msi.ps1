@@ -44,20 +44,50 @@ $entries = foreach ($root in $uninstallRoots) {
     }
 }
 $appEntries = @($entries | Where-Object { $_.DisplayName -and $_.DisplayName -like "*HENK*" })
+$programFilesRoots = @(
+    $env:ProgramFiles,
+    [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
+
+function Test-IsProgramFilesPath([string]$Path) {
+    if (-not $Path) { return $false }
+    foreach ($root in $programFilesRoots) {
+        $normalizedRoot = $root.TrimEnd('\') + '\'
+        if ($Path.StartsWith($normalizedRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
+}
 
 $appPath = $null
+$matchedEntry = $null
 foreach ($entry in $appEntries) {
+    $candidates = @()
     if ($entry.InstallLocation) {
-        $candidate = Join-Path $entry.InstallLocation "mihenk.exe"
-        if (Test-Path -LiteralPath $candidate) {
-            $appPath = $candidate
-            break
-        }
+        $candidates += (Join-Path $entry.InstallLocation "mihenk.exe")
     }
     if ($entry.DisplayIcon) {
         $iconPath = ($entry.DisplayIcon -replace '^"', '') -replace '",\d+$', ''
-        if (Test-Path -LiteralPath $iconPath -PathType Leaf) {
-            $appPath = $iconPath
+        $candidates += $iconPath
+    }
+
+    foreach ($candidate in $candidates) {
+        if ((Test-Path -LiteralPath $candidate -PathType Leaf) -and (Test-IsProgramFilesPath $candidate)) {
+            $appPath = $candidate
+            $matchedEntry = $entry
+            break
+        }
+    }
+    if ($appPath) { break }
+}
+
+if (-not $appPath) {
+    foreach ($root in $programFilesRoots) {
+        $candidate = Get-ChildItem -LiteralPath $root -Filter "mihenk.exe" -File -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($candidate) {
+            $appPath = $candidate.FullName
             break
         }
     }
