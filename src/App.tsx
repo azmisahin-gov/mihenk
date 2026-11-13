@@ -328,10 +328,6 @@ export default function App() {
     }
   }
 
-  async function updateDuration(recordId: string, duration: number): Promise<void> {
-    updateRecord(recordId, (record) => ({ ...record, durationSeconds: duration }));
-  }
-
   function updateRecord(recordId: string, update: (record: AudioRecord) => AudioRecord): void {
     setRecords((current) => current.map((record) => (
       record.id === recordId ? update(record) : record
