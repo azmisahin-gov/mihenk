@@ -500,7 +500,10 @@ export default function App() {
                         </div>
                         <textarea
                           value={segment.text}
-                          onChange={(event) => updateSegment(segment.id, (item) => ({ ...item, text: event.currentTarget.value }))}
+                          onChange={(event) => {
+                            const value = event.currentTarget.value;
+                            updateSegment(segment.id, (item) => ({ ...item, text: value }));
+                          }}
                           placeholder="Duyduğunuz ifadeyi buraya yazın…"
                           rows={3}
                           aria-label={`${formatTime(segment.startSeconds)} zamanındaki transkript`}
@@ -510,7 +513,10 @@ export default function App() {
                             <span>Konuşmacı</span>
                             <input
                               value={segment.speaker}
-                              onChange={(event) => updateSegment(segment.id, (item) => ({ ...item, speaker: event.currentTarget.value }))}
+                              onChange={(event) => {
+                                const value = event.currentTarget.value;
+                                updateSegment(segment.id, (item) => ({ ...item, speaker: value }));
+                              }}
                               aria-label="Anonim konuşmacı etiketi"
                             />
                           </label>
@@ -518,7 +524,10 @@ export default function App() {
                             <span>Durum</span>
                             <select
                               value={segment.status}
-                              onChange={(event) => updateSegment(segment.id, (item) => ({ ...item, status: event.currentTarget.value as SegmentStatus }))}
+                              onChange={(event) => {
+                                const value = event.currentTarget.value as SegmentStatus;
+                                updateSegment(segment.id, (item) => ({ ...item, status: value }));
+                              }}
                               aria-label="Bölümün kontrol durumu"
                             >
                               <option value="taslak">Taslak</option>
