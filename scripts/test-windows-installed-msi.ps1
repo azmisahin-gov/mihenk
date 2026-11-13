@@ -44,6 +44,10 @@ $entries = foreach ($root in $uninstallRoots) {
     }
 }
 $appEntries = @($entries | Where-Object { $_.DisplayName -and $_.DisplayName -like "*HENK*" })
+Write-Host ("Program Files ortam kökleri: ProgramFiles=" + $env:ProgramFiles + "; ProgramW6432=" + $env:ProgramW6432 + "; ProgramFiles(x86)=" + [Environment]::GetEnvironmentVariable('ProgramFiles(x86)'))
+foreach ($entry in $appEntries) {
+    Write-Host ("MSI kaldırma kaydı: DisplayName=" + $entry.DisplayName + "; InstallLocation=" + $entry.InstallLocation + "; DisplayIcon=" + $entry.DisplayIcon + "; UninstallString=" + $entry.UninstallString + "; RegistryKey=" + $entry.PSChildName)
+}
 $programFilesRoots = @(
     $env:ProgramFiles,
     [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
@@ -62,7 +66,29 @@ function Test-IsProgramFilesPath([string]$Path) {
 
 $appPath = $null
 $matchedEntry = $null
+
+# WiX records the resolved MSI install directory under HKCU. Prefer this
+# authoritative value over a recursive Program Files scan, but still enforce
+# the Program Files boundary before launching the application.
+$msiInstallState = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey("Software\mihenk\MİHENK")
+if ($msiInstallState) {
+    try {
+        $resolvedInstallDir = $msiInstallState.GetValue("InstallDir")
+        if ($resolvedInstallDir) {
+            $registryCandidate = Join-Path ([string]$resolvedInstallDir) "mihenk.exe"
+            Write-Host ("WiX MSI kayıtlı kurulum dizini: " + $resolvedInstallDir)
+            if ((Test-Path -LiteralPath $registryCandidate -PathType Leaf) -and (Test-IsProgramFilesPath $registryCandidate)) {
+                $appPath = $registryCandidate
+            }
+        }
+    }
+    finally {
+        $msiInstallState.Dispose()
+    }
+}
+
 foreach ($entry in $appEntries) {
+    if ($appPath) { break }
     $candidates = @()
     if ($entry.InstallLocation) {
         $candidates += (Join-Path $entry.InstallLocation "mihenk.exe")
