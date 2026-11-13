@@ -76,3 +76,11 @@ h2{font-size:2rem;letter-spacing:-.04em;margin:0 0 9px}
 .site-footer>div span{color:var(--muted);font-size:.76rem}
 @media(max-width:800px){.hero{grid-template-columns:1fr;gap:30px;padding:58px 0 65px}.download-grid{grid-template-columns:1fr}.download-card>p{min-height:0}.release-columns,.notice-grid{grid-template-columns:1fr}.section-heading{align-items:start;flex-direction:column}.site-footer{align-items:start;flex-direction:column}.site-footer>div{gap:16px}}
 @media(max-width:520px){.site-header,main,.site-footer{width:min(100% - 32px,1120px)}.site-header{height:auto;min-height:76px;align-items:start;padding:16px 0;gap:15px;flex-direction:column}nav{gap:17px;flex-wrap:wrap}nav a{font-size:.8rem}h1{font-size:2.8rem}.hero{padding-top:45px}.hero-card{padding:22px}.section{padding:48px 0}.site-footer>div{flex-direction:column;align-items:start}}
+
+.faq-section{border-top:1px solid var(--line)}
+.faq-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.faq-card{background:#fff;border:1px solid var(--line);border-radius:11px;padding:22px}
+.faq-card h3{font-size:.97rem;line-height:1.45;margin:0 0 10px}
+.faq-card p{font-size:.82rem;line-height:1.7;color:var(--muted);margin:0}
+.faq-card p strong{color:var(--green)}
+@media(max-width:800px){.faq-grid{grid-template-columns:1fr}}
