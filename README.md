@@ -74,9 +74,9 @@ README, issue, pull request başlık/açıklamaları ve commit mesajları Türk�
 
 ## Kurulum ve otomatik güncelleme
 
-> **Yayın durumu (13 Kasım 2026): Henüz indirilebilir kurulum paketi yayımlanmadı.** Bu PR dalında paketleme ve güncelleme iş akışları hazırlanmıştır; ancak PR henüz `main` dalına alınmamış ve GitHub Releases bölümünde bir sürüm oluşturulmamıştır. Bu nedenle aşağıdaki bağlantı ve paket biçimleri planlanan yayın hedefidir, mevcut indirme değildir.
+> **Yayın durumu (13 Kasım 2026):** İlk 56.12 masaüstü prototipi `main` dalındadır. İmzalı geliştirme önizlemesi için Windows ve Linux kurulum paketleri üretilmektedir; ilk paketler doğrulanıp GitHub Releases bölümüne eklenmeden indirme bağlantısı kullanıma açılmış sayılmaz. Bu sürüm yalnızca sentetik/açık test verisi içindir.
 
-### Planlanan kullanıcı indirmeleri
+### Hedeflenen kullanıcı indirmeleri
 
 - **Windows:** NSIS kurulum dosyası (.exe) ve MSI paketi.
 - **Pardus / Debian tabanlı Linux:** .deb paketi.
