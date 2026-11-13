@@ -90,7 +90,7 @@ Güncellemeler Tauri imza doğrulamasıyla denetlenir. İmza doğrulanmadan bir 
 Bir defalık depo yapılandırması:
 
 1. Yerel bilgisayarda `npm ci` çalıştırın.
-2. `npm run tauri signer generate -- -w ~/.tauri/mihenk.key` ile imza anahtarı üretin. Komutun gösterdiği **public key** değerini kaydedin.
+2. `npx tauri signer generate -w ~/.tauri/mihenk.key` ile imza anahtarı üretin. Komutun gösterdiği **public key** değerini kaydedin.
 3. GitHub deposunda `Settings > Secrets and variables > Actions` bölümünde:
    - Repository variable: `TAURI_UPDATER_PUBLIC_KEY` = komutun ürettiği public key.
    - Repository secret: `TAURI_SIGNING_PRIVATE_KEY` = `~/.tauri/mihenk.key` dosyasının içeriği.
