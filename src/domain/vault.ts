@@ -245,9 +245,9 @@ export async function unlockLocalVault(password: string): Promise<void> {
 export async function lockLocalVault(): Promise<void> {
   if (!activeStronghold) return;
   const stronghold = activeStronghold;
+  await stronghold.unload();
   activeStronghold = null;
   activeStore = null;
-  await stronghold.unload();
 }
 
 export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
