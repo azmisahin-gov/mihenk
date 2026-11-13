@@ -62,6 +62,7 @@ jobs:
             "scripts/test-windows-installed-msi.ps1",
             "scripts/test-windows-installed-nsis.ps1",
             "scripts/test-windows-release-binary.ps1",
+            "scripts/test-windows-loader-baseline.ps1",
             "scripts/inspect-windows-pe-dependencies.ps1",
             "scripts/prepare-webview2-runtime-windows.ps1"
           )
