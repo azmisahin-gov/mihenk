@@ -113,6 +113,7 @@ fn show_startup_error() {
 fn main() {
     std::panic::set_hook(Box::new(|panic| {
         startup_log("panic", &panic.to_string());
+        show_startup_error();
     }));
 
     let builder = tauri::Builder::default()
