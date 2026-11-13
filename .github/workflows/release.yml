@@ -105,6 +105,10 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Rust kur
         uses: dtolnay/rust-toolchain@stable
+      - name: Windows için libsodium arşivini doğrulayarak hazırla
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/prepare-libsodium-windows.ps1
       - name: Linux paket bağımlılıklarını kur
         if: runner.os == 'Linux'
         run: |
