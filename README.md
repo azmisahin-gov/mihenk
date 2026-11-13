@@ -12,8 +12,10 @@ MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürüt
 
 - Birden fazla ses dosyasını belleğe alma ve listeleme.
 - HTML5 destekli yerel ses oynatma.
-- Oynatma konumunda transkript bölümü ekleme.
-- Metin, zaman ve anonim konuşmacı etiketini elle düzenleme.
+- Oynatma konumunda zaman kodlu transkript bölümü ekleme.
+- Metin, başlangıç/bitiş zamanı, nötr konuşmacı etiketi ve kontrol durumunu elle düzenleme.
+- İşaretlenmiş bir transkript aralığını tekrar tekrar dinleme.
+- Space oynat/duraklat, sol/sağ ok 5 saniye sarma, Ctrl/⌘ + Enter bölüm ekleme kısayolları.
 - Düzenlenmiş taslağı TXT veya JSON olarak kullanıcının cihazına dışa aktarma.
 - Küçük dosyalarda tarayıcı içi SHA-256 ön kontrolü.
 
@@ -37,13 +39,14 @@ Gerekenler:
 Komutlar:
 
 ```bash
-npm install
+npm ci
 npm run tauri:dev
 ```
 
 Ön yüz denetimi ve derlemesi:
 
 ```bash
+npm test
 npm run check
 npm run build
 ```
@@ -85,21 +88,13 @@ Geliştirme önizlemesi ile kararlı sürüm ayrı kanallardır. Önizleme sür�
 
 ### Otomatik güncelleme güvenliği
 
-Yayın derlemesi Tauri imza doğrulamasını kullanacak şekilde yapılandırılmıştır. İmza doğrulanmadan güncelleme kurulmaz. Özel anahtar yalnızca GitHub Actions secret olarak tutulmalıdır; kaynak koduna, commit'e, artifact'e, issue/PR yorumuna veya log'a eklenmemelidir.
+Yayın derlemesi Tauri imza doğrulamasını kullanacak şekilde yapılandırılmıştır. İmza doğrulanmadan güncelleme kurulmaz.
 
-Bir defalık depo yapılandırması:
+**Bir defalık imza yapılandırması 13 Kasım 2026 tarihinde tamamlandı.** `TAURI_UPDATER_PUBLIC_KEY` GitHub repository variable ve `TAURI_SIGNING_PRIVATE_KEY` GitHub Actions secret olarak ayarlandı. Özel anahtar uygulama kaynak koduna veya yayın paketlerine eklenmez.
 
-1. Yerel bilgisayarda `npm ci` çalıştırın.
-2. `npx tauri signer generate -w ~/.tauri/mihenk.key` ile imza anahtarı üretin. Komutun gösterdiği **public key** değerini kaydedin.
-3. GitHub deposunda `Settings > Secrets and variables > Actions` bölümünde:
-   - Repository variable: `TAURI_UPDATER_PUBLIC_KEY` = komutun ürettiği public key.
-   - Repository secret: `TAURI_SIGNING_PRIVATE_KEY` = `~/.tauri/mihenk.key` dosyasının içeriği.
-   - Anahtar parola ile üretildiyse repository secret: `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = anahtar parolası.
-4. Özel anahtarın şifreli çevrimdışı yedeğini güvenli bir yerde saklayın. Anahtar kaybolursa aynı imza kimliğiyle mevcut kurulumlara güncelleme yayımlanamaz.
+Özel anahtarın yerel çevrimdışı kopyasını koruyun; bilgisayar hesabını ve diski şifreleyin, ayrıca güvenli çevrimdışı yedek alın. Anahtarı sohbet, issue, PR, dosya eki, commit veya log içinde paylaşmayın. Anahtar kaybolursa mevcut imza kimliğiyle güncelleme yayımlamak mümkün olmayabilir. Anahtarı yeniden üretmek veya değiştirmek mevcut kurulumların güncelleme zincirini etkileyebilir; gelişigüzel yenilemeyin.
 
-GitHub CLI kullanılıyorsa public key ve private key değerleri sırasıyla `gh variable set TAURI_UPDATER_PUBLIC_KEY` ve `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/mihenk.key` komutlarıyla eklenebilir. **Private key'i sohbet, issue, PR veya dosya eki olarak paylaşmayın.**
-
-İmza değişkenleri/secrets tanımlanmadan imzalı yayın iş akışı tamamlanamaz. Bu depo ayarlarının mevcut olup olmadığı henüz doğrulanmış değildir.
+Tauri güncelleme imzası Windows Authenticode yayıncı sertifikasının veya UYAP e-imza sertifikasının yerine geçmez.
 
 ### Yayın akışı
 
