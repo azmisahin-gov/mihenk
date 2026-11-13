@@ -74,7 +74,7 @@ README, issue, pull request başlık/açıklamaları ve commit mesajları Türk�
 
 ## Kurulum ve otomatik güncelleme
 
-> **Yayın durumu (13 Kasım 2026):** 56.12 masaüstü geliştirme prototipi `main` dalındadır. Windows ve Linux için imzalı geliştirme önizlemesi oluşturuluyor; GitHub Releases bölümünde doğrulanmış kurulum paketleri henüz yoktur. Paket bağlantıları ancak gerçek dosyalar yayımlandığında görünür. Bu sürüm yalnızca sentetik veya kullanım izni bulunan test verisi içindir.
+> **Yayın durumu (13 Kasım 2026):** İlk 56.12 masaüstü prototipi `main` dalındadır. İmzalı geliştirme önizlemesi için Windows ve Linux kurulum paketleri üretilmektedir; ilk paketler doğrulanıp GitHub Releases bölümüne eklenmeden indirme bağlantısı kullanıma açılmış sayılmaz. Bu sürüm yalnızca sentetik/açık test verisi içindir.
 
 ### Hedeflenen kullanıcı indirmeleri
 
