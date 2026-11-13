@@ -17,6 +17,10 @@
         "languages": [
           "Turkish"
         ]
+      },
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
       }
     }
   },
