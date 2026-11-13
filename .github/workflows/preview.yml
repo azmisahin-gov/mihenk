@@ -60,7 +60,7 @@ jobs:
         include:
           - platform: ubuntu-22.04
             bundles: "appimage,deb"
-          - platform: windows-latest
+          - platform: windows-2022
             bundles: "nsis,msi"
     steps:
       - name: Depoyu al
