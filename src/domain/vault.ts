@@ -9,6 +9,20 @@ import {
   rename,
 } from "@tauri-apps/plugin-fs";
 import { Stronghold } from "@tauri-apps/plugin-stronghold";
+import {
+  MAX_VAULT_AUDIO_BYTES,
+  VAULT_AUTH_TAG_BYTES,
+  VAULT_CHUNK_SIZE,
+  VAULT_FORMAT_VERSION,
+  buildVaultHeader,
+  createVaultFileKeyBytes,
+  createVaultNoncePrefix,
+  decryptVaultChunk,
+  encryptVaultChunk,
+  expectedVaultCiphertextSize,
+  importVaultFileKey,
+  verifyVaultHeader,
+} from "./vault-crypto";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
@@ -16,12 +30,6 @@ const SNAPSHOT_NAME = "secure.hold";
 const CLIENT_NAME = "mihenk-main";
 const STORE_META_KEY = "mihenk:vault:meta";
 const STORE_AUDIO_INDEX_KEY = "mihenk:vault:audio-index";
-const CHUNK_SIZE = 1024 * 1024;
-const MAX_VAULT_AUDIO_BYTES = 128 * 1024 * 1024;
-const HEADER_MAGIC = new TextEncoder().encode("MHKENC01");
-const HEADER_SIZE = 13;
-const FORMAT_VERSION = 1;
-const AUTH_TAG_BYTES = 16;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -33,7 +41,6 @@ interface StoreLike {
 }
 
 type StrongholdInstance = Awaited<ReturnType<typeof Stronghold.load>>;
-type StrongholdClient = Awaited<ReturnType<StrongholdInstance["createClient"]>>;
 
 export type VaultState = "not-created" | "locked" | "unlocked";
 
@@ -60,7 +67,6 @@ export interface VaultAudioMetadata {
 }
 
 let activeStronghold: StrongholdInstance | null = null;
-let activeClient: StrongholdClient | null = null;
 let activeStore: StoreLike | null = null;
 
 function requireStore(): StoreLike {
@@ -70,11 +76,20 @@ function requireStore(): StoreLike {
   return activeStore;
 }
 
+function requireStronghold(): StrongholdInstance {
+  if (!activeStronghold) throw new Error("Yerel kasa kilitli. Önce kasayı açın.");
+  return activeStronghold;
+}
+
 async function snapshotPath(): Promise<string> {
   return join(await appDataDir(), VAULT_DIR, SNAPSHOT_NAME);
 }
 
-async function encodeJson(value: unknown): Promise<number[]> {
+function snapshotRelativePath(): string {
+  return `${VAULT_DIR}/${SNAPSHOT_NAME}`;
+}
+
+function encodeJson(value: unknown): number[] {
   return Array.from(encoder.encode(JSON.stringify(value)));
 }
 
@@ -89,7 +104,7 @@ async function readJson<T>(store: StoreLike, key: string): Promise<T | null> {
 }
 
 async function writeJson(store: StoreLike, key: string, value: unknown): Promise<void> {
-  await store.insert(key, await encodeJson(value));
+  await store.insert(key, encodeJson(value));
 }
 
 function audioMetaKey(fileId: string): string {
@@ -104,101 +119,34 @@ function audioRelativePath(fileId: string, suffix: "part" | "mhn"): string {
   return `${MATERIALS_DIR}/${fileId}.${suffix}`;
 }
 
-function assertFileId(fileId: string): void {
-  if (!/^[a-f0-9]{32}$/i.test(fileId)) {
+export function assertVaultFileId(fileId: string): void {
+  if (!/^[a-f0-9]{32}$/.test(fileId)) {
     throw new Error("Materyal kimliği geçersiz.");
   }
 }
 
-function makeNonce(prefix: Uint8Array, index: number): Uint8Array {
-  if (prefix.byteLength !== 4 || !Number.isSafeInteger(index) || index < 0) {
-    throw new Error("Şifreleme nonce bilgisi geçersiz.");
+function validateMetadata(meta: VaultAudioMetadata): void {
+  assertVaultFileId(meta.fileId);
+  if (
+    meta.formatVersion !== VAULT_FORMAT_VERSION ||
+    !Number.isSafeInteger(meta.sizeBytes) ||
+    meta.sizeBytes <= 0 ||
+    meta.sizeBytes > MAX_VAULT_AUDIO_BYTES ||
+    meta.chunkSize !== VAULT_CHUNK_SIZE ||
+    meta.chunkCount !== Math.ceil(meta.sizeBytes / VAULT_CHUNK_SIZE) ||
+    meta.noncePrefix.length !== 4 ||
+    meta.noncePrefix.some((part) => !Number.isInteger(part) || part < 0 || part > 255) ||
+    typeof meta.fileName !== "string" ||
+    typeof meta.mediaType !== "string" ||
+    !Array.isArray(meta.segments)
+  ) {
+    throw new Error("Şifreli ses kaydının üst verisi geçersiz veya desteklenmiyor.");
   }
-  const nonce = new Uint8Array(12);
-  nonce.set(prefix, 0);
-  new DataView(nonce.buffer).setBigUint64(4, BigInt(index), false);
-  return nonce;
-}
-
-function makeAdditionalData(fileId: string, index: number, plainLength: number): Uint8Array {
-  return encoder.encode(`MİHENK-AUDIO-V1|${fileId}|${index}|${plainLength}`);
-}
-
-function buildHeader(): Uint8Array {
-  const header = new Uint8Array(HEADER_SIZE);
-  header.set(HEADER_MAGIC, 0);
-  header[8] = FORMAT_VERSION;
-  new DataView(header.buffer).setUint32(9, CHUNK_SIZE, true);
-  return header;
-}
-
-function verifyHeader(bytes: Uint8Array, meta: VaultAudioMetadata): void {
-  if (bytes.byteLength < HEADER_SIZE) throw new Error("Şifreli ses dosyası eksik.");
-  for (let i = 0; i < HEADER_MAGIC.length; i += 1) {
-    if (bytes[i] !== HEADER_MAGIC[i]) throw new Error("Şifreli ses dosyası biçimi tanınmadı.");
-  }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const version = bytes[8];
-  const chunkSize = view.getUint32(9, true);
-  if (version !== FORMAT_VERSION || chunkSize !== meta.chunkSize || chunkSize !== CHUNK_SIZE) {
-    throw new Error("Şifreli ses dosyasının sürümü veya blok boyutu desteklenmiyor.");
-  }
-}
-
-export function vaultChunkNonce(prefix: Uint8Array, index: number): Uint8Array {
-  return makeNonce(prefix, index);
-}
-
-export function vaultChunkAad(fileId: string, index: number, plainLength: number): Uint8Array {
-  assertFileId(fileId);
-  return makeAdditionalData(fileId, index, plainLength);
-}
-
-export async function encryptVaultChunk(
-  key: CryptoKey,
-  fileId: string,
-  noncePrefix: Uint8Array,
-  index: number,
-  plaintext: Uint8Array,
-): Promise<Uint8Array> {
-  const ciphertext = await crypto.subtle.encrypt(
-    {
-      name: "AES-GCM",
-      iv: makeNonce(noncePrefix, index),
-      additionalData: makeAdditionalData(fileId, index, plaintext.byteLength),
-      tagLength: 128,
-    },
-    key,
-    plaintext,
-  );
-  return new Uint8Array(ciphertext);
-}
-
-export async function decryptVaultChunk(
-  key: CryptoKey,
-  fileId: string,
-  noncePrefix: Uint8Array,
-  index: number,
-  plainLength: number,
-  ciphertext: Uint8Array,
-): Promise<Uint8Array> {
-  const plaintext = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: makeNonce(noncePrefix, index),
-      additionalData: makeAdditionalData(fileId, index, plainLength),
-      tagLength: 128,
-    },
-    key,
-    ciphertext,
-  );
-  const bytes = new Uint8Array(plaintext);
-  if (bytes.byteLength !== plainLength) throw new Error("Şifreli ses bloğunun boyutu doğrulanamadı.");
-  return bytes;
 }
 
 export async function getVaultState(): Promise<VaultState> {
-  const present = await exists(`${VAULT_DIR}/${SNAPSHOT_NAME}`, { baseDir: BaseDirectory.AppData });
+  if (activeStronghold) return "unlocked";
+  const present = await exists(snapshotRelativePath(), { baseDir: BaseDirectory.AppData });
   return present ? "locked" : "not-created";
 }
 
@@ -213,41 +161,49 @@ export async function createLocalVault(password: string): Promise<void> {
 
   await mkdir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
   const stronghold = await Stronghold.load(await snapshotPath(), password);
+  let initialized = false;
   try {
     const client = await stronghold.createClient(CLIENT_NAME);
-    const store = client.getStore();
+    const store = client.getStore() as StoreLike;
     await writeJson(store, STORE_META_KEY, {
-      formatVersion: FORMAT_VERSION,
+      formatVersion: VAULT_FORMAT_VERSION,
       createdAt: new Date().toISOString(),
       kdf: "Stronghold Argon2",
-      storage: "AES-256-GCM chunked audio",
+      audioCipher: "AES-256-GCM",
+      audioChunkBytes: VAULT_CHUNK_SIZE,
     });
     await writeJson(store, STORE_AUDIO_INDEX_KEY, [] as string[]);
     await stronghold.save();
     activeStronghold = stronghold;
-    activeClient = client;
     activeStore = store;
-  } catch (error) {
-    await stronghold.unload().catch(() => undefined);
-    throw error;
+    initialized = true;
+  } finally {
+    if (!initialized) {
+      await stronghold.unload().catch(() => undefined);
+      await remove(snapshotRelativePath(), { baseDir: BaseDirectory.AppData }).catch(() => undefined);
+    }
   }
 }
 
 export async function unlockLocalVault(password: string): Promise<void> {
   if (activeStronghold) return;
-  if (await getVaultState() !== "locked") throw new Error("Bu cihazda açılacak bir kasa bulunamadı.");
+  if (await getVaultState() !== "locked") {
+    throw new Error("Bu cihazda açılacak bir kasa bulunamadı.");
+  }
 
   const stronghold = await Stronghold.load(await snapshotPath(), password);
   try {
     const client = await stronghold.loadClient(CLIENT_NAME);
-    const store = client.getStore();
+    const store = client.getStore() as StoreLike;
     const metadata = await readJson<{ formatVersion: number }>(store, STORE_META_KEY);
-    if (!metadata || metadata.formatVersion !== FORMAT_VERSION) {
+    if (!metadata || metadata.formatVersion !== VAULT_FORMAT_VERSION) {
       throw new Error("Kasa sürümü tanınmıyor veya kasa doğrulanamadı.");
     }
-    await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
+    const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
+    if (!Array.isArray(ids)) throw new Error("Kasa materyal listesi bozuk.");
+    for (const fileId of ids) assertVaultFileId(fileId);
+
     activeStronghold = stronghold;
-    activeClient = client;
     activeStore = store;
   } catch {
     await stronghold.unload().catch(() => undefined);
@@ -259,32 +215,39 @@ export async function lockLocalVault(): Promise<void> {
   if (!activeStronghold) return;
   const stronghold = activeStronghold;
   activeStronghold = null;
-  activeClient = null;
   activeStore = null;
   await stronghold.unload();
 }
 
 export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
   const store = requireStore();
-  const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY) ?? [];
+  const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
+  if (!Array.isArray(ids)) throw new Error("Kasa materyal listesi bozuk.");
+
   const records: VaultAudioMetadata[] = [];
   for (const fileId of ids) {
-    assertFileId(fileId);
+    assertVaultFileId(fileId);
     const metadata = await readJson<VaultAudioMetadata>(store, audioMetaKey(fileId));
-    if (metadata) records.push(metadata);
+    if (!metadata) throw new Error("Kasa materyal listesinde kaydı bulunmayan dosya var.");
+    validateMetadata(metadata);
+    records.push(metadata);
   }
   return records;
 }
 
 export async function saveStoredAudioMetadata(metadata: VaultAudioMetadata): Promise<void> {
   const store = requireStore();
-  assertFileId(metadata.fileId);
+  validateMetadata(metadata);
+  if (!(await store.get(audioKeyKey(metadata.fileId)))) {
+    throw new Error("Ses dosyasının kasa anahtarı bulunamadı.");
+  }
   await writeJson(store, audioMetaKey(metadata.fileId), metadata);
-  await activeStronghold!.save();
+  await requireStronghold().save();
 }
 
 export async function importAudioToVault(file: File): Promise<VaultAudioMetadata> {
   const store = requireStore();
+  const stronghold = requireStronghold();
   if (file.size <= 0) throw new Error("Boş ses dosyası kasaya alınamaz.");
   if (file.size > MAX_VAULT_AUDIO_BYTES) {
     throw new Error("Bu önizlemede tek ses dosyası 128 MiB sınırını aşamaz.");
@@ -292,31 +255,36 @@ export async function importAudioToVault(file: File): Promise<VaultAudioMetadata
 
   await mkdir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
   const fileId = crypto.randomUUID().replaceAll("-", "").toLowerCase();
-  const noncePrefix = crypto.getRandomValues(new Uint8Array(4));
-  const rawKey = crypto.getRandomValues(new Uint8Array(32));
-  const key = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
-  const chunkCount = Math.ceil(file.size / CHUNK_SIZE);
+  const noncePrefix = createVaultNoncePrefix();
+  const rawKey = createVaultFileKeyBytes();
+  const chunkCount = Math.ceil(file.size / VAULT_CHUNK_SIZE);
   const partPath = audioRelativePath(fileId, "part");
   const finalPath = audioRelativePath(fileId, "mhn");
   let fileHandle: Awaited<ReturnType<typeof open>> | null = null;
   let renamed = false;
+  let metadataSaved = false;
 
   try {
+    const key = await importVaultFileKey(rawKey);
     fileHandle = await open(partPath, {
       write: true,
       create: true,
       truncate: true,
       baseDir: BaseDirectory.AppData,
     });
-    await fileHandle.write(buildHeader());
+    await fileHandle.write(buildVaultHeader());
 
     for (let index = 0; index < chunkCount; index += 1) {
-      const start = index * CHUNK_SIZE;
-      const end = Math.min(file.size, start + CHUNK_SIZE);
+      const start = index * VAULT_CHUNK_SIZE;
+      const end = Math.min(file.size, start + VAULT_CHUNK_SIZE);
       const plaintext = new Uint8Array(await file.slice(start, end).arrayBuffer());
-      const ciphertext = await encryptVaultChunk(key, fileId, noncePrefix, index, plaintext);
-      plaintext.fill(0);
-      await fileHandle.write(ciphertext);
+      try {
+        const ciphertext = await encryptVaultChunk(key, fileId, noncePrefix, index, plaintext);
+        await fileHandle.write(ciphertext);
+        ciphertext.fill(0);
+      } finally {
+        plaintext.fill(0);
+      }
     }
 
     await fileHandle.close();
@@ -333,68 +301,75 @@ export async function importAudioToVault(file: File): Promise<VaultAudioMetadata
       mediaType: file.type || "application/octet-stream",
       sizeBytes: file.size,
       lastModified: file.lastModified,
-      chunkSize: CHUNK_SIZE,
+      chunkSize: VAULT_CHUNK_SIZE,
       chunkCount,
       noncePrefix: Array.from(noncePrefix),
       durationSeconds: null,
       sha256Preview: null,
       segments: [],
-      formatVersion: FORMAT_VERSION,
+      formatVersion: VAULT_FORMAT_VERSION,
     };
 
     await store.insert(audioKeyKey(fileId), Array.from(rawKey));
     await writeJson(store, audioMetaKey(fileId), metadata);
-    const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY) ?? [];
+    const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
+    if (!Array.isArray(ids)) throw new Error("Kasa materyal listesi bozuk.");
     await writeJson(store, STORE_AUDIO_INDEX_KEY, [...ids, fileId]);
-    await activeStronghold!.save();
+    await stronghold.save();
+    metadataSaved = true;
     return metadata;
   } catch (error) {
     if (fileHandle) await fileHandle.close().catch(() => undefined);
+    await store.remove(audioKeyKey(fileId)).catch(() => undefined);
+    await store.remove(audioMetaKey(fileId)).catch(() => undefined);
+    const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY).catch(() => null);
+    if (Array.isArray(ids)) {
+      await writeJson(store, STORE_AUDIO_INDEX_KEY, ids.filter((id) => id !== fileId)).catch(() => undefined);
+      await stronghold.save().catch(() => undefined);
+    }
     if (renamed) {
       await remove(finalPath, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
     } else {
       await remove(partPath, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
     }
-    rawKey.fill(0);
     throw error;
   } finally {
     rawKey.fill(0);
+    noncePrefix.fill(0);
+    void metadataSaved;
   }
 }
 
 export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<File> {
   const store = requireStore();
-  assertFileId(metadata.fileId);
-  if (metadata.sizeBytes > MAX_VAULT_AUDIO_BYTES) {
-    throw new Error("Ses dosyası bu önizlemenin bellek sınırını aşıyor.");
-  }
+  validateMetadata(metadata);
   const rawKey = await store.get(audioKeyKey(metadata.fileId));
   if (!rawKey || rawKey.byteLength !== 32) {
+    rawKey?.fill(0);
     throw new Error("Ses dosyasının şifreleme anahtarı bulunamadı.");
   }
-  const fileBytes = await readFile(audioRelativePath(metadata.fileId, "mhn"), {
-    baseDir: BaseDirectory.AppData,
-  });
-  verifyHeader(fileBytes, metadata);
-  const expectedBytes = HEADER_SIZE + metadata.sizeBytes + metadata.chunkCount * AUTH_TAG_BYTES;
-  if (fileBytes.byteLength !== expectedBytes) {
-    rawKey.fill(0);
-    throw new Error("Şifreli ses dosyasının uzunluğu doğrulanamadı.");
-  }
 
+  let fileBytes: Uint8Array | null = null;
+  const plaintextChunks: Uint8Array[] = [];
   try {
-    const key = await crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM" }, false, ["decrypt"]);
-    const prefix = new Uint8Array(metadata.noncePrefix);
-    if (prefix.byteLength !== 4) throw new Error("Ses dosyasının nonce öneki bozuk.");
+    fileBytes = await readFile(audioRelativePath(metadata.fileId, "mhn"), {
+      baseDir: BaseDirectory.AppData,
+    });
+    verifyVaultHeader(fileBytes);
+    const expectedBytes = expectedVaultCiphertextSize(metadata.sizeBytes);
+    if (fileBytes.byteLength !== expectedBytes) {
+      throw new Error("Şifreli ses dosyasının uzunluğu doğrulanamadı.");
+    }
 
-    const chunks: Uint8Array[] = [];
-    let offset = HEADER_SIZE;
+    const key = await importVaultFileKey(rawKey);
+    const prefix = new Uint8Array(metadata.noncePrefix);
+    let offset = 13;
     for (let index = 0; index < metadata.chunkCount; index += 1) {
       const plainLength = Math.min(
-        metadata.chunkSize,
-        metadata.sizeBytes - index * metadata.chunkSize,
+        VAULT_CHUNK_SIZE,
+        metadata.sizeBytes - index * VAULT_CHUNK_SIZE,
       );
-      const cipherLength = plainLength + AUTH_TAG_BYTES;
+      const cipherLength = plainLength + VAULT_AUTH_TAG_BYTES;
       const ciphertext = fileBytes.slice(offset, offset + cipherLength);
       const plaintext = await decryptVaultChunk(
         key,
@@ -404,28 +379,36 @@ export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<Fil
         plainLength,
         ciphertext,
       );
-      chunks.push(plaintext);
+      plaintextChunks.push(plaintext);
+      ciphertext.fill(0);
       offset += cipherLength;
     }
-    return new File(chunks, metadata.fileName, {
+
+    return new File(plaintextChunks, metadata.fileName, {
       type: metadata.mediaType,
       lastModified: metadata.lastModified,
     });
   } catch {
-    throw new Error("Ses dosyasının şifreli blokları doğrulanamadı.");
+    throw new Error("Ses dosyasının şifreli blokları doğrulanamadı veya dosya bozuk.");
   } finally {
     rawKey.fill(0);
-    fileBytes.fill(0);
+    fileBytes?.fill(0);
+    for (const chunk of plaintextChunks) chunk.fill(0);
   }
 }
 
 export async function deleteStoredAudio(fileId: string): Promise<void> {
   const store = requireStore();
-  assertFileId(fileId);
-  const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY) ?? [];
+  const stronghold = requireStronghold();
+  assertVaultFileId(fileId);
+  const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
+  if (!Array.isArray(ids)) throw new Error("Kasa materyal listesi bozuk.");
+  if (!ids.includes(fileId)) return;
+
   await store.remove(audioKeyKey(fileId));
   await store.remove(audioMetaKey(fileId));
   await writeJson(store, STORE_AUDIO_INDEX_KEY, ids.filter((id) => id !== fileId));
-  await activeStronghold!.save();
+  await stronghold.save();
+  // Anahtar ve katalog kaydı kalıcı biçimde kaldırıldıktan sonra şifreli dosya temizlenir.
   await remove(audioRelativePath(fileId, "mhn"), { baseDir: BaseDirectory.AppData }).catch(() => undefined);
 }
