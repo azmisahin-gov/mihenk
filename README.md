@@ -108,7 +108,7 @@ Anahtarlar ayarlanmadan sürüm iş akışları bilerek durur; imzasız güncell
 - Kararlı sürüm etiketi oluşturmadan önce `package.json`, `src-tauri/tauri.conf.json` ve `src-tauri/Cargo.toml` sürüm numaraları eşitlenmelidir.
 - Güncelleme bildirimi uygulama açıldığında kontrol edilir. Kurulum kullanıcının açık onayıyla başlar ve bu prototipte bellekte ses kaydı bulunan oturumlarda etkinleştirilmez.
 
-**Platform sınırı:** Tauri'nin Linux otomatik güncelleme paketi AppImage içindir. .deb kullanıcıları yeni .deb paketini Releases sayfasından indirerek kurmalıdır. Windows kurulumları bu ilk aşamada Authenticode sertifikasıyla imzalı değildir; Windows SmartScreen uyarısı görülebilir. Bu, Tauri güncelleme imzasından ayrı bir Windows yayıncı imzasıdır.
+**Platform sınırı:** Kullanılan Tauri Updater 2.10 ve üzeri sürümler Linux'ta AppImage ve Debian `.deb`, Windows'ta NSIS ve MSI paketlerini güncelleyebilir. Debian güncellemesi sistem paket kurulumunu (`dpkg`) ve gerekli yönetici yetkisini isteyebilir. Windows kurulumları bu ilk aşamada Authenticode sertifikasıyla imzalı değildir; Windows SmartScreen uyarısı görülebilir. Bu, Tauri güncelleme imzasından ayrı bir Windows yayıncı imzasıdır.
 
 ### Test ve yayın güvenliği
 
