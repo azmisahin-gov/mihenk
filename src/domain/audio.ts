@@ -3,6 +3,7 @@ export type SegmentStatus = "taslak" | "belirsiz" | "uzman-onayli";
 export interface TranscriptSegment {
   id: string;
   startSeconds: number;
+  endSeconds: number | null;
   text: string;
   speaker: string;
   status: SegmentStatus;
@@ -59,6 +60,7 @@ export function createSegment(startSeconds: number): TranscriptSegment {
   return {
     id: crypto.randomUUID(),
     startSeconds: Math.max(0, startSeconds),
+    endSeconds: null,
     text: "",
     speaker: "Konuşmacı 1",
     status: "taslak",
