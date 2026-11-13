@@ -78,6 +78,13 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
+  // Güncellemeler uygulama açılışında kurulur; açık ses oturumu varsa bitene kadar bekler.
+  useEffect(() => {
+    if (updateState === "available" && availableUpdate && records.length === 0) {
+      void installAvailableUpdate();
+    }
+  }, [availableUpdate, updateState, records.length]);
+
   useEffect(() => () => {
     for (const record of recordsRef.current) {
       URL.revokeObjectURL(record.objectUrl);
@@ -340,18 +347,12 @@ export default function App() {
             <div>
               <strong>MİHENK {availableUpdate.version} güncellemesi hazır.</strong>
               <p>{availableUpdate.body || "Yeni sürüm indirilebilir."}</p>
-              {records.length > 0 && (
-                <small>Bu oturumda ses kayıtları var. Çalışmanız kaybolmasın diye güncelleme, kayıtlar kaldırılana kadar devre dışı.</small>
-              )}
+              <small>
+                {records.length > 0
+                  ? "Açık ses oturumu tamamlanınca güncelleme otomatik kurulacak."
+                  : "Güncelleme otomatik indirilecek ve uygulama yeniden başlatılacak."}
+              </small>
             </div>
-            <button
-              className="primary-button"
-              type="button"
-              disabled={records.length > 0}
-              onClick={() => void installAvailableUpdate()}
-            >
-              İndir ve yeniden başlat
-            </button>
           </div>
         )}
         {updateState === "installing" && (
