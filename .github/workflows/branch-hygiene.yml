@@ -39,6 +39,7 @@ jobs:
             "fix/preview-single-release-id"
             "fix/tauri-imza-bom-temizligi"
             "fix/yayin-surum-env"
+            "fix/retain-published-preview"
           )
 
           for branch in "${STALE_BRANCHES[@]}"; do
