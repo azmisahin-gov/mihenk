@@ -7,15 +7,21 @@ export const VAULT_HEADER_SIZE = 13;
 export const VAULT_AUTH_TAG_BYTES = 16;
 export const MAX_VAULT_AUDIO_BYTES = 128 * 1024 * 1024;
 
-export function createVaultNoncePrefix(): Uint8Array {
+function toOwnedArrayBuffer(source: Uint8Array): Uint8Array<ArrayBuffer> {
+  const copy = new Uint8Array(source.byteLength);
+  copy.set(source);
+  return copy;
+}
+
+export function createVaultNoncePrefix(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(4));
 }
 
-export function createVaultFileKeyBytes(): Uint8Array {
+export function createVaultFileKeyBytes(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(32));
 }
 
-export function vaultChunkNonce(prefix: Uint8Array, index: number): Uint8Array {
+export function vaultChunkNonce(prefix: Uint8Array, index: number): Uint8Array<ArrayBuffer> {
   if (prefix.byteLength !== 4 || !Number.isSafeInteger(index) || index < 0) {
     throw new Error("Şifreleme nonce bilgisi geçersiz.");
   }
@@ -25,7 +31,7 @@ export function vaultChunkNonce(prefix: Uint8Array, index: number): Uint8Array {
   return nonce;
 }
 
-export function vaultChunkAad(fileId: string, index: number, plainLength: number): Uint8Array {
+export function vaultChunkAad(fileId: string, index: number, plainLength: number): Uint8Array<ArrayBuffer> {
   if (!/^[a-f0-9]{32}$/i.test(fileId)) throw new Error("Materyal kimliği geçersiz.");
   if (
     !Number.isSafeInteger(index) || index < 0 ||
@@ -37,7 +43,7 @@ export function vaultChunkAad(fileId: string, index: number, plainLength: number
   return encoder.encode(`MİHENK-AUDIO-V${VAULT_FORMAT_VERSION}|${fileId}|${index}|${plainLength}`);
 }
 
-export function buildVaultHeader(): Uint8Array {
+export function buildVaultHeader(): Uint8Array<ArrayBuffer> {
   const header = new Uint8Array(VAULT_HEADER_SIZE);
   header.set(HEADER_MAGIC, 0);
   header[8] = VAULT_FORMAT_VERSION;
@@ -61,7 +67,12 @@ export function verifyVaultHeader(bytes: Uint8Array): void {
 
 export async function importVaultFileKey(rawKey: Uint8Array): Promise<CryptoKey> {
   if (rawKey.byteLength !== 32) throw new Error("Ses dosyasının anahtar boyutu geçersiz.");
-  return crypto.subtle.importKey("raw", rawKey, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  const keyBytes = toOwnedArrayBuffer(rawKey);
+  try {
+    return await crypto.subtle.importKey("raw", keyBytes, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  } finally {
+    keyBytes.fill(0);
+  }
 }
 
 export async function encryptVaultChunk(
@@ -70,18 +81,22 @@ export async function encryptVaultChunk(
   noncePrefix: Uint8Array,
   index: number,
   plaintext: Uint8Array,
-): Promise<Uint8Array> {
-  const encrypted = await crypto.subtle.encrypt(
-    {
-      name: "AES-GCM",
-      iv: vaultChunkNonce(noncePrefix, index),
-      additionalData: vaultChunkAad(fileId, index, plaintext.byteLength),
-      tagLength: 128,
-    },
-    key,
-    plaintext,
-  );
-  return new Uint8Array(encrypted);
+): Promise<Uint8Array<ArrayBuffer>> {
+  const iv = toOwnedArrayBuffer(vaultChunkNonce(noncePrefix, index));
+  const additionalData = toOwnedArrayBuffer(vaultChunkAad(fileId, index, plaintext.byteLength));
+  const plainBytes = toOwnedArrayBuffer(plaintext);
+  try {
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv, additionalData, tagLength: 128 },
+      key,
+      plainBytes,
+    );
+    return new Uint8Array(encrypted);
+  } finally {
+    iv.fill(0);
+    additionalData.fill(0);
+    plainBytes.fill(0);
+  }
 }
 
 export async function decryptVaultChunk(
@@ -91,17 +106,22 @@ export async function decryptVaultChunk(
   index: number,
   plainLength: number,
   ciphertext: Uint8Array,
-): Promise<Uint8Array> {
-  const decrypted = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: vaultChunkNonce(noncePrefix, index),
-      additionalData: vaultChunkAad(fileId, index, plainLength),
-      tagLength: 128,
-    },
-    key,
-    ciphertext,
-  );
+): Promise<Uint8Array<ArrayBuffer>> {
+  const iv = toOwnedArrayBuffer(vaultChunkNonce(noncePrefix, index));
+  const additionalData = toOwnedArrayBuffer(vaultChunkAad(fileId, index, plainLength));
+  const cipherBytes = toOwnedArrayBuffer(ciphertext);
+  let decrypted: ArrayBuffer;
+  try {
+    decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv, additionalData, tagLength: 128 },
+      key,
+      cipherBytes,
+    );
+  } finally {
+    iv.fill(0);
+    additionalData.fill(0);
+    cipherBytes.fill(0);
+  }
   const plaintext = new Uint8Array(decrypted);
   if (plaintext.byteLength !== plainLength) {
     plaintext.fill(0);

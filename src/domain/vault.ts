@@ -350,7 +350,7 @@ export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<Fil
   }
 
   let fileBytes: Uint8Array | null = null;
-  const plaintextChunks: Uint8Array[] = [];
+  const plaintextChunks: Uint8Array<ArrayBuffer>[] = [];
   try {
     fileBytes = await readFile(audioRelativePath(metadata.fileId, "mhn"), {
       baseDir: BaseDirectory.AppData,
