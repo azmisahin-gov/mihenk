@@ -4,9 +4,11 @@ import {
   exists,
   mkdir,
   open,
+  readDir,
   readFile,
   remove,
   rename,
+  writeFile,
 } from "@tauri-apps/plugin-fs";
 import { Stronghold } from "@tauri-apps/plugin-stronghold";
 import {
@@ -22,11 +24,18 @@ import {
   expectedVaultCiphertextSize,
   importVaultFileKey,
   verifyVaultHeader,
-} from "./vault-crypto";
+ } from "./vault-crypto";
+import {
+  buildVaultBackup,
+  parseVaultBackup,
+  MAX_VAULT_BACKUP_BYTES,
+  type VaultBackupEntry,
+} from "./vault-backup";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
 const SNAPSHOT_NAME = "secure.hold";
+const SALT_NAME = "stronghold.salt";
 const CLIENT_NAME = "mihenk-main";
 const STORE_META_KEY = "mihenk:vault:meta";
 const STORE_AUDIO_INDEX_KEY = "mihenk:vault:audio-index";
@@ -87,6 +96,26 @@ async function snapshotPath(): Promise<string> {
 
 function snapshotRelativePath(): string {
   return `${VAULT_DIR}/${SNAPSHOT_NAME}`;
+}
+
+function saltRelativePath(): string {
+  return `${VAULT_DIR}/${SALT_NAME}`;
+}
+
+function backupMaterialPath(fileName: string): string {
+  if (!/^[a-f0-9]{32}\\.mhn$/.test(fileName)) {
+    throw new Error("Kasada yedeklenmeye uygun olmayan bir materyal dosyası var.");
+  }
+  return `${MATERIALS_DIR}/${fileName}`;
+}
+
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  let difference = 0;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    difference |= left[index] ^ right[index];
+  }
+  return difference === 0;
 }
 
 function encodeJson(value: unknown): number[] {
@@ -409,4 +438,137 @@ export async function deleteStoredAudio(fileId: string): Promise<void> {
   await stronghold.save();
   // Anahtar ve katalog kaydı kalıcı biçimde kaldırıldıktan sonra şifreli dosya temizlenir.
   await remove(audioRelativePath(fileId, "mhn"), { baseDir: BaseDirectory.AppData }).catch(() => undefined);
+}
+
+/**
+ * Yedek paketi yalnızca şifreli Stronghold snapshot'ını, Argon2 salt dosyasını
+ * ve zaten AES-GCM ile şifrelenmiş materyal dosyalarını taşır.
+ * Dış paket gerçek dosya adı veya transkript metnini açığa çıkarmaz.
+ */
+export async function exportLocalVaultBackup(): Promise<Uint8Array<ArrayBuffer>> {
+  const stronghold = requireStronghold();
+  await stronghold.save();
+
+  const entries: VaultBackupEntry[] = [];
+  try {
+    const snapshot = await readFile(snapshotRelativePath(), { baseDir: BaseDirectory.AppData });
+    const salt = await readFile(saltRelativePath(), { baseDir: BaseDirectory.AppData });
+    if (salt.byteLength === 0) throw new Error("Stronghold Argon2 salt dosyası boş.");
+
+    entries.push({ path: snapshotRelativePath(), data: snapshot });
+    entries.push({ path: saltRelativePath(), data: salt });
+
+    const materialsExist = await exists(MATERIALS_DIR, { baseDir: BaseDirectory.AppData });
+    if (materialsExist) {
+      const children = await readDir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData });
+      for (const child of children) {
+        if (!child.isFile) {
+          throw new Error("Kasa materyal klasöründe beklenmeyen bir alt klasör var; yedek durduruldu.");
+        }
+        const path = backupMaterialPath(child.name);
+        const data = await readFile(path, { baseDir: BaseDirectory.AppData });
+        entries.push({ path, data });
+      }
+    }
+
+    return await buildVaultBackup(entries);
+  } finally {
+    for (const entry of entries) entry.data.fill(0);
+  }
+}
+
+/**
+ * Geri yükleme yalnızca boş bir kasa alanına yapılır. Snapshot en son taşınır;
+ * böylece snapshot görünür olmadan önce tüm materyal ve salt dosyaları yerleşmiş olur.
+ */
+export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void> {
+  if (activeStronghold) throw new Error("Geri yüklemeden önce açık kasayı kilitleyin.");
+  if (backup.byteLength > MAX_VAULT_BACKUP_BYTES) {
+    throw new Error("Şifreli yedek 512 MiB sınırını aşıyor.");
+  }
+  if (await getVaultState() !== "not-created") {
+    throw new Error("Geri yükleme yalnızca bu cihazda kasa yokken yapılabilir.");
+  }
+
+  const files = await parseVaultBackup(backup);
+  const snapshotData = files.get(snapshotRelativePath());
+  const saltData = files.get(saltRelativePath());
+  if (!snapshotData || !saltData || saltData.byteLength === 0) {
+    for (const data of files.values()) data.fill(0);
+    throw new Error("Yedekte kasa snapshot'ı veya Argon2 salt dosyası eksik.");
+  }
+
+  const materials = [...files.entries()].filter(([path]) => path.startsWith(`${MATERIALS_DIR}/`));
+  const finalPaths = [
+    snapshotRelativePath(),
+    saltRelativePath(),
+    ...materials.map(([path]) => path),
+  ];
+  const stagingPaths = finalPaths.map((path) => `${path}.restore.part`);
+  const committed: string[] = [];
+  let completed = false;
+
+  try {
+    // Kısmi/önceki bir kurtarma kalıntısının üzerine asla yazma.
+    for (const path of finalPaths) {
+      if (await exists(path, { baseDir: BaseDirectory.AppData })) {
+        throw new Error("Kasa klasöründe mevcut dosya veya önceki geri yüklemeden kalıntı var. Üzerine yazılmadı.");
+      }
+    }
+    for (const path of stagingPaths) {
+      if (await exists(path, { baseDir: BaseDirectory.AppData })) {
+        throw new Error("Önceki geri yüklemeden kalan geçici dosya var. Elle inceleme gerekiyor.");
+      }
+    }
+
+    await mkdir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
+
+    const orderedEntries: Array<[string, Uint8Array]> = [
+      ...materials,
+      [saltRelativePath(), saltData],
+      [snapshotRelativePath(), snapshotData],
+    ];
+    for (const [path, data] of orderedEntries) {
+      await writeFile(`${path}.restore.part`, data, { baseDir: BaseDirectory.AppData });
+      const written = await readFile(`${path}.restore.part`, { baseDir: BaseDirectory.AppData });
+      const valid = sameBytes(written, data);
+      written.fill(0);
+      if (!valid) throw new Error("Geri yüklenen geçici dosya diskte doğrulanamadı.");
+    }
+
+    // Materyal ve salt önce, Stronghold snapshot'ı son olarak görünür olur.
+    for (const [path] of materials) {
+      await rename(`${path}.restore.part`, path, {
+        oldPathBaseDir: BaseDirectory.AppData,
+        newPathBaseDir: BaseDirectory.AppData,
+      });
+      committed.push(path);
+    }
+    await rename(`${saltRelativePath()}.restore.part`, saltRelativePath(), {
+      oldPathBaseDir: BaseDirectory.AppData,
+      newPathBaseDir: BaseDirectory.AppData,
+    });
+    committed.push(saltRelativePath());
+
+    await rename(`${snapshotRelativePath()}.restore.part`, snapshotRelativePath(), {
+      oldPathBaseDir: BaseDirectory.AppData,
+      newPathBaseDir: BaseDirectory.AppData,
+    });
+    committed.push(snapshotRelativePath());
+    completed = true;
+  } catch (error) {
+    for (const path of stagingPaths) {
+      await remove(path, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
+    }
+    for (const path of committed.reverse()) {
+      await remove(path, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    for (const data of files.values()) data.fill(0);
+    if (!completed) {
+      // Geri yükleme yarıda kaldıysa boş kasayı tekrar deneyebilir hâle getir.
+      await remove(snapshotRelativePath(), { baseDir: BaseDirectory.AppData }).catch(() => undefined);
+    }
+  }
 }
