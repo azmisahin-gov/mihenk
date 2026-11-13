@@ -1,19 +1,10 @@
-name: Ön yüz doğrulaması
+name: MİHENK doğrulama
 
 on:
+  pull_request:
+    branches: ["main"]
   push:
-    branches: ["main", "feat/56-12-ses-calisma-alani", "feat/yerel-kasa-yedek-geri-yukle", "fix/onizleme-tek-yayin", "fix/preview-single-release-id"]
-    paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "tests/**"
-      - "package.json"
-      - "package-lock.json"
-      - "tsconfig.json"
-      - "vite.config.ts"
-      - ".github/workflows/verify.yml"
-      - ".github/workflows/preview.yml"
-      - ".github/workflows/release.yml"
+    branches: ["main"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
@@ -38,6 +29,8 @@ jobs:
         run: npm test
       - name: TypeScript denetimi
         run: npm run check
+      - name: İndirme sayfası JavaScript sözdizimini doğrula
+        run: node --check docs/site.js
       - name: Üretim ön yüzünü derle
         run: npm run build
 
@@ -57,6 +50,10 @@ jobs:
           node-version: "22.16.0"
       - name: Rust kur
         uses: dtolnay/rust-toolchain@stable
+      - name: Windows için libsodium arşivini doğrulayarak hazırla
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/prepare-libsodium-windows.ps1
       - name: Linux bağımlılıklarını kur
         if: runner.os == 'Linux'
         run: |

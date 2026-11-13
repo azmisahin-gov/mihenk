@@ -79,6 +79,10 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Rust kur
         uses: dtolnay/rust-toolchain@stable
+      - name: Windows için libsodium arşivini doğrulayarak hazırla
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/prepare-libsodium-windows.ps1
       - name: Linux paket bağımlılıklarını kur
         if: runner.os == 'Linux'
         run: |
@@ -93,7 +97,8 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            xvfb
       - name: Bağımlılıkları kilitli kur
         run: npm ci --no-audit --no-fund
       - name: Kare uygulama simgelerini üret
@@ -149,6 +154,84 @@ jobs:
           releaseId: ${{ needs.hazirla.outputs.release_id }}
           updaterJsonPreferNsis: true
           args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}
+
+      - name: Linux yayın ikilisinin açılışını doğrula
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="./src-tauri/target/release/mihenk"
+          if [[ ! -x "$APP" ]]; then
+            echo "Yayın ikilisi bulunamadı: $APP" >&2
+            exit 1
+          fi
+          STARTUP_LOG="${XDG_DATA_HOME:-$HOME/.local/share}/com.mihenk.desktop/logs/startup.log"
+          OUTPUT_LOG="$RUNNER_TEMP/mihenk-release-linux.log"
+          rm -f "$STARTUP_LOG"
+          xvfb-run -a bash -c '
+            set -euo pipefail
+            "$1" > "$2" 2>&1 &
+            app_pid=$!
+            cleanup() {
+              kill "$app_pid" 2>/dev/null || true
+              wait "$app_pid" 2>/dev/null || true
+            }
+            trap cleanup EXIT
+            for attempt in $(seq 1 20); do
+              if ! kill -0 "$app_pid" 2>/dev/null; then
+                wait "$app_pid" || true
+                exit 1
+              fi
+              sleep 1
+            done
+            kill -0 "$app_pid"
+          ' _ "$APP" "$OUTPUT_LOG" || {
+            cat "$OUTPUT_LOG" 2>/dev/null || true
+            cat "$STARTUP_LOG" 2>/dev/null || true
+            echo "Linux yayın ikilisi 20 saniye açık kalamadı." >&2
+            exit 1
+          }
+          echo "Linux yayın ikilisi 20 saniye açık kaldı."
+      - name: Windows yayın ikilisinin açılışını doğrula
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $app = Join-Path $PWD "src-tauri/target/release/mihenk.exe"
+          if (-not (Test-Path $app)) {
+            throw "Yayın ikilisi bulunamadı: $app"
+          }
+
+          $startupLog = Join-Path $env:LOCALAPPDATA "com.mihenk.desktop\logs\startup.log"
+          if (Test-Path $startupLog) {
+            Remove-Item $startupLog -Force
+          }
+          $webViewData = Join-Path $env:RUNNER_TEMP "mihenk-release-webview2"
+          New-Item -ItemType Directory -Force -Path $webViewData | Out-Null
+          $env:WEBVIEW2_USER_DATA_FOLDER = $webViewData
+          $stdout = Join-Path $env:RUNNER_TEMP "mihenk-release-stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "mihenk-release-stderr.log"
+
+          $process = Start-Process -FilePath $app -WorkingDirectory (Split-Path $app) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            for ($attempt = 1; $attempt -le 20; $attempt++) {
+              Start-Sleep -Seconds 1
+              $process.Refresh()
+              if ($process.HasExited) {
+                $outText = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+                $errText = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                $startupText = if (Test-Path $startupLog) { Get-Content $startupLog -Raw } else { "Başlangıç günlük dosyası oluşmadı." }
+                throw "Yayın ikilisi açıldıktan sonra kapandı. Çıkış kodu: $($process.ExitCode). stdout: $outText stderr: $errText başlangıç günlüğü: $startupText"
+              }
+            }
+
+            Write-Output "MİHENK yayın ikilisi 20 saniye açık kaldı. Başlangıç günlüğü: $startupLog"
+          }
+          finally {
+            $process.Refresh()
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
 
 
   yayina-al:

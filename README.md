@@ -59,6 +59,14 @@ Tauri geliştirme ortamı Linux'ta WebKitGTK 4.1 ve derleme bağımlılıkları 
 
 Tauri geliştirme ortamında Microsoft C++ Build Tools ve WebView2 gerekir.
 
+### Windows'ta uygulama açılmıyorsa
+
+Uygulama başlangıçta kapanırsa MİHENK artık yerel tanılama günlüğü yazar:
+
+`%LOCALAPPDATA%\\com.mihenk.desktop\\logs\\startup.log`
+
+Bu dosyayı açılış hatasının saatine göre kontrol edin. Hata bildirirken ses, transkript, kişi bilgisi veya UYAP belgesi paylaşmayın; yalnızca günlükteki teknik hata satırlarını ve uygulama sürümünü paylaşın. Günlük dosyası yerel kalır; kendiliğinden GitHub'a yüklenmez.
+
 ## Teknoloji adayı
 
 İlk masaüstü prototip, geçici olarak Tauri 2 + React + TypeScript + Vite kullanır. Bu seçim nihai platform mimarisi değildir; hedef cihaz, Windows/Pardus paketlemesi, kaynak tüketimi, güvenlik ve bakım denemelerinden sonra tekrar değerlendirilecektir.
@@ -74,15 +82,19 @@ README, issue, pull request başlık/açıklamaları ve commit mesajları Türk�
 
 ## Kurulum ve otomatik güncelleme
 
-> **Yayın durumu (13 Kasım 2026):** İlk 56.12 masaüstü prototipi `main` dalındadır. İmzalı geliştirme önizlemesi için Windows ve Linux kurulum paketleri üretilmektedir; ilk paketler doğrulanıp GitHub Releases bölümüne eklenmeden indirme bağlantısı kullanıma açılmış sayılmaz. Bu sürüm yalnızca sentetik/açık test verisi içindir.
+> **Yayın durumu (13 Kasım 2026):** `0.1.0-7` imzalı geliştirme önizlemesi GitHub Releases bölümünde yayımlanmıştır. Windows NSIS/EXE, Windows MSI, Linux AppImage ve Debian/ PARDUS DEB paketleri aynı önizleme kaydındadır. Henüz kararlı sürüm yoktur; indirme sayfası kararlı sürüm yayımlanana kadar önizleme paketlerini açıkça etiketleyerek gösterir. Bu sürüm yalnızca sentetik veya kullanım izni bulunan test verisi içindir.
 
 ### Hedeflenen kullanıcı indirmeleri
 
-- **Windows:** NSIS kurulum dosyası (.exe) ve MSI paketi.
+- **Windows Setup.exe (önerilen):** Varsayılan NSIS kurulumu yalnızca geçerli Windows kullanıcısına, `%LOCALAPPDATA%` altına yapılır; normalde yönetici izni istemez.
+- **Windows MSI:** WiX paketi varsayılan olarak Program Files içine bilgisayar geneli kurulum yapar ve yönetici izni gerektirir. EXE ve MSI alternatif kurulum biçimleridir; aynı bilgisayara ikisini birden kurmayın.
+- **Windows WebView2:** Kurulum paketleri çevrimdışı WebView2 Runtime yükleyicisini içerir. Bu, runtime'ın cihazda bulunmadığı ve internet erişiminin olmadığı ortamlarda da açılışı mümkün kılar; Windows kurulum dosyaları bu nedenle yaklaşık 127 MiB daha büyük olur.
 - **Pardus / Debian tabanlı Linux:** .deb paketi.
 - **Linux:** AppImage paketi.
 
-İlk paket yayımlandığında kararlı indirme adresi: https://github.com/azmisahin-gov/mihenk/releases/latest
+Sürüm ve indirme sayfası: https://azmisahin-gov.github.io/mihenk/  
+Tüm GitHub sürümleri: https://github.com/azmisahin-gov/mihenk/releases  
+Kararlı sürüm adresi (kararlı etiket yayımlandığında): https://github.com/azmisahin-gov/mihenk/releases/latest
 
 Geliştirme önizlemesi ile kararlı sürüm ayrı kanallardır. Önizleme sürümü kuran kullanıcılar yalnızca önizleme kanalından güncelleme alır; kararlı sürüm kullanıcıları önizleme koduna otomatik geçirilmez.
 
@@ -101,10 +113,21 @@ Tauri güncelleme imzası Windows Authenticode yayıncı sertifikasının veya U
 - `main` dalına birleştirilen değişiklikler, önizleme yayın iş akışını tetikler.
 - `vX.Y.Z` biçimindeki etiket kararlı sürüm paketlerini ve güncelleme manifestini üretir.
 - Yayından önce `package.json`, `src-tauri/tauri.conf.json` ve `src-tauri/Cargo.toml` sürümleri eşitlenir.
-- Uygulama açılışında güncelleme kontrolü yapılır; manifest imzası doğrulandıktan sonra yeni sürüm indirilip kurulabilir. Bu uçtan uca akış henüz yayımlanmış paket üzerinden test edilmemiştir.
+- Uygulama açılışında güncelleme kontrolü yapılır; manifest imzası doğrulandıktan sonra yeni sürüm indirilip kurulabilir. Güncelleme akışının gerçek kullanıcı cihazlarında ve her kurulum türünde uçtan uca kabul testi henüz tamamlanmamıştır.
 
 **Platform sınırı:** Tauri Updater Linux'ta AppImage ve Debian `.deb`, Windows'ta NSIS ve MSI paketlerini destekler. Debian güncellemesi sistem paket kurulumunu (`dpkg`) ve gerekli yönetici yetkisini isteyebilir. Windows kurulumları için Authenticode yayıncı sertifikası ayrıca gerekir; Tauri güncelleme imzası bunun yerine geçmez.
 
 ### Test ve yayın güvenliği
 
 GitHub Actions PR aşamasında kilitli bağımlılıkları, ön yüz derlemesini ve Windows/Linux masaüstü başlatma kontrollerini yürütür. Bu kontroller kurulum paketinin yayımlandığını, otomatik güncellemenin çalıştığını veya uygulamanın bilirkişi iş akışı için hazır olduğunu kanıtlamaz. Gerçek dağıtım, kalıcı/şifreli çalışma kasası, yerel ASR ve uçtan uca kullanıcı testleri tamamlanmadan ürün hazır ilan edilmeyecektir.
+
+## Geliştirme ve yayın akışı
+
+- Varsayılan geliştirme dalı `main`'dir. Yeni işler `feat/*` veya `fix/*` gibi kısa ömürlü dallarda yapılır.
+- Değişiklikler PR ile `main` dalına gelir. PR doğrulaması birim testleri, TypeScript/üretim derlemesi ve Linux/Windows masaüstü derleme denetimlerini çalıştırır.
+- `main` güncellendiğinde geliştirme önizlemesi otomatik hazırlanır. Tek bir taslak GitHub Release kaydı kullanılır; Linux ve Windows paketleri ile imzaları aynı kayda yüklenir. Her iki yayın ikilisi açılış testini geçip gerekli dosyalar doğrulanmadan önizleme yayımlanmaz.
+- Kararlı sürüm, `vX.Y.Z` etiketiyle başlatılır. Paket sürümleri birbiriyle karşılaştırılır; Linux ve Windows kurulumları/imzaları ile yayın ikilisi açılış testleri tamamlanınca taslak Release yayımlanır.
+- Bir PR birleştirilince aynı depodaki çalışma dalı otomatik silinir. Eski dalların ilk temizliği de tamamlanmıştır.
+
+**Depo yönetişimi notu:** PR doğrulaması otomatik çalışır; ancak GitHub `main` dalında zorunlu durum denetimi kuralı henüz etkinleştirilmemiştir. Üretim disiplini için `main` dalına PR zorunluluğu ve üç CI denetiminin zorunlu olması repo ayarlarında ayrıca etkinleştirilmelidir.
+
