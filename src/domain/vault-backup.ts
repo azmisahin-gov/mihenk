@@ -21,6 +21,10 @@ const SNAPSHOT_PATH = "mihenk-vault/secure.hold";
 const SALT_PATH = "mihenk-vault/stronghold.salt";
 const MATERIAL_PATH = /^mihenk-vault\/materials\/[a-f0-9]{32}\.mhn$/;
 
+export function isVaultMaterialFileName(fileName: string): boolean {
+  return /^[a-f0-9]{32}\\.mhn$/.test(fileName);
+}
+
 function isAllowedPath(path: string): boolean {
   return path === SNAPSHOT_PATH || path === SALT_PATH || MATERIAL_PATH.test(path);
 }
