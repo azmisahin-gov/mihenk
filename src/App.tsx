@@ -149,12 +149,19 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // Güncellemeler uygulama açılışında kurulur; açık ses oturumu varsa bitene kadar bekler.
+  // Güncellemeler ses çalarken veya şifreli dosya belleğe alınırken bekler.
+  // Kayıtlar artık kalıcı olduğundan kuyruk sayısı güncellemeyi engellemez.
   useEffect(() => {
-    if (vaultState === "unlocked" && updateState === "available" && availableUpdate && records.length === 0) {
+    if (
+      vaultState === "unlocked" &&
+      updateState === "available" &&
+      availableUpdate &&
+      !isPlaying &&
+      loadingRecordId === null
+    ) {
       void installAvailableUpdate();
     }
-  }, [availableUpdate, updateState, records.length, vaultState]);
+  }, [availableUpdate, updateState, vaultState, isPlaying, loadingRecordId]);
 
   useEffect(() => () => {
     for (const record of recordsRef.current) {
