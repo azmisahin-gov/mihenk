@@ -12,8 +12,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  hazirla:
+    name: Tek önizleme kaydı hazırla
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Eski önizleme kayıtlarını temizle ve tek taslak oluştur
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin "${GITHUB_SHA}:refs/tags/preview" --force
+
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[] | select(.tag_name == "preview") | .id' |
+            while IFS= read -r old_release_id; do
+              [[ -n "$old_release_id" ]] || continue
+              echo "Önceki önizleme kaydı kaldırılıyor: $old_release_id"
+              gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/${old_release_id}"
+            done
+
+          RELEASE_ID="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+            -f tag_name=preview \
+            -f name="MİHENK Geliştirme Önizlemesi" \
+            -f body="main dalındaki en son geliştirme yapısıdır. Deneme içindir; kararlı sürüm değildir." \
+            -F draft=true \
+            -F prerelease=true \
+            -f target_commitish="${GITHUB_SHA}" \
+            --jq '.id')"
+          test -n "$RELEASE_ID"
+          echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
   paketle:
     name: ${{ matrix.platform }} önizleme paketleri
+    needs: hazirla
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -102,29 +140,20 @@ jobs:
             { encoding: "utf8", mode: 0o600 },
           );
           NODE
-      - name: Önizleme etiketini güncel main commitine taşı
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: git push origin "${GITHUB_SHA}:refs/tags/preview" --force
       - name: Derle ve önizleme kanalına yayımla
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: .
-          tagName: preview
-          releaseName: MİHENK Geliştirme Önizlemesi
-          releaseBody: "main dalındaki en son geliştirme yapısıdır. Deneme içindir; kararlı sürüm değildir."
-          releaseDraft: true
-          prerelease: true
-          generateReleaseNotes: true
+          releaseId: ${{ needs.hazirla.outputs.release_id }}
           updaterJsonPreferNsis: true
           args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}
 
 
   yayina-al:
     name: Önizleme paketlerini doğrula ve yayımla
-    needs: paketle
+    needs: [hazirla, paketle]
     runs-on: ubuntu-latest
     steps:
       - name: Depoyu al
@@ -132,14 +161,14 @@ jobs:
       - name: Tüm platform paketlerini doğrula ve önizlemeyi yayımla
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_ID: ${{ needs.hazirla.outputs.release_id }}
         shell: bash
         run: |
           set -euo pipefail
           BASE_VERSION="$(node -p "require('./package.json').version")"
           PREVIEW_VERSION="${BASE_VERSION}-${GITHUB_RUN_NUMBER}"
-          RELEASE_ID="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[] | select(.tag_name == "preview" and .draft == true) | [.id, .created_at] | @tsv' | sort -k2,2 | tail -n1 | cut -f1)"
           if [[ -z "$RELEASE_ID" ]]; then
-            echo "Birleştirilecek taslak preview sürümü bulunamadı." >&2
+            echo "Hazırlık işinden taslak önizleme kimliği alınamadı." >&2
             exit 1
           fi
 
