@@ -91,6 +91,17 @@ if (-not $appPath) {
     throw "MSI kuruldu fakat Program Files içinde mihenk.exe bulunamadı. Kayıtlar: $displayNames. MSI günlüğü: $msiTail"
 }
 
+$runtimeSummary = @()
+$runtimeRoots = @("HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients")
+foreach ($root in $runtimeRoots) {
+    if (Test-Path -LiteralPath $root) {
+        foreach ($key in Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue) {
+            $name = $key.GetValue("name")
+            if ($name -match "WebView2") { $runtimeSummary += "$name; sürüm=$($key.GetValue('pv')); konum=$($key.GetValue('location'))" }
+        }
+    }
+}
+Write-Host ("WebView2 Runtime: " + $(if ($runtimeSummary) { $runtimeSummary -join " | " } else { "kayıt defteri girdisi bulunamadı" }))
 Write-Host "Kurulu uygulama başlatılıyor: $appPath"
 $webViewData = Join-Path $env:RUNNER_TEMP "mihenk-installed-webview2"
 New-Item -ItemType Directory -Force -Path $webViewData | Out-Null
@@ -108,7 +119,13 @@ try {
             $outText = if (Test-Path -LiteralPath $stdout) { Get-Content -LiteralPath $stdout -Raw } else { "" }
             $errText = if (Test-Path -LiteralPath $stderr) { Get-Content -LiteralPath $stderr -Raw } else { "" }
             $startupText = if (Test-Path -LiteralPath $startupLog) { Get-Content -LiteralPath $startupLog -Raw } else { "Başlangıç günlüğü oluşmadı." }
-            throw "MSI ile kurulan uygulama kapandı. Çıkış kodu: $($process.ExitCode). stdout: $outText stderr: $errText başlangıç günlüğü: $startupText"
+            $crashPaths = @((Join-Path $webViewData "EBWebView\Crashpad\reports"), (Join-Path $env:LOCALAPPDATA "CrashDumps"))
+            $crashFiles = foreach ($path in $crashPaths) { if (Test-Path -LiteralPath $path) { Get-ChildItem -LiteralPath $path -File -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 8 FullName, Length, LastWriteTime } }
+            $crashText = if ($crashFiles) { $crashFiles | Format-Table -AutoSize | Out-String } else { "Çökme dökümü bulunamadı." }
+            $wvProcesses = Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" -ErrorAction SilentlyContinue | Select-Object ProcessId, ParentProcessId, ExecutablePath, CommandLine | Format-List | Out-String
+            $eventText = try { Get-WinEvent -FilterHashtable @{ LogName = "Application"; StartTime = (Get-Date).AddMinutes(-2); Id = @(1000, 1001, 1026) } -MaxEvents 30 -ErrorAction SilentlyContinue | Where-Object { $_.Message -match "(?i)mihenk|msedgewebview2|webview2" } | Select-Object -First 8 TimeCreated, ProviderName, Id, Message | Format-List | Out-String } catch { $_.Exception.Message }
+            $runtimeText = if ($runtimeSummary) { $runtimeSummary -join " | " } else { "WebView2 Runtime sürümü belirlenemedi." }
+            throw ("MSI ile kurulan uygulama kapandı. Çıkış kodu: $($process.ExitCode). stdout: $outText stderr: $errText başlangıç günlüğü: $startupText" + [Environment]::NewLine + "WebView2: " + $runtimeText + [Environment]::NewLine + "WebView2 süreçleri: " + $wvProcesses + [Environment]::NewLine + "Çökme dosyaları: " + $crashText + [Environment]::NewLine + "Windows Application olayları: " + $eventText)
         }
     }
 
