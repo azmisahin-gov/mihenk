@@ -302,7 +302,9 @@ export default function App() {
       setVaultState("unlocked");
       setNotice(creating ? "Şifreli yerel kasa oluşturuldu." : "Yerel kasa açıldı.");
     } catch (error) {
-      setVaultState(creating ? "not-created" : "locked");
+      await lockLocalVault().catch(() => undefined);
+      const actualState = await getVaultState().catch(() => creating ? "not-created" : "locked");
+      setVaultState(actualState);
       setVaultError(error instanceof Error ? error.message : "Yerel kasa açılamadı.");
     } finally {
       setVaultBusy(false);
@@ -316,10 +318,10 @@ export default function App() {
     try {
       await persistVaultRecords(recordsRef.current);
       audioRef.current?.pause();
+      await lockLocalVault();
       for (const record of recordsRef.current) {
         if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
       }
-      await lockLocalVault();
       setRecords([]);
       setActiveId(null);
       setCurrentTime(0);
@@ -328,7 +330,8 @@ export default function App() {
       setVaultState("locked");
       setNotice("Yerel kasa kilitlendi.");
     } catch (error) {
-      setVaultState("unlocked");
+      const actualState = await getVaultState().catch(() => "locked");
+      setVaultState(actualState);
       setVaultError(error instanceof Error ? error.message : "Kasa kilitlenemedi.");
       setNotice("Kasa kilitlenemedi; çalışma açık bırakıldı.");
     } finally {
@@ -657,12 +660,13 @@ export default function App() {
       });
 
       // Kalıcı kasa güncelleme öncesi kaydedilir ve kilitlenir.
+      setVaultState("locking");
       await persistVaultRecords(recordsRef.current);
       audioRef.current?.pause();
+      await lockLocalVault();
       for (const record of recordsRef.current) {
         if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
       }
-      await lockLocalVault();
       setRecords([]);
       setActiveId(null);
       setVaultState("locked");
@@ -671,7 +675,8 @@ export default function App() {
       const message = error instanceof Error ? error.message : "Güncelleme kurulamadı.";
       setUpdateError(message);
       setVaultError(message);
-      if (!activeVaultOpen()) setVaultState("locked");
+      const actualState = await getVaultState().catch(() => "locked");
+      setVaultState(actualState);
       setUpdateState("error");
     }
   }
