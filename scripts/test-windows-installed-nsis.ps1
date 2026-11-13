@@ -143,6 +143,27 @@ finally {
             Write-Warning "Geçici NSIS test kurulumunun kaldırma kodu: $($uninstall.ExitCode)"
         }
     }
+    # The WiX MSI template reuses this per-user key to restore INSTALLDIR.
+    # NSIS stores its custom install directory as the unnamed value; MSI reads
+    # that value before falling back to ProgramFiles64Folder. Remove only stale
+    # values that point at this exact temporary test directory.
+    $installStatePath = "Software\mihenk\MİHENK"
+    $installStateKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($installStatePath, $true)
+    if ($installStateKey) {
+        try {
+            foreach ($valueName in @("", "InstallDir")) {
+                $storedPath = $installStateKey.GetValue($valueName, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                if ($storedPath -and ([string]$storedPath).TrimEnd('\').Equals($installDir.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $installStateKey.DeleteValue($valueName, $false)
+                    Write-Host ("Yalnız geçici NSIS dizinine ait HKCU InstallDir değeri temizlendi: " + $(if ($valueName) { $valueName } else { "(default)" }))
+                }
+            }
+        }
+        finally {
+            $installStateKey.Dispose()
+        }
+    }
+
     # NSIS uninstaller sometimes leaves its ARP registration behind when
     # a prior application launch failed. Remove only entries pointing at
     # this exact temporary test directory; never touch a user's installation.
