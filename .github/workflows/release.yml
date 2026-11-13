@@ -76,9 +76,9 @@ jobs:
           echo "release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
 
   paketle:
-    name: ${ matrix.platform } kararlı paketleri
+    name: ${{ matrix.platform }} kararlı paketleri
     needs: hazirla
-    runs-on: ${ matrix.platform }
+    runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       max-parallel: 1
@@ -170,7 +170,7 @@ jobs:
           projectPath: .
           releaseId: ${{ needs.hazirla.outputs.release_id }}
           updaterJsonPreferNsis: true
-          args: --config src-tauri/tauri.generated.conf.json --bundles ${ matrix.bundles }
+          args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}
 
       - name: Linux yayın ikilisinin açılışını doğrula
         if: runner.os == 'Linux'
