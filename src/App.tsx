@@ -4,6 +4,7 @@ import {
   createSegment,
   formatBytes,
   formatTime,
+  repeatStartIfReached,
   safeFileStem,
   type AudioRecord,
   type SegmentStatus,
@@ -47,6 +48,7 @@ export default function App() {
   const [records, setRecords] = useState<AudioRecord[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
+  const [repeatSegmentId, setRepeatSegmentId] = useState<string | null>(null);
   const [notice, setNotice] = useState("Ses seçerek çalışma alanını başlatın.");
   const [isDragging, setIsDragging] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<Awaited<ReturnType<typeof check>>>(null);
@@ -246,6 +248,7 @@ export default function App() {
 
   function removeSegment(segmentId: string): void {
     if (!activeRecord) return;
+    if (repeatSegmentId === segmentId) setRepeatSegmentId(null);
     updateRecord(activeRecord.id, (record) => ({
       ...record,
       segments: record.segments.filter((segment) => segment.id !== segmentId),
@@ -275,6 +278,51 @@ export default function App() {
     if (!audioRef.current || !Number.isFinite(value)) return;
     audioRef.current.currentTime = value;
     setCurrentTime(value);
+  }
+
+  function handleAudioTimeUpdate(): void {
+    const player = audioRef.current;
+    if (!player) return;
+
+    const repeatedSegment = activeRecord?.segments.find(
+      (segment) => segment.id === repeatSegmentId,
+    );
+    if (repeatedSegment?.endSeconds !== null && repeatedSegment?.endSeconds !== undefined) {
+      const repeatStart = repeatStartIfReached(
+        player.currentTime,
+        repeatedSegment.startSeconds,
+        repeatedSegment.endSeconds,
+      );
+      if (repeatStart !== null) player.currentTime = repeatStart;
+    }
+
+    setCurrentTime(player.currentTime);
+  }
+
+  function toggleSegmentRepeat(segment: AudioRecord["segments"][number]): void {
+    if (repeatSegmentId === segment.id) {
+      setRepeatSegmentId(null);
+      setNotice("Bölüm aralığı tekrarı kapatıldı.");
+      return;
+    }
+
+    if (segment.endSeconds === null || segment.endSeconds <= segment.startSeconds) {
+      setNotice("Tekrar için önce başlangıçtan sonra bir bölüm bitişi işaretleyin.");
+      return;
+    }
+
+    setRepeatSegmentId(segment.id);
+    const player = audioRef.current;
+    if (player) {
+      player.currentTime = segment.startSeconds;
+      setCurrentTime(segment.startSeconds);
+      void player.play().catch(() => {
+        setNotice("Ses oynatılamadı. Dosya biçimi veya tarayıcı desteğini kontrol edin.");
+      });
+    }
+    setNotice(
+      `${formatTime(segment.startSeconds)}–${formatTime(segment.endSeconds)} aralığı tekrarlanıyor.`,
+    );
   }
 
   function jumpTo(seconds: number): void {
@@ -522,6 +570,7 @@ export default function App() {
                     <button className="record-select" type="button" onClick={() => {
                       setActiveId(record.id);
                       setCurrentTime(0);
+                      setRepeatSegmentId(null);
                     }}>
                       <span className="record-number">{String(index + 1).padStart(2, "0")}</span>
                       <span className="record-main">
@@ -589,7 +638,7 @@ export default function App() {
                       controls
                       preload="metadata"
                       onLoadedMetadata={handleMetadata}
-                      onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
+                      onTimeUpdate={handleAudioTimeUpdate}
                       onEnded={() => setCurrentTime(activeRecord.durationSeconds ?? currentTime)}
                       onError={() => setNotice("Ses açılamadı. Dosya biçimi bu ortamda desteklenmiyor olabilir.")}
                     />
@@ -620,7 +669,7 @@ export default function App() {
                   <div className="player-actions">
                     <button className="secondary-button" type="button" onClick={addSegment}>+ Dinleme konumuna bölüm ekle</button>
                     <span>Metin bölümleri elle girilir</span>
-                    <span className="keyboard-hint">Kısayollar: Space oynat/duraklat · ← / → 5 saniye sar · Ctrl / ⌘ + Enter bölüm ekle</span>
+                    <span className="keyboard-hint">Kısayollar: Space oynat/duraklat · ← / → 5 saniye sar · Ctrl / ⌘ + Enter bölüm ekle. Bölüm kartından aralık tekrarı açılabilir.</span>
                   </div>
                 </div>
               ) : (
@@ -670,6 +719,14 @@ export default function App() {
                             onClick={() => markSegmentEnd(segment.id)}
                             aria-label="Geçerli oynatma konumunu bölüm bitişi olarak kaydet"
                           >Bitişi işaretle</button>
+                          <button
+                            className={`segment-repeat-button ${repeatSegmentId === segment.id ? "active" : ""}`}
+                            type="button"
+                            onClick={() => toggleSegmentRepeat(segment)}
+                            disabled={segment.endSeconds === null || segment.endSeconds <= segment.startSeconds}
+                            aria-pressed={repeatSegmentId === segment.id}
+                            title={segment.endSeconds === null ? "Önce bölüm bitişini işaretleyin" : "Bu ses aralığını tekrar dinleyin"}
+                          >{repeatSegmentId === segment.id ? "Tekrar açık" : "Aralığı tekrarla"}</button>
                           <button className="segment-delete" type="button" aria-label="Bölümü sil" onClick={() => removeSegment(segment.id)}>×</button>
                         </div>
                         <textarea

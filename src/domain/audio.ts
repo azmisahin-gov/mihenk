@@ -56,6 +56,28 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unitIndex]}`;
 }
 
+/**
+ * Ses oynatıcısının işaretli aralığın sonuna ulaşıp ulaşmadığını belirler.
+ * Geçerli aralıkta son noktaya gelince başlangıç saniyesini döndürür.
+ */
+export function repeatStartIfReached(
+  currentSeconds: number,
+  startSeconds: number,
+  endSeconds: number,
+): number | null {
+  if (
+    !Number.isFinite(currentSeconds) ||
+    !Number.isFinite(startSeconds) ||
+    !Number.isFinite(endSeconds) ||
+    startSeconds < 0 ||
+    endSeconds <= startSeconds
+  ) {
+    return null;
+  }
+
+  return currentSeconds >= endSeconds ? startSeconds : null;
+}
+
 export function createSegment(startSeconds: number): TranscriptSegment {
   return {
     id: crypto.randomUUID(),

@@ -7,6 +7,7 @@ import {
   createSegment,
   formatBytes,
   formatTime,
+  repeatStartIfReached,
   MAX_PREVIEW_HASH_BYTES,
   safeFileStem,
 } from "../src/domain/audio.ts";
@@ -60,4 +61,17 @@ test("küçük dosyanın SHA-256 özeti bilinen değerle eşleşir", async () =>
     result.hash,
     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
   );
+});
+
+test("işaretli ses aralığı bitince yalnızca geçerli başlangıca döner", () => {
+  assert.equal(repeatStartIfReached(4.9, 1.25, 5), null);
+  assert.equal(repeatStartIfReached(5, 1.25, 5), 1.25);
+  assert.equal(repeatStartIfReached(5.2, 1.25, 5), 1.25);
+});
+
+test("geçersiz veya ters ses aralığı tekrar döngüsüne alınmaz", () => {
+  assert.equal(repeatStartIfReached(6, 5, 5), null);
+  assert.equal(repeatStartIfReached(6, 6, 5), null);
+  assert.equal(repeatStartIfReached(6, -1, 5), null);
+  assert.equal(repeatStartIfReached(Number.NaN, 1, 5), null);
 });
