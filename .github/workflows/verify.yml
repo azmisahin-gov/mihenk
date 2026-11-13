@@ -54,6 +54,20 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/prepare-libsodium-windows.ps1
+      - name: Windows MSI kurulum testi betiğinin sözdizimini doğrula
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD "scripts/test-windows-installed-msi.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+          }
       - name: Linux bağımlılıklarını kur
         if: runner.os == 'Linux'
         run: |

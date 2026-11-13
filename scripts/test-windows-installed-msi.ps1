@@ -1,0 +1,131 @@
+$ErrorActionPreference = "Stop"
+
+$baseVersion = node -p "require('./package.json').version"
+if ($LASTEXITCODE -ne 0) { throw "package.json sürümü okunamadı." }
+
+if ($env:GITHUB_REF_NAME -like "v*") {
+    $version = $env:GITHUB_REF_NAME.Substring(1)
+} else {
+    $version = "$baseVersion-$env:GITHUB_RUN_NUMBER"
+}
+
+$msiPath = Join-Path $PWD ("src-tauri/target/release/bundle/msi/MİHENK_" + $version + "_x64_tr-TR.msi")
+if (-not (Test-Path -LiteralPath $msiPath)) {
+    throw "Windows MSI paketi bulunamadı: $msiPath"
+}
+
+$startupLog = Join-Path $env:LOCALAPPDATA "com.mihenk.desktop\logs\startup.log"
+if (Test-Path -LiteralPath $startupLog) {
+    Remove-Item -LiteralPath $startupLog -Force
+}
+
+$msiLog = Join-Path $env:RUNNER_TEMP "mihenk-msi-install.log"
+$installArgs = @("/i", ('"' + $msiPath + '"'), "/qn", "/norestart", "/l*v", ('"' + $msiLog + '"'))
+
+Write-Host "Gerçek MSI paketi kuruluyor: $msiPath"
+$installer = Start-Process -FilePath "msiexec.exe" -ArgumentList $installArgs -Wait -PassThru
+if ($installer.ExitCode -notin @(0, 3010)) {
+    $msiTail = if (Test-Path -LiteralPath $msiLog) {
+        (Get-Content -LiteralPath $msiLog -Tail 80) -join [Environment]::NewLine
+    } else {
+        "MSI kurulum günlüğü oluşmadı."
+    }
+    throw "MSI kurulumu başarısız. Çıkış kodu: $($installer.ExitCode). Günlük: $msiTail"
+}
+
+$uninstallRoots = @(
+    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+)
+$entries = foreach ($root in $uninstallRoots) {
+    if (Test-Path $root) {
+        Get-ChildItem -Path $root -ErrorAction SilentlyContinue |
+            ForEach-Object { Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue }
+    }
+}
+$appEntries = @($entries | Where-Object { $_.DisplayName -and $_.DisplayName -like "*HENK*" })
+
+$appPath = $null
+foreach ($entry in $appEntries) {
+    if ($entry.InstallLocation) {
+        $candidate = Join-Path $entry.InstallLocation "mihenk.exe"
+        if (Test-Path -LiteralPath $candidate) {
+            $appPath = $candidate
+            break
+        }
+    }
+    if ($entry.DisplayIcon) {
+        $iconPath = ($entry.DisplayIcon -replace '^"', '') -replace '",\d+$', ''
+        if (Test-Path -LiteralPath $iconPath -PathType Leaf) {
+            $appPath = $iconPath
+            break
+        }
+    }
+}
+
+if (-not $appPath) {
+    $searchRoots = @($env:ProgramFiles, [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) |
+        Where-Object { $_ -and (Test-Path -LiteralPath $_) } |
+        Select-Object -Unique
+    foreach ($root in $searchRoots) {
+        $candidate = Get-ChildItem -LiteralPath $root -Filter "mihenk.exe" -File -Recurse -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($candidate) {
+            $appPath = $candidate.FullName
+            break
+        }
+    }
+}
+
+if ($appPath -and -not $appPath.StartsWith($env:ProgramFiles, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "MSI uygulamayı Program Files yerine başka bir konuma kurdu: $appPath"
+}
+
+if (-not $appPath) {
+    $displayNames = ($appEntries | ForEach-Object { $_.DisplayName }) -join "; "
+    $msiTail = if (Test-Path -LiteralPath $msiLog) {
+        (Get-Content -LiteralPath $msiLog -Tail 50) -join [Environment]::NewLine
+    } else {
+        "MSI kurulum günlüğü bulunamadı."
+    }
+    throw "MSI kuruldu fakat Program Files içinde mihenk.exe bulunamadı. Kayıtlar: $displayNames. MSI günlüğü: $msiTail"
+}
+
+Write-Host "Kurulu uygulama başlatılıyor: $appPath"
+$webViewData = Join-Path $env:RUNNER_TEMP "mihenk-installed-webview2"
+New-Item -ItemType Directory -Force -Path $webViewData | Out-Null
+$env:WEBVIEW2_USER_DATA_FOLDER = $webViewData
+
+$stdout = Join-Path $env:RUNNER_TEMP "mihenk-installed-stdout.log"
+$stderr = Join-Path $env:RUNNER_TEMP "mihenk-installed-stderr.log"
+$process = Start-Process -FilePath $appPath -WorkingDirectory (Split-Path $appPath) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+try {
+    for ($attempt = 1; $attempt -le 20; $attempt++) {
+        Start-Sleep -Seconds 1
+        $process.Refresh()
+        if ($process.HasExited) {
+            $outText = if (Test-Path -LiteralPath $stdout) { Get-Content -LiteralPath $stdout -Raw } else { "" }
+            $errText = if (Test-Path -LiteralPath $stderr) { Get-Content -LiteralPath $stderr -Raw } else { "" }
+            $startupText = if (Test-Path -LiteralPath $startupLog) { Get-Content -LiteralPath $startupLog -Raw } else { "Başlangıç günlüğü oluşmadı." }
+            throw "MSI ile kurulan uygulama kapandı. Çıkış kodu: $($process.ExitCode). stdout: $outText stderr: $errText başlangıç günlüğü: $startupText"
+        }
+    }
+
+    if (-not (Test-Path -LiteralPath $startupLog)) {
+        throw "Uygulama açık kaldı fakat başlangıç günlüğü oluşmadı: $startupLog"
+    }
+    $startupText = Get-Content -LiteralPath $startupLog -Raw
+    if ($startupText -notmatch "\[setup\] Tauri başlangıç kurulumu tamamlandı") {
+        throw "Uygulama 20 saniye açık kaldı ancak başlangıç kurulumu tamamlanma kaydı yok. Günlük: $startupText"
+    }
+
+    Write-Host "MSI kurulumu ve gerçek Program Files uygulama başlatması başarılı. PID: $($process.Id)"
+    Write-Host "Başlangıç günlüğü: $startupLog"
+}
+finally {
+    $process.Refresh()
+    if (-not $process.HasExited) {
+        Stop-Process -Id $process.Id -Force
+    }
+}

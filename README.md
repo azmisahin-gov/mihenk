@@ -82,13 +82,14 @@ README, issue, pull request başlık/açıklamaları ve commit mesajları Türk�
 
 ## Kurulum ve otomatik güncelleme
 
-> **Yayın durumu (13 Kasım 2026):** `0.1.0-7` imzalı geliştirme önizlemesi GitHub Releases bölümünde yayımlanmıştır. Windows NSIS/EXE, Windows MSI, Linux AppImage ve Debian/ PARDUS DEB paketleri aynı önizleme kaydındadır. Henüz kararlı sürüm yoktur; indirme sayfası kararlı sürüm yayımlanana kadar önizleme paketlerini açıkça etiketleyerek gösterir. Bu sürüm yalnızca sentetik veya kullanım izni bulunan test verisi içindir.
+> **Yayın durumu (13 Kasım 2026):** Kararlı sürüm henüz yoktur. GitHub Releases bölümündeki `draft` durumundaki kayıtlar halka açık indirme değildir; indirme sayfası yalnızca iki platformun paket ve açılış kontrolleri tamamlanıp yayımlanan sürümleri gösterir. Geliştirme önizlemeleri yalnızca sentetik veya kullanım izni bulunan test verisi içindir.
 
 ### Hedeflenen kullanıcı indirmeleri
 
 - **Windows Setup.exe (önerilen):** Varsayılan NSIS kurulumu yalnızca geçerli Windows kullanıcısına, `%LOCALAPPDATA%` altına yapılır; normalde yönetici izni istemez.
 - **Windows MSI:** WiX paketi varsayılan olarak Program Files içine bilgisayar geneli kurulum yapar ve yönetici izni gerektirir. EXE ve MSI alternatif kurulum biçimleridir; aynı bilgisayara ikisini birden kurmayın.
 - **Windows WebView2:** Kurulum paketleri çevrimdışı WebView2 Runtime yükleyicisini içerir. Bu, runtime'ın cihazda bulunmadığı ve internet erişiminin olmadığı ortamlarda da açılışı mümkün kılar; Windows kurulum dosyaları bu nedenle yaklaşık 127 MiB daha büyük olur.
+- **Windows yayıncı imzası:** Setup.exe ve MSI henüz Authenticode kod imzalama sertifikasıyla imzalanmıyor. Bu nedenle Windows “bilinmeyen yayımcı” veya SmartScreen uyarısı gösterebilir. İndirilen paketin yanındaki Tauri `.sig` dosyası otomatik güncelleme imzasıdır; Authenticode imzası değildir. İmzalama sertifikası ve SmartScreen itibarı tamamlanmadan bu kurulumlar üretim onayı almış sayılmaz.
 - **Pardus / Debian tabanlı Linux:** .deb paketi.
 - **Linux:** AppImage paketi.
 
@@ -106,7 +107,7 @@ Yayın derlemesi Tauri imza doğrulamasını kullanacak şekilde yapılandırıl
 
 Özel anahtarın yerel çevrimdışı kopyasını koruyun; bilgisayar hesabını ve diski şifreleyin, ayrıca güvenli çevrimdışı yedek alın. Anahtarı sohbet, issue, PR, dosya eki, commit veya log içinde paylaşmayın. Anahtar kaybolursa mevcut imza kimliğiyle güncelleme yayımlamak mümkün olmayabilir. Anahtarı yeniden üretmek veya değiştirmek mevcut kurulumların güncelleme zincirini etkileyebilir; gelişigüzel yenilemeyin.
 
-Tauri güncelleme imzası Windows Authenticode yayıncı sertifikasının veya UYAP e-imza sertifikasının yerine geçmez.
+Tauri güncelleme imzası Windows Authenticode yayıncı sertifikasının veya UYAP e-imza sertifikasının yerine geçmez. Windows kurulum dosyalarında Authenticode imzası henüz yoktur; bu nedenle SmartScreen/UAC uyarısı beklenebilir. Geçerli bir kod imzalama sertifikasıyla imza atmak yayıncı kimliğini gösterir, ancak yeni uygulamalarda SmartScreen uyarısının hemen kalkacağını garanti etmez.
 
 ### Yayın akışı
 
@@ -129,5 +130,5 @@ GitHub Actions PR aşamasında kilitli bağımlılıkları, ön yüz derlemesini
 - Kararlı sürüm, `vX.Y.Z` etiketiyle başlatılır. Paket sürümleri birbiriyle karşılaştırılır; Linux ve Windows kurulumları/imzaları ile yayın ikilisi açılış testleri tamamlanınca taslak Release yayımlanır.
 - Bir PR birleştirilince aynı depodaki çalışma dalı otomatik silinir. Eski dalların ilk temizliği de tamamlanmıştır.
 
-**Depo yönetişimi notu:** PR doğrulaması otomatik çalışır; ancak GitHub `main` dalında zorunlu durum denetimi kuralı henüz etkinleştirilmemiştir. Üretim disiplini için `main` dalına PR zorunluluğu ve üç CI denetiminin zorunlu olması repo ayarlarında ayrıca etkinleştirilmelidir.
+**Depo yönetişimi notu:** PR doğrulaması otomatik çalışır. Bu bağlantı, yönetici izni gerektiren `main` dalı koruma kurallarını okuyamıyor; bu nedenle PR zorunluluğu ve üç CI denetiminin zorunlu olması depo sahibi tarafından GitHub ayarlarında ayrıca doğrulanmalıdır. Birleştirme sonrası dalları temizleyen iş akışı ayrıca çalışır.
 

@@ -18,9 +18,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.release.outputs.release_id }}
-    env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
     steps:
       - name: Depoyu al
         uses: actions/checkout@v4
@@ -32,6 +29,7 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -52,7 +50,6 @@ jobs:
           test "$VERSION" = "$CONFIG_VERSION"
           test "$VERSION" = "$CARGO_VERSION"
           test -n "$TAURI_UPDATER_PUBLIC_KEY"
-          test -n "$TAURI_SIGNING_PRIVATE_KEY"
 
           RELEASES_JSON="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100")"
           RELEASE_ID="$(jq -r --arg tag "$GITHUB_REF_NAME" '[.[] | select(.tag_name == $tag and .draft == true)][0].id // empty' <<< "$RELEASES_JSON")"
@@ -88,10 +85,6 @@ jobs:
             bundles: "appimage,deb"
           - platform: windows-latest
             bundles: "nsis,msi"
-    env:
-      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-      TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
     steps:
       - name: Depoyu al
         uses: actions/checkout@v4
@@ -130,12 +123,13 @@ jobs:
       - name: Kare uygulama simgelerini üret
         run: npx tauri icon src-tauri/icons/mihenk.svg --output src-tauri/icons
       - name: Yayın sürümü yapılandırmasını oluştur
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
         shell: bash
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           test -n "$TAURI_UPDATER_PUBLIC_KEY"
-          test -n "$TAURI_SIGNING_PRIVATE_KEY"
           node - "$VERSION" "$TAURI_UPDATER_PUBLIC_KEY" <<'NODE'
           const fs = require("node:fs");
           const [version, pubkey] = process.argv.slice(2);
@@ -147,6 +141,8 @@ jobs:
           NODE
           echo "VITE_APP_VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Güncelleme imza anahtarını UTF-8 BOM karakterinden arındır
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -158,6 +154,7 @@ jobs:
           if (key.startsWith("ï»¿")) key = key.slice(3);
           key = key.trim();
           if (!key) throw new Error("TAURI_SIGNING_PRIVATE_KEY boş.");
+          process.stdout.write(`::add-mask::${key}\n`);
           const delimiter = "MIHENK_PRIVATE_KEY_END";
           if (key.includes(delimiter)) throw new Error("İmza anahtarı ayırıcıyla çakışıyor.");
           fs.appendFileSync(
@@ -170,11 +167,18 @@ jobs:
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: .
           releaseId: ${{ needs.hazirla.outputs.release_id }}
           updaterJsonPreferNsis: true
           args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}
+
+      - name: İmza anahtarını sonraki adımların ortamından temizle
+        shell: bash
+        run: |
+          echo "TAURI_SIGNING_PRIVATE_KEY=" >> "$GITHUB_ENV"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=" >> "$GITHUB_ENV"
 
       - name: Linux yayın ikilisinin açılışını doğrula
         if: runner.os == 'Linux'
@@ -214,39 +218,10 @@ jobs:
           }
           echo "Linux yayın ikilisi 20 saniye açık kaldı."
 
-      - name: Windows yayın ikilisinin açılışını doğrula
+      - name: Windows MSI kurulumunu ve kurulu uygulamayı doğrula
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          $app = Join-Path $PWD "src-tauri/target/release/mihenk.exe"
-          if (-not (Test-Path $app)) {
-            throw "Yayın ikilisi bulunamadı: $app"
-          }
-          $startupLog = Join-Path $env:LOCALAPPDATA "com.mihenk.desktop\logs\startup.log"
-          if (Test-Path $startupLog) { Remove-Item $startupLog -Force }
-          $webViewData = Join-Path $env:RUNNER_TEMP "mihenk-stable-webview2"
-          New-Item -ItemType Directory -Force -Path $webViewData | Out-Null
-          $env:WEBVIEW2_USER_DATA_FOLDER = $webViewData
-          $stdout = Join-Path $env:RUNNER_TEMP "mihenk-stable-stdout.log"
-          $stderr = Join-Path $env:RUNNER_TEMP "mihenk-stable-stderr.log"
-          $process = Start-Process -FilePath $app -WorkingDirectory (Split-Path $app) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-          try {
-            for ($attempt = 1; $attempt -le 20; $attempt++) {
-              Start-Sleep -Seconds 1
-              $process.Refresh()
-              if ($process.HasExited) {
-                $outText = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
-                $errText = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
-                $startupText = if (Test-Path $startupLog) { Get-Content $startupLog -Raw } else { "Başlangıç günlük dosyası oluşmadı." }
-                throw "Windows yayın ikilisi açıldıktan sonra kapandı. Çıkış kodu: $($process.ExitCode). stdout: $outText stderr: $errText başlangıç günlüğü: $startupText"
-              }
-            }
-            Write-Output "Windows yayın ikilisi 20 saniye açık kaldı."
-          }
-          finally {
-            $process.Refresh()
-            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
-          }
+        run: ./scripts/test-windows-installed-msi.ps1
 
   yayina-al:
     name: Kararlı sürümü doğrula ve yayımla
