@@ -507,7 +507,7 @@ export default function App() {
                         <strong>Henüz transkript bölümü yok</strong>
                         <p>Sesin istediğiniz konumunda durdurup “Bölüm ekle” düğmesini kullanın.</p>
                       </div>
-                    ) : activeRecord.segments.map((segment, index) => (
+                    ) : activeRecord.segments.map((segment) => (
                       <article className="segment-card" key={segment.id}>
                         <div className="segment-topline">
                           <button className="timestamp-button" type="button" onClick={() => jumpTo(segment.startSeconds)}>
