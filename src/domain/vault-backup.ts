@@ -87,7 +87,7 @@ export async function buildVaultBackup(entries: VaultBackupEntry[]): Promise<Uin
     const digest = await sha256(entry.data);
     totalBytes += 2 + 8 + VAULT_BACKUP_HASH_BYTES + pathBytes.byteLength + entry.data.byteLength;
     if (totalBytes > MAX_VAULT_BACKUP_BYTES) {
-      throw new Error("Şifreli yedek 512 MiB sınırını aşıyor.");
+      throw new Error("Kasa yedek paketi 512 MiB sınırını aşıyor.");
     }
     prepared.push({
       pathBytes,
