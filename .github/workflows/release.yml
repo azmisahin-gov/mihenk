@@ -152,6 +152,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/inspect-windows-pe-dependencies.ps1 -Stage pre-bundle
+      - name: Windows Evergreen WebView2 Runtime'ı hazırla
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/prepare-webview2-runtime-windows.ps1
       - name: Windows paketleme öncesi ham EXE açılışını doğrula
         id: pre_bundle_smoke
         if: runner.os == 'Windows'
@@ -240,10 +244,6 @@ jobs:
           }
           echo "Linux yayın ikilisi 20 saniye açık kaldı."
 
-      - name: Windows Evergreen WebView2 Runtime'ı hazırla
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./scripts/prepare-webview2-runtime-windows.ps1
       - name: Windows paketlenmiş yayın ikilisinin açılışını doğrula
         id: post_bundle_smoke
         if: runner.os == 'Windows'
