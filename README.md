@@ -19,15 +19,15 @@ MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürüt
 - Düzenlenmiş taslağı TXT veya JSON olarak kullanıcının cihazına dışa aktarma.
 - Küçük dosyalarda tarayıcı içi SHA-256 ön kontrolü.
 
-**Henüz bağlı olmayanlar:** ASR motoru, kalıcı görev/veri deposu, güvenli yerel dosya kasası, uzun dosyalarda akışlı hash, gerçek görev/rapor modeli ve UYAP/UDF entegrasyonu.
+**Henüz bağlı olmayanlar:** ASR motoru, kasa parolası kurtarma/sıfırlama, görev bazında yalıtım ve gerçek görev/rapor modeli, uzun dosyalarda akışlı hash ve UYAP/UDF entegrasyonu.
 
 ## Güvenli kullanım sınırı
 
-Bu ilk arayüz prototipi, seçilen ses dosyalarını uygulama açık kaldığı sürece bellekte tutar. Uygulama kapatıldığında dosya seçimi ve düzenleme durumu kaybolur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
+Yerel kasa önizlemesi, içe alınan sesleri cihazdaki Stronghold snapshot ve AES-256-GCM şifreli blok dosyalarında saklar. Kasa parolası olmadan yerel kayıtlar açılamaz. Bu ilk dilimde dosya başına 128 MiB sınırı vardır; dinleme sırasında kayıt bellekte açılır. `.mihenkbackup` dosyası Stronghold snapshot’ını, Argon2 salt’ını ve AES-GCM ile şifrelenmiş materyal dosyalarını tek pakette taşır. Paket kendi başına ek bir parola katmanıyla şifrelenmez; içindeki hassas veriler zaten şifreli kalır. Paket içi SHA-256 özetleri kazara bozulmayı saptar; imza veya kötü niyetli değişikliğe karşı doğrulama değildir. Geri yükleme yalnız boş kasaya yapılır ve aynı kasa parolası gerekir. Parola kurtarma/sıfırlama yoktur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
 
 SHA-256 göstergesi yalnızca küçük dosyalardaki seçilmiş dosyanın ön kontrolüdür. Delil zinciri, teslim öncesi köken doğrulaması veya dosyanın özgünlüğü hakkında kanıt sayılmaz. 128 MiB üzerindeki dosyalarda bu prototip hash üretmez.
 
-**Gerçek dava/soruşturma materyalini bu prototipte kullanmayın.** Gerçek materyalle kullanım için görev yalıtımı, kalıcı şifreli kasa, erişim kontrolü, yedekleme/geri yükleme, güvenli güncelleme ve hukuk/veri koruma incelemesi tamamlanmalıdır.
+**Gerçek dava/soruşturma materyalini bu önizlemede kullanmayın.** Gerçek materyalle kullanım için kasa parolası kurtarma, görev yalıtımı, tam arayüz ve geri yükleme testleri, bağımsız güvenlik incelemesi ve hukuk/veri koruma değerlendirmesi tamamlanmalıdır.
 
 ## Geliştirme
 
