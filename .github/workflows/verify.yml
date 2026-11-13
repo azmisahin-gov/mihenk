@@ -2,7 +2,7 @@ name: Ön yüz doğrulaması
 
 on:
   push:
-    branches: ["main", "feat/56-12-ses-calisma-alani"]
+    branches: ["main", "feat/56-12-ses-calisma-alani", "fix/appimage-kare-simge"]
     paths:
       - "src/**"
       - "src-tauri/**"
@@ -12,6 +12,8 @@ on:
       - "tsconfig.json"
       - "vite.config.ts"
       - ".github/workflows/verify.yml"
+      - ".github/workflows/preview.yml"
+      - ".github/workflows/release.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
