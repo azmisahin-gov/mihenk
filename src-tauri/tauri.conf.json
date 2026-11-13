@@ -27,5 +27,11 @@
   },
   "bundle": {
     "active": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "MİHENK_GELİŞTİRME_DERLEMESİ_GÜNCELLEME_KAPALI",
+      "endpoints": []
+    }
   }
 }
