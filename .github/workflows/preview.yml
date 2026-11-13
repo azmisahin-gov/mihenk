@@ -93,7 +93,8 @@ jobs:
             libssl-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev \
-            patchelf
+            patchelf \
+            xvfb
       - name: Bağımlılıkları kilitli kur
         run: npm ci --no-audit --no-fund
       - name: Kare uygulama simgelerini üret
@@ -150,6 +151,43 @@ jobs:
           updaterJsonPreferNsis: true
           args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}
 
+      - name: Linux yayın ikilisinin açılışını doğrula
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="./src-tauri/target/release/mihenk"
+          if [[ ! -x "$APP" ]]; then
+            echo "Yayın ikilisi bulunamadı: $APP" >&2
+            exit 1
+          fi
+          STARTUP_LOG="\${XDG_DATA_HOME:-$HOME/.local/share}/com.mihenk.desktop/logs/startup.log"
+          OUTPUT_LOG="$RUNNER_TEMP/mihenk-release-linux.log"
+          rm -f "$STARTUP_LOG"
+          xvfb-run -a bash -c '
+            set -euo pipefail
+            "$1" > "$2" 2>&1 &
+            app_pid=$!
+            cleanup() {
+              kill "$app_pid" 2>/dev/null || true
+              wait "$app_pid" 2>/dev/null || true
+            }
+            trap cleanup EXIT
+            for attempt in $(seq 1 20); do
+              if ! kill -0 "$app_pid" 2>/dev/null; then
+                wait "$app_pid" || true
+                exit 1
+              fi
+              sleep 1
+            done
+            kill -0 "$app_pid"
+          ' _ "$APP" "$OUTPUT_LOG" || {
+            cat "$OUTPUT_LOG" 2>/dev/null || true
+            cat "$STARTUP_LOG" 2>/dev/null || true
+            echo "Linux yayın ikilisi 20 saniye açık kalamadı." >&2
+            exit 1
+          }
+          echo "Linux yayın ikilisi 20 saniye açık kaldı."
       - name: Windows yayın ikilisinin açılışını doğrula
         if: runner.os == 'Windows'
         shell: pwsh
