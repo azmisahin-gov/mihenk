@@ -28,6 +28,7 @@
           "path": "$APPDATA/mihenk-vault/**/*"
         }
       ]
-    }
+    },
+    "fs:allow-read-file"
   ]
 }
