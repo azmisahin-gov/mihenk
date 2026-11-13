@@ -1,19 +1,10 @@
-name: Ön yüz doğrulaması
+name: MİHENK doğrulama
 
 on:
+  pull_request:
+    branches: ["main"]
   push:
-    branches: ["main", "feat/56-12-ses-calisma-alani", "feat/yerel-kasa-yedek-geri-yukle", "fix/onizleme-tek-yayin", "fix/preview-single-release-id"]
-    paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "tests/**"
-      - "package.json"
-      - "package-lock.json"
-      - "tsconfig.json"
-      - "vite.config.ts"
-      - ".github/workflows/verify.yml"
-      - ".github/workflows/preview.yml"
-      - ".github/workflows/release.yml"
+    branches: ["main"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
