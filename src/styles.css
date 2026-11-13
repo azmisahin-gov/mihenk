@@ -328,3 +328,8 @@ audio { width: 100%; height: 34px; }
 .vault-lock-button:hover:not(:disabled) { border-color: #8ca998; color: #315b43; }
 .vault-lock-button:disabled { opacity: .5; }
 @media(max-width:640px){.vault-gate-shell{padding:14px}.vault-gate-card{padding:24px}}
+
+.vault-backup-button { border:1px solid #dce4de; border-radius:6px; padding:7px 10px; background:#edf4ee; color:#315d45; font-size:9px; }
+.vault-backup-button:hover:not(:disabled) { border-color:#8ca998; background:#e4efe6; }
+.vault-backup-button:disabled { opacity:.5; cursor:not-allowed; }
+.vault-restore-panel { margin-top:12px; }

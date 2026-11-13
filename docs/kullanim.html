@@ -112,7 +112,9 @@
           <h2>8. Şifreli kasa ve güvenli test</h2>
           <p>Uygulama ilk açıldığında bu cihazda parola korumalı yerel kasa oluşturun. Sonraki açılışlarda aynı parolayla kasayı açın. Parola en az 12 karakter olmalıdır; MİHENK parolayı sunucuya göndermez.</p>
           <p>Eklenen ses dosyaları 1 MiB bloklar hâlinde AES-256-GCM ile şifrelenerek uygulamanın yerel veri klasörüne kaydedilir. Kasa anahtarları ve görev metaverisi Stronghold snapshot içinde korunur. Dinleme sırasında ses bellekte açılır. Bu önizlemede dosya başına 128 MiB sınırı vardır.</p>
-          <p><strong>Önemli:</strong> Kasa parolası kaybolursa şu an bir parola sıfırlama veya kurtarma anahtarı akışı yoktur. Şifreli yedekleme ve geri yükleme de henüz uygulanmamıştır. Bu nedenle yalnızca sentetik veya kullanım izni bulunan test sesleriyle deneyin; gerçek dava/soruşturma materyali kullanmayın.</p>
+          <p>Üst çubuktaki <strong>Şifreli yedek indir</strong> düğmesi Stronghold snapshot'ını, Argon2 salt dosyasını ve AES-GCM ile şifrelenmiş materyalleri tek bir .mihenkbackup dosyasında birleştirir. Yedek içeriği şifreli kalır; dosyayı cihazdan ayrı, güvenli bir ortamda saklayın.</p>
+          <p>Yeni veya boş bir kurulumda <strong>Şifreli yedekten geri yükle</strong> seçeneğini kullanın. Yedek önce bütünlük kontrolünden geçer; dosyalar yerleştirildikten sonra snapshot en son etkinleştirilir. Geri yükleme tamamlanınca kasayı, yedek alınırken kullanılan parola ile açın. Mevcut kasanın üzerine yazılmaz.</p>
+          <p><strong>Önemli:</strong> Kasa parolası kaybolursa şu an parola sıfırlama veya ayrı kurtarma anahtarı yoktur; şifreli yedek de aynı parolayı gerektirir. Bu nedenle yalnızca sentetik veya kullanım izni bulunan test sesleriyle deneyin; gerçek dava/soruşturma materyali kullanmayın.</p>
           <p>Kasa parolasını güvenli, cihazdan ayrı bir yerde saklayın. Hata bildirirken gerçek sesleri, transkriptleri, ekran görüntülerini veya dosya numaralarını GitHub'a eklemeyin.</p>
         </section>
       </article>

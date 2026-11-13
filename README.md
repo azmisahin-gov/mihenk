@@ -23,7 +23,7 @@ MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürüt
 
 ## Güvenli kullanım sınırı
 
-Yerel kasa önizlemesi, içe alınan sesleri cihazdaki Stronghold snapshot ve AES-256-GCM şifreli blok dosyalarında saklar. Kasa parolası olmadan yerel kayıtlar açılamaz. Bu ilk dilimde dosya başına 128 MiB sınırı vardır; dinleme sırasında kayıt bellekte açılır. Kasa parolası kurtarma, şifreli yedekleme/geri yükleme henüz yoktur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
+Yerel kasa önizlemesi, içe alınan sesleri cihazdaki Stronghold snapshot ve AES-256-GCM şifreli blok dosyalarında saklar. Kasa parolası olmadan yerel kayıtlar açılamaz. Bu ilk dilimde dosya başına 128 MiB sınırı vardır; dinleme sırasında kayıt bellekte açılır. Şifreli .mihenkbackup yedeği Stronghold snapshot, Argon2 salt ve şifreli materyalleri birlikte taşır; geri yükleme yalnızca boş kasaya yapılır. Kasa parolası kurtarma veya parola sıfırlama yoktur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
 
 SHA-256 göstergesi yalnızca küçük dosyalardaki seçilmiş dosyanın ön kontrolüdür. Delil zinciri, teslim öncesi köken doğrulaması veya dosyanın özgünlüğü hakkında kanıt sayılmaz. 128 MiB üzerindeki dosyalarda bu prototip hash üretmez.
 

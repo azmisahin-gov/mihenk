@@ -20,9 +20,12 @@ import {
   openStoredAudio,
   saveStoredAudioMetadata,
   unlockLocalVault,
+  exportLocalVaultBackup,
+  restoreLocalVaultBackup,
   type VaultAudioMetadata,
   type VaultState,
 } from "./domain/vault";
+import { MAX_VAULT_BACKUP_BYTES } from "./domain/vault-backup";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
@@ -39,6 +42,22 @@ function saveTextFile(fileName: string, content: string, mimeType: string): void
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
+function saveBinaryFile(fileName: string, bytes: Uint8Array): void {
+  const owned = new Uint8Array(bytes.byteLength);
+  owned.set(bytes);
+  const blob = new Blob([owned.buffer], { type: "application/octet-stream" });
+  const downloadUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = downloadUrl;
+  anchor.download = fileName;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  owned.fill(0);
 }
 
 function hashLabel(record: AudioRecord): string {
@@ -75,7 +94,9 @@ export default function App() {
   const [vaultError, setVaultError] = useState("");
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [backupInputBusy, setBackupInputBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -529,6 +550,53 @@ export default function App() {
     });
   }
 
+  async function createEncryptedBackup(): Promise<void> {
+    if (vaultState !== "unlocked" || backupInputBusy) return;
+    setBackupInputBusy(true);
+    try {
+      await persistVaultRecords(recordsRef.current);
+      const backup = await exportLocalVaultBackup();
+      const dateStamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
+      saveBinaryFile(`MİHENK-yerel-kasa-${dateStamp}.mihenkbackup`, backup);
+      backup.fill(0);
+      setNotice("Şifreli kasa yedeği oluşturuldu. Kasa parolası olmadan geri açılamaz.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Şifreli yedek oluşturulamadı: ${error.message}` : "Şifreli yedek oluşturulamadı.");
+    } finally {
+      setBackupInputBusy(false);
+    }
+  }
+
+  async function restoreEncryptedBackup(file: File | undefined): Promise<void> {
+    if (!file) return;
+    if (vaultBusy || backupInputBusy) return;
+    if (file.size > MAX_VAULT_BACKUP_BYTES) {
+      setVaultError("Yedek dosyası 512 MiB sınırını aşıyor.");
+      return;
+    }
+
+    setBackupInputBusy(true);
+    setVaultError("");
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      try {
+        await restoreLocalVaultBackup(bytes);
+      } finally {
+        bytes.fill(0);
+      }
+      setVaultPassword("");
+      setVaultPasswordConfirm("");
+      setVaultState("locked");
+      setNotice("Şifreli yedek bu cihaza geri yüklendi. Kasayı açmak için yedek oluşturulurken kullanılan parolayı girin.");
+    } catch (error) {
+      setVaultError(error instanceof Error ? error.message : "Şifreli yedek geri yüklenemedi.");
+      setVaultState("not-created");
+    } finally {
+      setBackupInputBusy(false);
+      if (backupInputRef.current) backupInputRef.current.value = "";
+    }
+  }
+
   function exportText(): void {
     if (!activeRecord) return;
     saveTextFile(
@@ -645,14 +713,31 @@ export default function App() {
                 </label>
               )}
               {vaultError && <p className="vault-gate-error" role="alert">{vaultError}</p>}
-              <button className="primary-button vault-submit-button" type="submit" disabled={busy}>
+              <button className="primary-button vault-submit-button" type="submit" disabled={busy || backupInputBusy}>
                 {busy ? "İşleniyor…" : newVault ? "Şifreli kasa oluştur" : "Kasayı aç"}
               </button>
             </form>
           )}
+          {newVault && (
+            <div className="vault-restore-panel">
+              <input
+                ref={backupInputRef}
+                className="visually-hidden"
+                type="file"
+                accept=".mihenkbackup,application/octet-stream"
+                onChange={(event) => void restoreEncryptedBackup(event.currentTarget.files?.[0])}
+              />
+              <button
+                className="secondary-button vault-submit-button"
+                type="button"
+                onClick={() => backupInputRef.current?.click()}
+                disabled={backupInputBusy || busy}
+              >{backupInputBusy ? "Yedek doğrulanıyor…" : "Şifreli yedekten geri yükle"}</button>
+            </div>
+          )}
           <div className="vault-gate-notice">
             <strong>Önizleme sınırları</strong>
-            Her ses dosyası en fazla 128 MiB olabilir. Kurtarma parolası, yedekleme ve geri yükleme henüz yoktur; kasa parolası kaybolursa veriler açılamayabilir. Yalnızca sentetik veya kullanım izni bulunan test kayıtlarıyla deneyin.
+            Her ses dosyası en fazla 128 MiB olabilir. Şifreli yedek snapshot, salt ve materyalleri birlikte taşır; geri yükleme yalnız boş kasaya yapılır. Kasa parolası kaybolursa yedek de açılamaz. Yalnızca sentetik veya kullanım izni bulunan test kayıtlarıyla deneyin.
           </div>
         </section>
       </main>
@@ -715,7 +800,10 @@ export default function App() {
           <div className="topbar-status">
             <span className="status-pill"><span className="status-dot" /> Cihaz içinde</span>
             <span className="prototype-pill">GELİŞTİRME ÖNİZLEMESİ</span>
-            <button className="vault-lock-button" type="button" onClick={() => void lockVault()} disabled={vaultBusy}>Kasayı kilitle</button>
+            <button className="vault-backup-button" type="button" onClick={() => void createEncryptedBackup()} disabled={backupInputBusy || vaultBusy}>
+              {backupInputBusy ? "Yedek hazırlanıyor…" : "Şifreli yedek indir"}
+            </button>
+            <button className="vault-lock-button" type="button" onClick={() => void lockVault()} disabled={vaultBusy || backupInputBusy}>Kasayı kilitle</button>
           </div>
         </header>
 
@@ -780,7 +868,7 @@ export default function App() {
               <span>
                 Ses dosyaları yerel kasaya AES-GCM ile şifrelenerek kaydedilir; parola koruması Stronghold ile sağlanır.
                 Bu önizlemede dosya başına 128 MiB sınırı vardır; dinleme sırasında dosya bellekte çözülür.
-                Yedek/kurtarma ve ASR henüz yoktur. Gerçek vaka materyali kullanmayın.
+                Şifreli yedek alabilir ve boş kasaya geri yükleyebilirsiniz; parola kurtarma yoktur. ASR henüz bağlı değildir. Gerçek vaka materyali kullanmayın.
               </span>
             </div>
           </div>
