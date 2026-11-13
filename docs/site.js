@@ -107,6 +107,22 @@ function showRelease(targetId, release, unavailableText) {
   link.rel = "noopener noreferrer";
   link.textContent = "GitHub sürüm sayfasını aç ↗";
   target.append(meta, notes, link);
+
+  const assets = installerAssets(release);
+  if (assets.length > 0) {
+    const heading = document.createElement("p");
+    heading.className = "release-assets-heading";
+    heading.textContent = "Bu kanaldaki kurulum paketleri";
+    const assetList = document.createElement("div");
+    assetList.className = "release-asset-list";
+    for (const asset of assets) {
+      const assetLink = makeAssetLink(asset);
+      if (assetLink) assetList.append(assetLink);
+    }
+    if (assetList.childElementCount > 0) {
+      target.append(heading, assetList);
+    }
+  }
 }
 
 async function loadReleases() {
