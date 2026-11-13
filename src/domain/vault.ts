@@ -499,29 +499,21 @@ export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void>
   }
 
   const materials = [...files.entries()].filter(([path]) => path.startsWith(`${MATERIALS_DIR}/`));
-  const finalPaths = [
-    snapshotRelativePath(),
-    saltRelativePath(),
-    ...materials.map(([path]) => path),
+  const stagingPaths = [
+    ...materials.map(([path]) => `${path}.restore.part`),
+    `${saltRelativePath()}.restore.part`,
+    `${snapshotRelativePath()}.restore.part`,
   ];
-  const stagingPaths = finalPaths.map((path) => `${path}.restore.part`);
   const committed: string[] = [];
+  const staged: string[] = [];
+  let previousSalt: Uint8Array | null = null;
   let completed = false;
 
   try {
-    // Kısmi/önceki bir kurtarma kalıntısının üzerine asla yazma.
-    for (const path of finalPaths) {
-      if (path === saltRelativePath()) continue;
-      if (await exists(path, { baseDir: BaseDirectory.AppData })) {
-        throw new Error("Kasa klasöründe mevcut dosya veya önceki geri yüklemeden kalıntı var. Üzerine yazılmadı.");
-      }
-    }
-
-    // Stronghold eklentisi boş kurulumda Argon2 salt dosyasını snapshot'tan
-    // önce oluşturmuş olabilir. Snapshot yoksa bu salt'a bağlı bir kasa verisi yoktur.
+    // Snapshot yoksa yeni kurulumun oluşturduğu salt tek başına kasa verisi taşımaz.
     const existingSalt = await exists(saltRelativePath(), { baseDir: BaseDirectory.AppData });
     if (existingSalt) {
-      await remove(saltRelativePath(), { baseDir: BaseDirectory.AppData });
+      previousSalt = await readFile(saltRelativePath(), { baseDir: BaseDirectory.AppData });
     }
 
     if (await exists(MATERIALS_DIR, { baseDir: BaseDirectory.AppData })) {
@@ -531,6 +523,15 @@ export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void>
       }
     }
 
+    const finalPaths = [
+      snapshotRelativePath(),
+      ...materials.map(([path]) => path),
+    ];
+    for (const path of finalPaths) {
+      if (await exists(path, { baseDir: BaseDirectory.AppData })) {
+        throw new Error("Kasa klasöründe mevcut dosya veya önceki geri yüklemeden kalıntı var. Üzerine yazılmadı.");
+      }
+    }
     for (const path of stagingPaths) {
       if (await exists(path, { baseDir: BaseDirectory.AppData })) {
         throw new Error("Önceki geri yüklemeden kalan geçici dosya var. Elle inceleme gerekiyor.");
@@ -545,8 +546,10 @@ export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void>
       [snapshotRelativePath(), snapshotData],
     ];
     for (const [path, data] of orderedEntries) {
-      await writeFile(`${path}.restore.part`, data, { baseDir: BaseDirectory.AppData });
-      const written = await readFile(`${path}.restore.part`, { baseDir: BaseDirectory.AppData });
+      const stagingPath = `${path}.restore.part`;
+      staged.push(stagingPath);
+      await writeFile(stagingPath, data, { baseDir: BaseDirectory.AppData });
+      const written = await readFile(stagingPath, { baseDir: BaseDirectory.AppData });
       const valid = sameBytes(written, data);
       written.fill(0);
       if (!valid) throw new Error("Geri yüklenen geçici dosya diskte doğrulanamadı.");
@@ -559,32 +562,38 @@ export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void>
         newPathBaseDir: BaseDirectory.AppData,
       });
       committed.push(path);
+      staged.splice(staged.indexOf(`${path}.restore.part`), 1);
     }
+
     await rename(`${saltRelativePath()}.restore.part`, saltRelativePath(), {
       oldPathBaseDir: BaseDirectory.AppData,
       newPathBaseDir: BaseDirectory.AppData,
     });
     committed.push(saltRelativePath());
+    staged.splice(staged.indexOf(`${saltRelativePath()}.restore.part`), 1);
 
     await rename(`${snapshotRelativePath()}.restore.part`, snapshotRelativePath(), {
       oldPathBaseDir: BaseDirectory.AppData,
       newPathBaseDir: BaseDirectory.AppData,
     });
     committed.push(snapshotRelativePath());
+    staged.splice(staged.indexOf(`${snapshotRelativePath()}.restore.part`), 1);
     completed = true;
   } catch (error) {
-    for (const path of stagingPaths) {
+    for (const path of staged) {
       await remove(path, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
     }
     for (const path of committed.reverse()) {
       await remove(path, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
     }
+    // Başarısız geri yükleme boş kurulumda önceden bulunan salt dosyasını geri koyar.
+    if (previousSalt) {
+      await writeFile(saltRelativePath(), previousSalt, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
+    }
     throw error;
   } finally {
+    previousSalt?.fill(0);
     for (const data of files.values()) data.fill(0);
-    if (!completed) {
-      // Geri yükleme yarıda kaldıysa boş kasayı tekrar deneyebilir hâle getir.
-      await remove(snapshotRelativePath(), { baseDir: BaseDirectory.AppData }).catch(() => undefined);
-    }
+    void completed;
   }
 }
