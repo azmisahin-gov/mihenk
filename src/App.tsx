@@ -9,6 +9,8 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 const AUDIO_EXTENSION = /\.(wav|mp3|m4a|aac|ogg|flac|opus|wma|aiff?)$/i;
 
@@ -42,6 +44,10 @@ export default function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [notice, setNotice] = useState("Ses seçerek çalışma alanını başlatın.");
   const [isDragging, setIsDragging] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<Awaited<ReturnType<typeof check>>>(null);
+  const [updateState, setUpdateState] = useState<"checking" | "none" | "available" | "installing" | "error">("checking");
+  const [updateProgress, setUpdateProgress] = useState(0);
+  const [updateError, setUpdateError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
@@ -49,6 +55,28 @@ export default function App() {
   useEffect(() => {
     recordsRef.current = records;
   }, [records]);
+
+  useEffect(() => {
+    const isDesktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isDesktopRuntime) {
+      setUpdateState("none");
+      return;
+    }
+
+    let cancelled = false;
+    void check()
+      .then((update) => {
+        if (cancelled) return;
+        setAvailableUpdate(update);
+        setUpdateState(update ? "available" : "none");
+      })
+      .catch(() => {
+        // Ağ hatası veya yapılandırılmamış geliştirme derlemesi kullanıcı iş akışını engellemez.
+        if (!cancelled) setUpdateState("none");
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => () => {
     for (const record of recordsRef.current) {
@@ -220,6 +248,34 @@ export default function App() {
 
   const activeDuration = activeRecord?.durationSeconds ?? 0;
 
+  async function installAvailableUpdate(): Promise<void> {
+    if (!availableUpdate || records.length > 0 || updateState === "installing") return;
+    setUpdateState("installing");
+    setUpdateProgress(0);
+    setUpdateError("");
+
+    let downloadedBytes = 0;
+    let totalBytes: number | undefined;
+    try {
+      await availableUpdate.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          totalBytes = event.data.contentLength;
+        } else if (event.event === "Progress") {
+          downloadedBytes += event.data.chunkLength;
+          if (totalBytes && totalBytes > 0) {
+            setUpdateProgress(Math.min(100, Math.round((downloadedBytes / totalBytes) * 100)));
+          }
+        } else if (event.event === "Finished") {
+          setUpdateProgress(100);
+        }
+      });
+      await relaunch();
+    } catch (error) {
+      setUpdateError(error instanceof Error ? error.message : "Güncelleme kurulamadı.");
+      setUpdateState("error");
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -261,7 +317,7 @@ export default function App() {
           </div>
           <div className="version-line">
             <span>56.12 · Ses kayıtları</span>
-            <span>0.1.0</span>
+            <span>{import.meta.env.VITE_APP_VERSION ?? "0.1.0"}</span>
           </div>
         </div>
       </aside>
@@ -278,6 +334,42 @@ export default function App() {
             <span className="prototype-pill">GELİŞTİRME ÖNİZLEMESİ</span>
           </div>
         </header>
+
+        {updateState === "available" && availableUpdate && (
+          <div className="update-banner" role="status">
+            <div>
+              <strong>MİHENK {availableUpdate.version} güncellemesi hazır.</strong>
+              <p>{availableUpdate.body || "Yeni sürüm indirilebilir."}</p>
+              {records.length > 0 && (
+                <small>Bu oturumda ses kayıtları var. Çalışmanız kaybolmasın diye güncelleme, kayıtlar kaldırılana kadar devre dışı.</small>
+              )}
+            </div>
+            <button
+              className="primary-button"
+              type="button"
+              disabled={records.length > 0}
+              onClick={() => void installAvailableUpdate()}
+            >
+              İndir ve yeniden başlat
+            </button>
+          </div>
+        )}
+        {updateState === "installing" && (
+          <div className="update-banner" role="status">
+            <div>
+              <strong>Güncelleme indiriliyor ve kuruluyor.</strong>
+              <p>{updateProgress > 0 ? `İlerleme: %${updateProgress}` : "İndirme başlatıldı."}</p>
+            </div>
+          </div>
+        )}
+        {updateState === "error" && (
+          <div className="update-banner update-error" role="alert">
+            <div>
+              <strong>Güncelleme kurulamadı.</strong>
+              <p>{updateError || "Bağlantıyı kontrol edip daha sonra tekrar deneyin."}</p>
+            </div>
+          </div>
+        )}
 
         <section className="page-content">
           <div className="page-heading">
