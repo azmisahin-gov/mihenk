@@ -17,6 +17,7 @@ jobs:
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - platform: ubuntu-22.04
@@ -87,4 +88,5 @@ jobs:
           releaseDraft: false
           prerelease: true
           generateReleaseNotes: true
+          updaterJsonPreferNsis: true
           args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}
