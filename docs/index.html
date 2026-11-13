@@ -43,7 +43,7 @@
         <strong id="latest-version">Henüz sürüm yok</strong>
         <span id="latest-date" class="muted">İlk kararlı sürüm bekleniyor</span>
         <div class="card-rule"></div>
-        <p>İndirme bağlantıları yalnızca GitHub Releases üzerinde gerçekten yayımlanan kurulum dosyaları için görünür.</p>
+        <p>Kararlı sürüm varsa o, yoksa açıkça önizleme olarak işaretlenmiş en son geliştirme paketi gösterilir.</p>
         <a class="inline-link" href="https://github.com/azmisahin-gov/mihenk/releases" rel="noopener noreferrer">Tüm yayınları GitHub'da aç ↗</a>
       </aside>
     </section>
@@ -111,7 +111,7 @@
         <article class="download-card">
           <div class="os-symbol" aria-hidden="true">⊞</div>
           <h3>Windows</h3>
-          <p>Windows 10/11, 64 bit. Kurulum sihirbazı veya MSI paketi.</p>
+          <p>Windows 10/11, 64 bit. EXE mevcut kullanıcıya; MSI Program Files içine tüm bilgisayara kurulur ve yönetici izni ister. İkisinden birini seçin.</p>
           <div class="asset-list" id="windows-assets"><span class="empty-state">Henüz Windows paketi yayımlanmadı.</span></div>
         </article>
         <article class="download-card">
@@ -175,6 +175,10 @@
       <article class="faq-card">
         <h3>Güncelleme imzası nedir?</h3>
         <p>Bu, MİHENK yayıncısının yeni uygulama sürümünü kendisinin yayımladığını doğrulayan uygulamaya özgü teknik imzadır. Gizli anahtar yalnızca yayın altyapısında tutulur. Bilirkişinin bilgisayarına veya UYAP'a sertifika yüklemesi gerekmez.</p>
+      </article>
+      <article class="faq-card">
+        <h3>Windows'ta Setup.exe ile MSI arasındaki fark nedir?</h3>
+        <p><strong>Setup.exe</strong> varsayılan olarak yalnızca geçerli Windows kullanıcısına kurulur ve yönetici izni istemez. <strong>MSI</strong> Program Files içine bilgisayar geneline kurulum yapar ve yönetici izni gerektirir. Bunlar alternatif kurulum biçimleridir; ikisini birlikte kurmanız gerekmez. Günlük kullanım için Setup.exe önerilir.</p>
       </article>
       <article class="faq-card">
         <h3>Aynı kurulum birden fazla bilgisayarda çalışır mı?</h3>
