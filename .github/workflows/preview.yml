@@ -199,10 +199,32 @@ jobs:
             exit 1
           }
           echo "Linux yayın ikilisi 20 saniye açık kaldı."
-      - name: Windows MSI kurulumunu ve kurulu uygulamayı doğrula
+      - name: Windows NSIS Setup.exe kurulumunu ve açılışını doğrula
+        id: nsis_smoke
         if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: ./scripts/test-windows-installed-nsis.ps1
+      - name: Windows MSI kurulumunu ve kurulu uygulamayı doğrula
+        id: msi_smoke
+        if: runner.os == 'Windows'
+        continue-on-error: true
         shell: pwsh
         run: ./scripts/test-windows-installed-msi.ps1
+      - name: Windows kurulum testlerini zorunlu tut
+        if: ${{ always() && runner.os == 'Windows' }}
+        shell: pwsh
+        env:
+          NSIS_OUTCOME: ${{ steps.nsis_smoke.outcome }}
+          MSI_OUTCOME: ${{ steps.msi_smoke.outcome }}
+        run: |
+          $failures = @()
+          if ($env:NSIS_OUTCOME -ne "success") { $failures += "NSIS Setup.exe: $($env:NSIS_OUTCOME)" }
+          if ($env:MSI_OUTCOME -ne "success") { $failures += "MSI: $($env:MSI_OUTCOME)" }
+          if ($failures.Count -gt 0) {
+            throw ("Windows kurulum kabul testleri başarısız: " + ($failures -join "; "))
+          }
+          Write-Host "NSIS Setup.exe ve MSI gerçek kurulum/açılış testleri başarılı."
 
 
   yayina-al:
