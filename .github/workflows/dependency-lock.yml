@@ -2,7 +2,7 @@ name: Bağımlılık kilit dosyalarını güncelle
 
 on:
   push:
-    branches: ["feat/yerel-gorev-kasasi"]
+    branches: ["main", "feat/yerel-kasa-yedek-geri-yukle"]
     paths:
       - "package.json"
       - "src-tauri/Cargo.toml"
