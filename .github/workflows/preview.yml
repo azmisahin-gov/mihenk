@@ -88,7 +88,10 @@ jobs:
           node <<'NODE'
           const fs = require("node:fs");
           const raw = process.env.TAURI_SIGNING_PRIVATE_KEY || "";
-          const key = raw.replace(/^\\uFEFF/, "").replace(/^ï»¿/, "").trim();
+          let key = raw;
+          if (key.charCodeAt(0) === 0xfeff) key = key.slice(1);
+          if (key.startsWith("ï»¿")) key = key.slice(3);
+          key = key.trim();
           if (!key) throw new Error("TAURI_SIGNING_PRIVATE_KEY boş.");
           const delimiter = "MIHENK_PRIVATE_KEY_END";
           if (key.includes(delimiter)) throw new Error("İmza anahtarı ayırıcıyla çakışıyor.");
