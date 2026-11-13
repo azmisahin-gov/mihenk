@@ -59,6 +59,8 @@ jobs:
             patchelf
       - name: Bağımlılıkları kilitli kur
         run: npm ci --no-audit --no-fund
+      - name: Kare uygulama simgelerini üret
+        run: npx tauri icon src-tauri/icons/mihenk.svg --output src-tauri/icons
       - name: Sürümü ve imza anahtarlarını doğrula
         shell: bash
         run: |
@@ -81,12 +83,30 @@ jobs:
           fs.writeFileSync("src-tauri/tauri.generated.conf.json", JSON.stringify(config, null, 2) + "\n");
           NODE
           echo "VITE_APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Güncelleme imza anahtarını UTF-8 BOM karakterinden arındır
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require("node:fs");
+          const raw = process.env.TAURI_SIGNING_PRIVATE_KEY || "";
+          let key = raw;
+          if (key.charCodeAt(0) === 0xfeff) key = key.slice(1);
+          if (key.startsWith("ï»¿")) key = key.slice(3);
+          key = key.trim();
+          if (!key) throw new Error("TAURI_SIGNING_PRIVATE_KEY boş.");
+          const delimiter = "MIHENK_PRIVATE_KEY_END";
+          if (key.includes(delimiter)) throw new Error("İmza anahtarı ayırıcıyla çakışıyor.");
+          fs.appendFileSync(
+            process.env.GITHUB_ENV,
+            `TAURI_SIGNING_PRIVATE_KEY<<${delimiter}\n${key}\n${delimiter}\n`,
+            { encoding: "utf8", mode: 0o600 },
+          );
+          NODE
       - name: Derle ve GitHub Releases bölümüne yayımla
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: .
           tagName: v__VERSION__
