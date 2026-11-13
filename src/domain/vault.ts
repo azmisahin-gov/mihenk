@@ -565,6 +565,9 @@ export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void>
       staged.splice(staged.indexOf(`${path}.restore.part`), 1);
     }
 
+    if (previousSalt) {
+      await remove(saltRelativePath(), { baseDir: BaseDirectory.AppData });
+    }
     await rename(`${saltRelativePath()}.restore.part`, saltRelativePath(), {
       oldPathBaseDir: BaseDirectory.AppData,
       newPathBaseDir: BaseDirectory.AppData,
