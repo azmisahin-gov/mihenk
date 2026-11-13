@@ -2,18 +2,7 @@ name: Ön yüz doğrulaması
 
 on:
   push:
-    branches: ["main"]
-    paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "tests/**"
-      - "package.json"
-      - "package-lock.json"
-      - "tsconfig.json"
-      - "vite.config.ts"
-      - ".github/workflows/verify.yml"
-  pull_request:
-    branches: ["main"]
+    branches: ["main", "feat/56-12-ses-calisma-alani"]
     paths:
       - "src/**"
       - "src-tauri/**"
