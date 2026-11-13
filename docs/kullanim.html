@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="MİHENK 56.12 ses çalışma alanı geliştirme önizlemesi kullanım kılavuzu.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <title>MİHENK — Kullanım Kılavuzu</title>
+  <link rel="stylesheet" href="./site.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">İçeriğe geç</a>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="MİHENK ana sayfa">
+      <span class="brand-mark" aria-hidden="true">M</span>
+      <span><strong>MİHENK</strong><small>Bilirkişi çalışma alanı</small></span>
+    </a>
+    <nav aria-label="Ana menü">
+      <a href="./">Ana sayfa</a>
+      <a href="./#indir">İndir</a>
+      <a href="./#surumler">Sürümler</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="guide-hero">
+      <p class="eyebrow">KULLANIM KILAVUZU · 56.12</p>
+      <h1>Ses çalışma alanı</h1>
+      <p class="lead">Bu kılavuz, MİHENK masaüstü geliştirme önizlemesindeki ses kuyruğu, yerel oynatma ve elle transkript taslağı düzenleme işlevlerini açıklar.</p>
+      <div class="guide-warning" role="alert">
+        <strong>Önemli: Bu sürüm gerçek vaka materyali için hazır değildir.</strong>
+        Çalışma yalnızca uygulama belleğinde tutulur. Uygulamayı kapatmak veya güncellemek ses kuyruğunu ve transkript düzenlemelerini kaybettirir. Şifreli yerel kasa, otomatik kayıt, yedekleme ve geri yükleme henüz bulunmaz. Yalnızca sentetik, kişisel olmayan veya kullanım izni bulunan test sesleriyle deneyin.
+      </div>
+    </section>
+
+    <div class="guide-layout">
+      <article class="guide-article">
+        <section id="baslangic">
+          <h2>1. Başlangıç ve ses ekleme</h2>
+          <ol>
+            <li>MİHENK'i açın. Üst bölümde <strong>GELİŞTİRME ÖNİZLEMESİ</strong> ibaresi görülür.</li>
+            <li><strong>Ses dosyası ekle</strong> düğmesiyle cihazınızdan bir veya birden fazla dosya seçin; dosyaları sol taraftaki kuyruğa da sürükleyip bırakabilirsiniz.</li>
+            <li>Desteklenen yaygın uzantılar WAV, MP3, M4A, AAC, OGG, FLAC, OPUS, WMA ve AIFF'tir. Gerçek oynatma desteği işletim sistemi ve WebView medya bileşenine göre değişebilir.</li>
+            <li>Bir kaydı seçtiğinizde orta bölümde oynatma alanı açılır. Orijinal dosya bu prototipte değiştirilmez veya başka bir servise yüklenmez.</li>
+          </ol>
+          <p class="guide-note">Test için kısa, kişisel veri içermeyen bir ses kullanın. Kaynak dosyanın tek kopyasını düzenleme amacıyla dönüştürmeyin veya üzerine yazmayın.</p>
+        </section>
+
+        <section id="dinleme">
+          <h2>2. Dinleme ve zaman konumu</h2>
+          <ul>
+            <li>Orta bölümdeki yerleşik ses denetimlerini oynatma, duraklatma ve ses düzeyi için kullanabilirsiniz.</li>
+            <li>Zaman kaydırıcısı belirli bir konuma gitmenizi sağlar. Segment zamanına tıklamak ilgili konumdan oynatmayı başlatır.</li>
+            <li>Ses kuyruğunda başka bir kayıt seçildiğinde dinleme alanı seçilen dosyaya geçer.</li>
+          </ul>
+        </section>
+
+        <section id="segment">
+          <h2>3. Transkript bölümü oluşturma ve düzeltme</h2>
+          <ol>
+            <li>Dinlediğiniz sesin ilgili noktasında duraklatın.</li>
+            <li><strong>Dinleme konumuna bölüm ekle</strong> veya transkript panelindeki <strong>+ Bölüm</strong> düğmesini kullanın.</li>
+            <li>Sağ paneldeki metin alanına duyduğunuz ifadeyi yazın. Sistem otomatik konuşma tanıma yapmaz; metin uzman tarafından elle girilir.</li>
+            <li>Konuşmacı alanını yalnızca <strong>Konuşmacı 1</strong>, <strong>Konuşmacı 2</strong> gibi nötr etiketlerle kullanın. Bu alan kişi kimliği, cinsiyet veya yaş tespiti yapmaz.</li>
+            <li>Durum alanında bölümü <strong>Taslak</strong>, <strong>Belirsiz</strong> veya <strong>Uzman kontrol etti</strong> olarak işaretleyebilirsiniz.</li>
+            <li>Bir bölümün bitişini işaretlemek için sesi o noktaya getirin ve <strong>Bitişi işaretle</strong> düğmesine basın. Bitiş zamanı başlangıçtan önce olamaz.</li>
+            <li>İşaretli bir bölümü tekrar tekrar dinlemek için <strong>Aralığı tekrarla</strong> düğmesine basın. Oynatma bölümün bitişinde başlangıca döner; <strong>Tekrar açık</strong> düğmesine yeniden basarak döngüyü kapatabilirsiniz. Bu işlem yalnızca geçerli oturumda çalışır.</li>
+          </ol>
+          <p>Yeni bölümler başlangıç zamanına göre sıralanır. Bir bölümü silmek yalnızca geçerli prototip oturumundaki taslak bölümü kaldırır.</p>
+        </section>
+
+        <section id="kisayol">
+          <h2>4. Klavye kısayolları</h2>
+          <table class="guide-shortcuts">
+            <thead><tr><th>Kısayol</th><th>İşlem</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>Space</kbd></td><td>Oynat / duraklat</td></tr>
+              <tr><td><kbd>←</kbd> / <kbd>→</kbd></td><td>5 saniye geri / ileri sar</td></tr>
+              <tr><td><kbd>Ctrl</kbd> / <kbd>⌘</kbd> + <kbd>Enter</kbd></td><td>Geçerli dinleme konumuna bölüm ekle</td></tr>
+            </tbody>
+          </table>
+          <p>Metin kutusu, seçim alanı veya zaman kaydırıcısı odaktayken bu kısayollar metin ve kontrol düzenlemesinin önüne geçmez.</p>
+        </section>
+
+        <section id="disari">
+          <h2>5. Taslak dışa aktarma</h2>
+          <ul>
+            <li><strong>TXT dışa aktar</strong> okunabilir zaman kodlu transkript taslağı üretir.</li>
+            <li><strong>JSON dışa aktar</strong> dosya adı, türü, boyutu, okunan süreyi, varsa ön kontrol SHA-256 değerini ve segment alanlarını yapılandırılmış biçimde verir.</li>
+            <li>Dışa aktarılan dosyalar nihai bilirkişi raporu, onaylı transkript, UDF veya UYAP'a sunulabilir belge değildir.</li>
+          </ul>
+        </section>
+
+        <section id="hash">
+          <h2>6. SHA-256 ön kontrolünün anlamı</h2>
+          <p>Prototip, 128 MiB ve altındaki ses dosyalarında tarayıcı kriptografi API'siyle bir SHA-256 özeti hesaplar. Daha büyük dosyalarda bu ön kontrol atlanır. Bu değer tek başına dosyanın özgünlüğünü, bütünlüğünü, elde edilme biçimini veya delil zincirini kanıtlamaz. Akışlı hash ve kanıtlanabilir kaynak kabul süreci henüz uygulanmamıştır.</p>
+        </section>
+
+        <section id="sinirlar">
+          <h2>7. Bu önizlemede bulunmayan işlevler</h2>
+          <ul>
+            <li>Otomatik konuşma tanıma (ASR) ve model indirme/çalıştırma yoktur.</li>
+            <li>Kalıcı veya şifreli görev kasası, otomatik kayıt, yedekleme ve geri yükleme yoktur.</li>
+            <li>Ses dosyasından konuşmacı kimliği, cinsiyet veya yaş çıkarımı yapılmaz.</li>
+            <li>Ses özgünlüğü/manipülasyon analizi, ses karşılaştırması veya adli ses incelemesi yapılmaz.</li>
+            <li>UDF oluşturma, UYAP API erişimi/otomasyonu, bilirkişi adına görüş üretme, imza atma veya resmî teslim işlemi yoktur.</li>
+          </ul>
+        </section>
+
+        <section id="guvenlik">
+          <h2>8. Güvenli test ve geri bildirim</h2>
+          <p>Bu aşamada gerçek dava, soruşturma, kişi veya kurum verisi içeren sesleri, transkriptleri, ekran görüntülerini ya da dosya numaralarını GitHub'a veya hata bildirimlerine eklemeyin. Hata bildirirken yalnızca sentetik örnek, uygulama sürümü ve kişisel veri içermeyen hata adımlarını paylaşın.</p>
+          <p>Uygulamayı kapatmadan önce TXT veya JSON taslağınızı dışa aktarın; bunlar da yalnızca geçici taslak kopyalarıdır ve güvenli kasa yerine geçmez.</p>
+        </section>
+      </article>
+
+      <aside class="guide-aside" aria-label="Kılavuz içindekiler">
+        <h2>Bu sayfada</h2>
+        <a href="#baslangic">Başlangıç ve ses ekleme</a>
+        <a href="#dinleme">Dinleme ve zaman konumu</a>
+        <a href="#segment">Transkript bölümleri</a>
+        <a href="#kisayol">Klavye kısayolları</a>
+        <a href="#disari">Taslak dışa aktarma</a>
+        <a href="#hash">SHA-256 ön kontrolü</a>
+        <a href="#sinirlar">Önizleme sınırları</a>
+        <a href="#guvenlik">Güvenli test</a>
+      </aside>
+    </div>
+    <div class="guide-bottom">
+      <a class="button button-secondary" href="./">Ana sayfaya dön</a>
+      <a class="button button-primary" href="./#indir">Sürümleri görüntüle</a>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <a class="brand footer-brand" href="./"><span class="brand-mark" aria-hidden="true">M</span><span><strong>MİHENK</strong><small>Bilirkişi çalışma alanı</small></span></a>
+    <div><a href="./">Ana sayfa</a><a href="https://github.com/azmisahin-gov/mihenk/issues" rel="noopener noreferrer">Hata bildir / katkı ver</a><span>© MİHENK</span></div>
+  </footer>
+</body>
+</html>

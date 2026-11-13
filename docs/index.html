@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="MİHENK bilirkişi masaüstü uygulaması — kararlı ve önizleme sürümlerini indir.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' https://api.github.com; img-src 'self' data:; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <title>MİHENK — İndir</title>
+  <link rel="stylesheet" href="./site.css">
+  <script src="./site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">İçeriğe geç</a>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="MİHENK ana sayfa">
+      <span class="brand-mark" aria-hidden="true">M</span>
+      <span><strong>MİHENK</strong><small>Bilirkişi çalışma alanı</small></span>
+    </a>
+    <nav aria-label="Ana menü">
+      <a href="#ozellikler">Özellikler</a>
+      <a href="#indir">İndir</a>
+      <a href="./kullanim.html">Kullanım kılavuzu</a>
+      <a href="#surumler">Sürümler</a>
+      <a href="https://github.com/azmisahin-gov/mihenk" rel="noopener noreferrer">Kaynak kodu</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">YEREL · MASAÜSTÜ · BİLİRKİŞİ ODAKLI</p>
+        <h1>İşinizi tek bir çalışma alanında yürütün.</h1>
+        <p class="lead">MİHENK'in Windows ve Pardus/Linux kurulum paketleri, sürüm notları ve doğrulanmış indirme bağlantıları bu sayfada yer alır.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#indir">Sürümleri görüntüle</a>
+          <a class="button button-secondary" href="https://github.com/azmisahin-gov/mihenk/issues/3" rel="noopener noreferrer">Pilot kapsamı ve durum</a>
+        </div>
+        <p class="status-line"><span class="status-dot" aria-hidden="true"></span><span id="page-status" role="status" aria-live="polite">Yayın bilgisi kontrol ediliyor…</span></p>
+      </div>
+      <aside class="hero-card" aria-label="MİHENK yayın durumu">
+        <span class="card-kicker">YAYIN KANALI</span>
+        <strong id="latest-version">Henüz sürüm yok</strong>
+        <span id="latest-date" class="muted">İlk kararlı sürüm bekleniyor</span>
+        <div class="card-rule"></div>
+        <p>İndirme bağlantıları yalnızca GitHub Releases üzerinde gerçekten yayımlanan kurulum dosyaları için görünür.</p>
+        <a class="inline-link" href="https://github.com/azmisahin-gov/mihenk/releases" rel="noopener noreferrer">Tüm yayınları GitHub'da aç ↗</a>
+      </aside>
+    </section>
+
+    <section class="section feature-section" id="ozellikler">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">ÜRÜN YETENEKLERİ</p>
+          <h2>Mevcut iş akışı ve geliştirme başlıkları</h2>
+          <p class="section-lead">MİHENK tek bir masaüstü çalışma alanında ilerler. Her modül doğrulama tamamlandıkça kullanıma açılır.</p>
+        </div>
+      </div>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <span class="feature-number">01</span>
+          <h3>Çoklu ses kuyruğu</h3>
+          <p>Birden fazla ses kaydını aynı çalışma alanına alın; kayıtlar arasında geçiş yapın ve yerel oynatmayı kullanın.</p>
+          <span class="feature-state available">Önizlemede mevcut</span>
+        </article>
+        <article class="feature-card">
+          <span class="feature-number">02</span>
+          <h3>Zaman kodlu transkript</h3>
+          <p>Dinleme konumunda bölüm oluşturun; başlangıç/bitiş, metin, nötr konuşmacı etiketi ve kontrol durumunu düzenleyin. İşaretli ses aralığını döngüde tekrar dinleyin.</p>
+          <span class="feature-state available">Önizlemede mevcut</span>
+        </article>
+        <article class="feature-card">
+          <span class="feature-number">03</span>
+          <h3>Uzman denetimli taslak</h3>
+          <p>Belirsiz bölümleri işaretleyin ve TXT/JSON taslağı alın. Sistem bilirkişi adına mesleki kanaat veya nihai rapor oluşturmaz.</p>
+          <span class="feature-state available">Önizlemede mevcut</span>
+        </article>
+        <article class="feature-card">
+          <span class="feature-number">04</span>
+          <h3>Şifreli yerel görev kasası</h3>
+          <p>Görevlerin, kaynakların ve düzeltmelerin uygulama kapanınca kaybolmaması; şifreleme, kilitleme ve kurtarma.</p>
+          <span class="feature-state planned">Geliştirme ve güvenlik doğrulaması bekliyor</span>
+        </article>
+        <article class="feature-card">
+          <span class="feature-number">05</span>
+          <h3>Cihaz içi Türkçe ASR</h3>
+          <p>Model lisansı, doğruluk, hız ve kaynak kullanımı karşılaştırıldıktan sonra çevrimdışı transkripsiyon motoru.</p>
+          <span class="feature-state planned">Benchmark ve entegrasyon bekliyor</span>
+        </article>
+        <article class="feature-card">
+          <span class="feature-number">06</span>
+          <h3>Doğrulanmış çıktı ve resmi süreç sınırı</h3>
+          <p>Belge çıktıları ve UDF/UYAP uyumluluğu ancak biçim, yetki ve yeniden dağıtım koşulları doğrulandıktan sonra ele alınır.</p>
+          <span class="feature-state planned">Araştırma ve uzman incelemesi bekliyor</span>
+        </article>
+      </div>
+      <p class="feature-footnote">Önizleme sürümündeki ses ve transkript çalışmaları yalnızca oturum belleğinde tutulur. Şifreli kasa ve otomatik kayıt gelene kadar gerçek vaka materyaliyle kullanılmamalıdır.</p>
+    </section>
+
+    <section class="section" id="indir">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">KURULUM PAKETLERİ</p>
+          <h2>İşletim sisteminizi seçin</h2>
+          <p class="section-lead">Paketler yayımlandığında indirme düğmeleri burada otomatik görünür.</p>
+        </div>
+        <span class="release-chip" id="stable-chip">Kararlı sürüm: kontrol ediliyor</span>
+      </div>
+
+      <div class="download-grid">
+        <article class="download-card">
+          <div class="os-symbol" aria-hidden="true">⊞</div>
+          <h3>Windows</h3>
+          <p>Windows 10/11, 64 bit. Kurulum sihirbazı veya MSI paketi.</p>
+          <div class="asset-list" id="windows-assets"><span class="empty-state">Henüz Windows paketi yayımlanmadı.</span></div>
+        </article>
+        <article class="download-card">
+          <div class="os-symbol" aria-hidden="true">◈</div>
+          <h3>Pardus / Debian</h3>
+          <p>Debian tabanlı 64 bit sistemler için DEB paketi.</p>
+          <div class="asset-list" id="debian-assets"><span class="empty-state">Henüz DEB paketi yayımlanmadı.</span></div>
+        </article>
+        <article class="download-card">
+          <div class="os-symbol" aria-hidden="true">◇</div>
+          <h3>Linux AppImage</h3>
+          <p>Desteklenen Linux dağıtımlarında taşınabilir uygulama paketi.</p>
+          <div class="asset-list" id="appimage-assets"><span class="empty-state">Henüz AppImage paketi yayımlanmadı.</span></div>
+        </article>
+      </div>
+      <p class="integrity-note">Güvenlik: İndirme bağlantıları GitHub Releases kaynaklıdır. İmzalı otomatik güncelleme, uygulama içindeki Tauri imza doğrulamasıyla ayrıca denetlenir. İmza doğrulaması, bilirkişilik delil zinciri doğrulaması anlamına gelmez.</p>
+    </section>
+
+    <section class="section release-section" id="surumler">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">SÜRÜM GEÇMİŞİ</p>
+          <h2>Kararlı ve önizleme sürümleri</h2>
+          <p class="section-lead">Önizleme sürümleri test içindir; kararlı sürüm yerine kullanılmamalıdır.</p>
+        </div>
+      </div>
+      <div class="release-columns">
+        <article class="release-panel">
+          <div class="panel-title"><h3>Kararlı sürüm</h3><span class="channel-tag stable">STABLE</span></div>
+          <div id="stable-release" class="release-content"><p class="empty-state">Yayın bilgisi bekleniyor.</p></div>
+        </article>
+        <article class="release-panel">
+          <div class="panel-title"><h3>Geliştirme önizlemesi</h3><span class="channel-tag preview">PREVIEW</span></div>
+          <div id="preview-release" class="release-content"><p class="empty-state">Önizleme sürümü henüz yayımlanmadı.</p></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="notice-section">
+      <h2>Kurulumdan önce</h2>
+      <div class="notice-grid">
+        <div><strong>Doğru işletim sistemi</strong><p>Yalnızca işletim sisteminize ve işlemci mimarinize uygun paketi indirin.</p></div>
+        <div><strong>Önizleme sürümleri</strong><p>Önizleme sürümleri deneysel olabilir. Gerçek bilirkişi dosyaları için onaylanmış kullanım sürümü değildir.</p></div>
+        <div><strong>Veri güvenliği</strong><p>MİHENK'in gerçek dosyalarla kullanımı; şifreli yerel kasa, kurtarma, ASR ve uzman doğrulama testleri tamamlanmadan ilan edilmeyecektir.</p></div>
+      </div>
+      <p class="notice-footer">Henüz paket yoksa bu sayfa bunu açıkça bildirir; sizi var olmayan bir indirmeye yönlendirmez.</p>
+    </section>
+    <section class="section faq-section" id="guvenlik">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">KURULUM VE GÜVEN</p>
+        <h2>Sık sorulan sorular</h2>
+        <p class="section-lead">Kurulum, güncelleme ve UYAP e-imzası birbirinden ayrı konulardır.</p>
+      </div>
+    </div>
+    <div class="faq-grid">
+      <article class="faq-card">
+        <h3>MİHENK'i kurmak için UYAP e-imza sertifikası gerekir mi?</h3>
+        <p><strong>Hayır.</strong> MİHENK'i indirmek, kurmak ve açmak için bilirkişinin UYAP e-imza sertifikası gerekmez. UYAP e-imza, yalnızca ilgili resmî UYAP işlemlerinde ve yetkili imza adımlarında ayrı olarak kullanılır. MİHENK bu sertifikanın yerine geçmez.</p>
+      </article>
+      <article class="faq-card">
+        <h3>Güncelleme imzası nedir?</h3>
+        <p>Bu, MİHENK yayıncısının yeni uygulama sürümünü kendisinin yayımladığını doğrulayan uygulamaya özgü teknik imzadır. Gizli anahtar yalnızca yayın altyapısında tutulur. Bilirkişinin bilgisayarına veya UYAP'a sertifika yüklemesi gerekmez.</p>
+      </article>
+      <article class="faq-card">
+        <h3>Aynı kurulum birden fazla bilgisayarda çalışır mı?</h3>
+        <p>Evet. Yayınlanan kurulum paketi aynı desteklenen işletim sistemine sahip bilgisayarlara kurulabilir. Her bilgisayar kendi yerel çalışma verisini tutar; uygulama yayıncısının imza anahtarı kullanıcıya dağıtılmaz.</p>
+      </article>
+      <article class="faq-card">
+        <h3>Yeni sürüm nasıl yüklenir?</h3>
+        <p>Hedeflenen kullanımda uygulama yeni sürümü kontrol eder, imzasını doğrular ve uygun olduğunda kendini günceller. İlk dağıtımda Windows SmartScreen veya işletim sistemi izinleri gösterilebilir. Bu uyarılar UYAP e-imzası ile ilgili değildir.</p>
+      </article>
+    </div>
+  </section>
+
+</main>
+
+  <footer class="site-footer">
+    <a class="brand footer-brand" href="./"><span class="brand-mark" aria-hidden="true">M</span><span><strong>MİHENK</strong><small>Bilirkişi çalışma alanı</small></span></a>
+    <div><a href="./kullanim.html">Kullanım kılavuzu</a><a href="https://github.com/azmisahin-gov/mihenk" rel="noopener noreferrer">GitHub deposu</a><a href="https://github.com/azmisahin-gov/mihenk/issues" rel="noopener noreferrer">Hata bildir / katkı ver</a><span>© MİHENK</span></div>
+  </footer>
+</body>
+</html>

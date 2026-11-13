@@ -1,0 +1,99 @@
+name: MİHENK kararlı sürüm
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mihenk-kararli-yayin
+  cancel-in-progress: false
+
+jobs:
+  yayinla:
+    name: ${{ matrix.platform }} kurulum paketleri
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            bundles: "appimage,deb"
+          - platform: windows-latest
+            bundles: "nsis,msi"
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Rust kur
+        uses: dtolnay/rust-toolchain@stable
+      - name: Linux paket bağımlılıklarını kur
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+      - name: Bağımlılıkları kilitli kur
+        run: npm ci --no-audit --no-fund
+      - name: Sürümü ve imza anahtarlarını doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          CONFIG_VERSION="$(node -p "JSON.parse(require('fs').readFileSync('src-tauri/tauri.conf.json','utf8')).version")"
+          CARGO_VERSION="$(node -e "const t=require('fs').readFileSync('src-tauri/Cargo.toml','utf8'); console.log(t.match(/\[package\][\s\S]*?version = \"([^\"]+)\"/)[1])")"
+          test "$VERSION" = "$PACKAGE_VERSION"
+          test "$VERSION" = "$CONFIG_VERSION"
+          test "$VERSION" = "$CARGO_VERSION"
+          test -n "$TAURI_UPDATER_PUBLIC_KEY"
+          test -n "$TAURI_SIGNING_PRIVATE_KEY"
+          node - "$VERSION" "$TAURI_UPDATER_PUBLIC_KEY" <<'NODE'
+          const fs = require("node:fs");
+          const [version, pubkey] = process.argv.slice(2);
+          const config = JSON.parse(fs.readFileSync("src-tauri/tauri.release.conf.json", "utf8"));
+          config.version = version;
+          config.plugins.updater.pubkey = pubkey;
+          fs.writeFileSync("src-tauri/tauri.generated.conf.json", JSON.stringify(config, null, 2) + "\n");
+          NODE
+          echo "VITE_APP_VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Derle ve GitHub Releases bölümüne yayımla
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: .
+          tagName: v__VERSION__
+          releaseName: MİHENK v__VERSION__
+          releaseBody: "Windows ve Linux kurulum paketleri. Güncellemeler Tauri imzasıyla doğrulanır."
+          releaseDraft: false
+          prerelease: false
+          generateReleaseNotes: true
+          updaterJsonPreferNsis: true
+          args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}

@@ -1,0 +1,137 @@
+name: Ön yüz doğrulaması
+
+on:
+  push:
+    branches: ["main", "feat/56-12-ses-calisma-alani"]
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "vite.config.ts"
+      - ".github/workflows/verify.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arayuz:
+    name: TypeScript ve üretim derlemesi
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Kilitli JavaScript bağımlılıklarını kur
+        run: npm ci --no-audit --no-fund
+      - name: Birim testleri
+        run: npm test
+      - name: TypeScript denetimi
+        run: npm run check
+      - name: Üretim ön yüzünü derle
+        run: npm run build
+
+  masaustu:
+    name: Tauri masaüstü derleme denetimi
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Rust kur
+        uses: dtolnay/rust-toolchain@stable
+      - name: Linux bağımlılıklarını kur
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            xvfb
+      - name: Kilitli JavaScript bağımlılıklarını kur
+        run: npm ci --no-audit --no-fund
+      - name: Ön yüzü derle
+        run: npm run build
+      - name: Kilitli Tauri Rust bağımlılıklarını denetle
+        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+      - name: Masaüstü ikilisini derle
+        run: cargo build --locked --manifest-path src-tauri/Cargo.toml
+      - name: Linux sanal ekranda uygulamayı başlat
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a bash -lc '
+            ./src-tauri/target/debug/mihenk &
+            app_pid=$!
+            cleanup() {
+              kill "$app_pid" 2>/dev/null || true
+              wait "$app_pid" 2>/dev/null || true
+            }
+            trap cleanup EXIT
+            for attempt in $(seq 1 20); do
+              if ! kill -0 "$app_pid" 2>/dev/null; then
+                wait "$app_pid"
+                exit 1
+              fi
+              sleep 1
+            done
+            kill -0 "$app_pid"
+          '
+      - name: Windows uygulamasını başlatma denetimi
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $app = Join-Path $PWD "src-tauri/target/debug/mihenk.exe"
+          if (-not (Test-Path $app)) {
+            throw "Masaüstü ikilisi bulunamadı: $app"
+          }
+
+          $stdout = Join-Path $env:RUNNER_TEMP "mihenk-stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "mihenk-stderr.log"
+          $webViewData = Join-Path $env:RUNNER_TEMP "mihenk-webview2"
+          New-Item -ItemType Directory -Force -Path $webViewData | Out-Null
+          $env:WEBVIEW2_USER_DATA_FOLDER = $webViewData
+
+          $process = Start-Process -FilePath $app -WorkingDirectory (Split-Path $app) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            for ($attempt = 1; $attempt -le 15; $attempt++) {
+              Start-Sleep -Seconds 1
+              $process.Refresh()
+              if ($process.HasExited) {
+                $outText = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+                $errText = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                throw "MİHENK başlatıldıktan sonra kapandı. Çıkış kodu: $($process.ExitCode). stdout: $outText stderr: $errText"
+              }
+            }
+
+            Write-Output "MİHENK Windows süreci 15 saniye boyunca açık kaldı. PID: $($process.Id)"
+          }
+          finally {
+            $process.Refresh()
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+          }
