@@ -30,6 +30,7 @@ import {
   parseVaultBackup,
   MAX_VAULT_BACKUP_BYTES,
   type VaultBackupEntry,
+  isVaultMaterialFileName,
 } from "./vault-backup";
 
 const VAULT_DIR = "mihenk-vault";
@@ -103,7 +104,7 @@ function saltRelativePath(): string {
 }
 
 function backupMaterialPath(fileName: string): string {
-  if (!/^[a-f0-9]{32}\\.mhn$/.test(fileName)) {
+  if (!isVaultMaterialFileName(fileName)) {
     throw new Error("Kasada yedeklenmeye uygun olmayan bir materyal dosyası var.");
   }
   return `${MATERIALS_DIR}/${fileName}`;
