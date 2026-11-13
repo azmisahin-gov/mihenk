@@ -566,9 +566,9 @@ export default function App() {
       const dateStamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
       saveBinaryFile(`MİHENK-yerel-kasa-${dateStamp}.mihenkbackup`, backup);
       backup.fill(0);
-      setNotice("Şifreli kasa yedeği oluşturuldu. Kasa parolası olmadan geri açılamaz.");
+      setNotice("Kasa yedeği oluşturuldu. İçindeki veriler mevcut kasa parolasıyla açılır.");
     } catch (error) {
-      setNotice(error instanceof Error ? `Şifreli yedek oluşturulamadı: ${error.message}` : "Şifreli yedek oluşturulamadı.");
+      setNotice(error instanceof Error ? `Kasa yedeği oluşturulamadı: ${error.message}` : "Şifreli yedek oluşturulamadı.");
     } finally {
       setBackupInputBusy(false);
     }
@@ -596,7 +596,7 @@ export default function App() {
       setVaultPassword("");
       setVaultPasswordConfirm("");
       setVaultState("locked");
-      setNotice("Şifreli yedek geri yüklendi. Salt yapılandırmasını yenilemek için uygulama yeniden başlatılıyor.");
+      setNotice("Kasa yedeği geri yüklendi. Salt yapılandırmasını yenilemek için uygulama yeniden başlatılıyor.");
       await relaunch();
     } catch (error) {
       setVaultError(error instanceof Error ? error.message : "Şifreli yedek geri yüklenemedi.");
@@ -742,7 +742,7 @@ export default function App() {
                 type="button"
                 onClick={() => backupInputRef.current?.click()}
                 disabled={backupInputBusy || busy}
-              >{backupInputBusy ? "Yedek doğrulanıyor…" : "Şifreli yedekten geri yükle"}</button>
+              >{backupInputBusy ? "Yedek doğrulanıyor…" : "Kasa yedeğinden geri yükle"}</button>
             </div>
           )}
           <div className="vault-gate-notice">
@@ -811,7 +811,7 @@ export default function App() {
             <span className="status-pill"><span className="status-dot" /> Cihaz içinde</span>
             <span className="prototype-pill">GELİŞTİRME ÖNİZLEMESİ</span>
             <button className="vault-backup-button" type="button" onClick={() => void createEncryptedBackup()} disabled={backupInputBusy || vaultBusy}>
-              {backupInputBusy ? "Yedek hazırlanıyor…" : "Şifreli yedek indir"}
+              {backupInputBusy ? "Yedek hazırlanıyor…" : "Kasa yedeği indir"}
             </button>
             <button className="vault-lock-button" type="button" onClick={() => void lockVault()} disabled={vaultBusy || backupInputBusy}>Kasayı kilitle</button>
           </div>
@@ -878,7 +878,7 @@ export default function App() {
               <span>
                 Ses dosyaları yerel kasaya AES-GCM ile şifrelenerek kaydedilir; parola koruması Stronghold ile sağlanır.
                 Bu önizlemede dosya başına 128 MiB sınırı vardır; dinleme sırasında dosya bellekte çözülür.
-                Şifreli yedek alabilir ve boş kasaya geri yükleyebilirsiniz; parola kurtarma yoktur. ASR henüz bağlı değildir. Gerçek vaka materyali kullanmayın.
+                Kasa yedeğini boş kasaya geri yükleyebilirsiniz; aynı parola gerekir. Paket ayrıca şifrelenmez, ancak içindeki Stronghold snapshot ve AES-GCM materyalleri şifrelidir. SHA-256 denetimi imza değildir. ASR henüz bağlı değildir. Gerçek vaka materyali kullanmayın.
               </span>
             </div>
           </div>
