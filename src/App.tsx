@@ -264,6 +264,7 @@ export default function App() {
     if (activeId === recordId) {
       setActiveId(remaining[0]?.id ?? null);
       setCurrentTime(0);
+      setRepeatSegmentId(null);
     }
     setNotice("Ses dosyası bellekten çıkarıldı.");
   }
