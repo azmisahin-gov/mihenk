@@ -122,6 +122,20 @@ jobs:
           fs.writeFileSync("src-tauri/tauri.generated.conf.json", JSON.stringify(config, null, 2) + "\n");
           NODE
           echo "VITE_APP_VERSION=$PREVIEW_VERSION" >> "$GITHUB_ENV"
+      - name: Windows ham yayın ikilisini paketlemeden önce derle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: npx tauri build --no-bundle --ci --config src-tauri/tauri.generated.conf.json
+      - name: Windows paketleme öncesi PE ve DLL bağımlılıklarını kaydet
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/inspect-windows-pe-dependencies.ps1 -Stage pre-bundle
+      - name: Windows paketleme öncesi ham EXE açılışını doğrula
+        id: pre_bundle_smoke
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: ./scripts/test-windows-release-binary.ps1
       - name: Güncelleme imza anahtarını UTF-8 BOM karakterinden arındır
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -156,6 +170,10 @@ jobs:
           updaterJsonPreferNsis: true
           args: --config src-tauri/tauri.generated.conf.json --bundles ${{ matrix.bundles }}
 
+      - name: Windows paketleme sonrası PE ve DLL bağımlılıklarını kaydet
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/inspect-windows-pe-dependencies.ps1 -Stage post-bundle
       - name: İmza anahtarını sonraki adımların ortamından temizle
         shell: bash
         run: |
@@ -203,8 +221,8 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/prepare-webview2-runtime-windows.ps1
-      - name: Windows yayın ikilisinin açılışını doğrula
-        id: release_binary_smoke
+      - name: Windows paketlenmiş yayın ikilisinin açılışını doğrula
+        id: post_bundle_smoke
         if: runner.os == 'Windows'
         continue-on-error: true
         shell: pwsh
@@ -225,18 +243,20 @@ jobs:
         if: ${{ always() && runner.os == 'Windows' }}
         shell: pwsh
         env:
-          RELEASE_BINARY_OUTCOME: ${{ steps.release_binary_smoke.outcome }}
+          PRE_BUNDLE_OUTCOME: ${{ steps.pre_bundle_smoke.outcome }}
+          POST_BUNDLE_OUTCOME: ${{ steps.post_bundle_smoke.outcome }}
           NSIS_OUTCOME: ${{ steps.nsis_smoke.outcome }}
           MSI_OUTCOME: ${{ steps.msi_smoke.outcome }}
         run: |
           $failures = @()
-          if ($env:RELEASE_BINARY_OUTCOME -ne "success") { $failures += "Yayın EXE: $($env:RELEASE_BINARY_OUTCOME)" }
+          if ($env:PRE_BUNDLE_OUTCOME -ne "success") { $failures += "Ham EXE (paketleme öncesi): $($env:PRE_BUNDLE_OUTCOME)" }
+          if ($env:POST_BUNDLE_OUTCOME -ne "success") { $failures += "Paketlenmiş EXE: $($env:POST_BUNDLE_OUTCOME)" }
           if ($env:NSIS_OUTCOME -ne "success") { $failures += "NSIS Setup.exe: $($env:NSIS_OUTCOME)" }
           if ($env:MSI_OUTCOME -ne "success") { $failures += "MSI: $($env:MSI_OUTCOME)" }
           if ($failures.Count -gt 0) {
             throw ("Windows kurulum kabul testleri başarısız: " + ($failures -join "; "))
           }
-          Write-Host "Yayın EXE, NSIS Setup.exe ve MSI gerçek açılış/kurulum testleri başarılı."
+          Write-Host "Ham ve paketlenmiş EXE, NSIS Setup.exe ve MSI kabul testleri başarılı."
 
 
   yayina-al:
