@@ -38,6 +38,11 @@ function hashLabel(record: AudioRecord): string {
   }
 }
 
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.matches("input, textarea, select");
+}
+
 export default function App() {
   const [records, setRecords] = useState<AudioRecord[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -100,6 +105,55 @@ export default function App() {
     () => records.reduce((total, record) => total + (record.durationSeconds ?? 0), 0),
     [records],
   );
+
+  useEffect(() => {
+    function handleKeyboardShortcuts(event: KeyboardEvent): void {
+      if (event.defaultPrevented || isTextEntryTarget(event.target)) return;
+
+      const player = audioRef.current;
+      if (!activeRecord || !player) return;
+
+      if (
+        event.code === "Space" &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        if (player.paused) {
+          void player.play().catch(() => {
+            setNotice("Ses oynatılamadı. Dosya biçimi veya tarayıcı desteğini kontrol edin.");
+          });
+        } else {
+          player.pause();
+        }
+        return;
+      }
+
+      if (
+        (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const duration = Number.isFinite(player.duration) ? player.duration : Number.MAX_SAFE_INTEGER;
+        seekTo(Math.min(duration, Math.max(0, player.currentTime + direction * 5)));
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        addSegment();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyboardShortcuts);
+    return () => window.removeEventListener("keydown", handleKeyboardShortcuts);
+  }, [activeRecord, currentTime]);
 
   function updateRecord(recordId: string, update: (record: AudioRecord) => AudioRecord): void {
     setRecords((current) => current.map((record) => (
@@ -566,6 +620,7 @@ export default function App() {
                   <div className="player-actions">
                     <button className="secondary-button" type="button" onClick={addSegment}>+ Dinleme konumuna bölüm ekle</button>
                     <span>Metin bölümleri elle girilir</span>
+                    <span className="keyboard-hint">Kısayollar: Space oynat/duraklat · ← / → 5 saniye sar · Ctrl / ⌘ + Enter bölüm ekle</span>
                   </div>
                 </div>
               ) : (

@@ -208,6 +208,7 @@ audio { width: 100%; height: 34px; }
 .source-integrity p { margin: 6px 0 0; color: #a0aaa3; font-size: 8px; line-height: 1.5; }
 .player-actions { margin-top: 13px; display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
 .player-actions span { color: #9da8a1; font-size: 8px; }
+.player-actions .keyboard-hint { color: #718078; line-height: 1.55; max-width: 100%; }
 .empty-player { min-height: 485px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 20px; }
 .empty-audio-icon { width: 54px; height: 54px; display: grid; place-items: center; border-radius: 15px; color: #58856e; background: #eef5ef; font-size: 23px; margin-bottom: 14px; }
 .empty-player h3 { color: #4b5b52; font: 700 13px Manrope, sans-serif; margin: 0 0 6px; }
