@@ -10,6 +10,22 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
+import {
+  createLocalVault,
+  deleteStoredAudio,
+  getVaultState,
+  importAudioToVault,
+  listStoredAudio,
+  lockLocalVault,
+  openStoredAudio,
+  saveStoredAudioMetadata,
+  unlockLocalVault,
+  exportLocalVaultBackup,
+  restoreLocalVaultBackup,
+  type VaultAudioMetadata,
+  type VaultState,
+} from "./domain/vault";
+import { MAX_VAULT_BACKUP_BYTES } from "./domain/vault-backup";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
@@ -26,6 +42,22 @@ function saveTextFile(fileName: string, content: string, mimeType: string): void
   anchor.click();
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
+function saveBinaryFile(fileName: string, bytes: Uint8Array): void {
+  const owned = new Uint8Array(bytes.byteLength);
+  owned.set(bytes);
+  const blob = new Blob([owned.buffer], { type: "application/octet-stream" });
+  const downloadUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = downloadUrl;
+  anchor.download = fileName;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  owned.fill(0);
 }
 
 function hashLabel(record: AudioRecord): string {
@@ -55,13 +87,45 @@ export default function App() {
   const [updateState, setUpdateState] = useState<"checking" | "none" | "available" | "installing" | "error">("checking");
   const [updateProgress, setUpdateProgress] = useState(0);
   const [updateError, setUpdateError] = useState("");
+  const [vaultState, setVaultState] = useState<VaultState | "checking" | "unavailable" | "creating" | "unlocking" | "locking">("checking");
+  const [vaultPassword, setVaultPassword] = useState("");
+  const [vaultPasswordConfirm, setVaultPasswordConfirm] = useState("");
+  const [vaultBusy, setVaultBusy] = useState(false);
+  const [vaultError, setVaultError] = useState("");
+  const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [backupInputBusy, setBackupInputBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     recordsRef.current = records;
   }, [records]);
+
+  useEffect(() => {
+    const isDesktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isDesktopRuntime) {
+      setVaultState("unavailable");
+      return;
+    }
+
+    let cancelled = false;
+    void getVaultState()
+      .then((state) => {
+        if (!cancelled) setVaultState(state);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setVaultError(error instanceof Error ? error.message : "Yerel kasa durumu okunamadı.");
+          setVaultState("unavailable");
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const isDesktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -85,16 +149,23 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // Güncellemeler uygulama açılışında kurulur; açık ses oturumu varsa bitene kadar bekler.
+  // Güncellemeler ses çalarken veya şifreli dosya belleğe alınırken bekler.
+  // Kayıtlar artık kalıcı olduğundan kuyruk sayısı güncellemeyi engellemez.
   useEffect(() => {
-    if (updateState === "available" && availableUpdate && records.length === 0) {
+    if (
+      vaultState === "unlocked" &&
+      updateState === "available" &&
+      availableUpdate &&
+      !isPlaying &&
+      loadingRecordId === null
+    ) {
       void installAvailableUpdate();
     }
-  }, [availableUpdate, updateState, records.length]);
+  }, [availableUpdate, updateState, vaultState, isPlaying, loadingRecordId]);
 
   useEffect(() => () => {
     for (const record of recordsRef.current) {
-      URL.revokeObjectURL(record.objectUrl);
+      if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
     }
   }, []);
 
@@ -157,6 +228,138 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyboardShortcuts);
   }, [activeRecord, currentTime]);
 
+  async function restoreVaultRecords(): Promise<void> {
+    const stored = await listStoredAudio();
+    const restored: AudioRecord[] = stored.map((metadata) => ({
+      id: metadata.fileId,
+      file: new File([], metadata.fileName, {
+        type: metadata.mediaType,
+        lastModified: metadata.lastModified,
+      }),
+      objectUrl: "",
+      durationSeconds: metadata.durationSeconds,
+      sha256: metadata.sha256Preview,
+      hashState: metadata.sha256Preview ? "hesaplandi" : "bekliyor",
+      segments: metadata.segments,
+      vaultMetadata: metadata,
+    }));
+    setRecords(restored);
+    setActiveId(null);
+    setCurrentTime(0);
+    setRepeatSegmentId(null);
+  }
+
+  async function persistVaultRecords(snapshot: AudioRecord[]): Promise<void> {
+    const write = async () => {
+      for (const record of snapshot) {
+        if (!record.vaultMetadata) continue;
+        const metadata: VaultAudioMetadata = {
+          ...record.vaultMetadata,
+          durationSeconds: record.durationSeconds,
+          sha256Preview: record.sha256,
+          segments: record.segments,
+        };
+        await saveStoredAudioMetadata(metadata);
+      }
+    };
+
+    const queued = saveQueueRef.current.then(write, write);
+    saveQueueRef.current = queued.catch(() => undefined);
+    await queued;
+  }
+
+  useEffect(() => {
+    if (vaultState !== "unlocked" || records.length === 0) return;
+    const timeout = window.setTimeout(() => {
+      void persistVaultRecords(records).catch((error) => {
+        setNotice(error instanceof Error ? `Kasa kaydı yapılamadı: ${error.message}` : "Kasa kaydı yapılamadı.");
+      });
+    }, 450);
+    return () => window.clearTimeout(timeout);
+  }, [records, vaultState]);
+
+  async function submitVaultPassword(): Promise<void> {
+    if (vaultBusy) return;
+    setVaultError("");
+    if (vaultState === "not-created" && vaultPassword !== vaultPasswordConfirm) {
+      setVaultError("Parola ve parola tekrarı eşleşmiyor.");
+      return;
+    }
+    if (vaultPassword.length < 12) {
+      setVaultError("Kasa parolası en az 12 karakter olmalıdır.");
+      return;
+    }
+
+    const creating = vaultState === "not-created";
+    setVaultBusy(true);
+    setVaultState(creating ? "creating" : "unlocking");
+    try {
+      if (creating) await createLocalVault(vaultPassword);
+      else await unlockLocalVault(vaultPassword);
+      await restoreVaultRecords();
+      setVaultPassword("");
+      setVaultPasswordConfirm("");
+      setVaultState("unlocked");
+      setNotice(creating ? "Şifreli yerel kasa oluşturuldu." : "Yerel kasa açıldı.");
+    } catch (error) {
+      await lockLocalVault().catch(() => undefined);
+      const actualState = await getVaultState().catch(() => (creating ? "not-created" : "locked") as VaultState);
+      setVaultState(actualState);
+      setVaultError(error instanceof Error ? error.message : "Yerel kasa açılamadı.");
+    } finally {
+      setVaultBusy(false);
+    }
+  }
+
+  async function lockVault(): Promise<void> {
+    if (vaultState !== "unlocked" || vaultBusy) return;
+    setVaultBusy(true);
+    setVaultState("locking");
+    try {
+      await persistVaultRecords(recordsRef.current);
+      audioRef.current?.pause();
+      await lockLocalVault();
+      for (const record of recordsRef.current) {
+        if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
+      }
+      setRecords([]);
+      setActiveId(null);
+      setCurrentTime(0);
+      setRepeatSegmentId(null);
+      setLoadingRecordId(null);
+      setVaultState("locked");
+      setNotice("Yerel kasa kilitlendi.");
+    } catch (error) {
+      const actualState = await getVaultState().catch(() => "locked" as VaultState);
+      setVaultState(actualState);
+      setVaultError(error instanceof Error ? error.message : "Kasa kilitlenemedi.");
+      setNotice("Kasa kilitlenemedi; çalışma açık bırakıldı.");
+    } finally {
+      setVaultBusy(false);
+    }
+  }
+
+  async function selectRecord(recordId: string): Promise<void> {
+    const record = records.find((item) => item.id === recordId);
+    if (!record) return;
+    setActiveId(recordId);
+    setCurrentTime(0);
+    setRepeatSegmentId(null);
+    if (record.objectUrl || !record.vaultMetadata) return;
+
+    setLoadingRecordId(recordId);
+    try {
+      const file = await openStoredAudio(record.vaultMetadata);
+      const objectUrl = URL.createObjectURL(file);
+      updateRecord(recordId, (item) => ({ ...item, file, objectUrl }));
+      setNotice("Şifreli ses dosyası doğrulandı ve dinlemeye açıldı.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Şifreli ses dosyası açılamadı.");
+    } finally {
+      setLoadingRecordId((current) => current === recordId ? null : current);
+    }
+  }
+
   function updateRecord(recordId: string, update: (record: AudioRecord) => AudioRecord): void {
     setRecords((current) => current.map((record) => (
       record.id === recordId ? update(record) : record
@@ -164,44 +367,60 @@ export default function App() {
   }
 
   async function addFiles(fileList: FileList | File[]): Promise<void> {
+    if (vaultState !== "unlocked") {
+      setNotice("Ses eklemeden önce yerel kasayı açın.");
+      return;
+    }
+
     const incoming = Array.from(fileList);
     const accepted = incoming.filter((file) => file.type.startsWith("audio/") || AUDIO_EXTENSION.test(file.name));
     const rejectedCount = incoming.length - accepted.length;
-
     if (accepted.length === 0) {
       setNotice("Seçilen dosyalarda tanınan bir ses dosyası bulunamadı.");
       return;
     }
 
-    const created: AudioRecord[] = accepted.map((file) => ({
-      id: crypto.randomUUID(),
-      file,
-      objectUrl: URL.createObjectURL(file),
-      durationSeconds: null,
-      sha256: null,
-      hashState: "bekliyor",
-      segments: [],
-    }));
+    let addedCount = 0;
+    let failedCount = 0;
+    for (const file of accepted) {
+      try {
+        setNotice(`“${file.name}” şifreli yerel kasaya alınıyor…`);
+        const imported = await importAudioToVault(file);
+        const hash = await calculatePreviewHash(file);
+        const metadata: VaultAudioMetadata = {
+          ...imported,
+          sha256Preview: hash.hash,
+        };
+        await saveStoredAudioMetadata(metadata);
+        const record: AudioRecord = {
+          id: metadata.fileId,
+          file,
+          objectUrl: URL.createObjectURL(file),
+          durationSeconds: metadata.durationSeconds,
+          sha256: metadata.sha256Preview,
+          hashState: hash.state,
+          segments: metadata.segments,
+          vaultMetadata: metadata,
+        };
 
-    setRecords((current) => [...current, ...created]);
-    setActiveId((current) => current ?? created[0]?.id ?? null);
-    setCurrentTime(0);
-    setNotice(
-      rejectedCount > 0
-        ? `${created.length} ses eklendi; ${rejectedCount} desteklenmeyen dosya atlandı.`
-        : `${created.length} ses dosyası belleğe alındı. Kalıcı kayıt yapılmadı.`,
-    );
-
-    // Hash işlemleri sırayla yürütülür; aynı anda çok sayıda tam dosya belleğe alınmaz.
-    for (const record of created) {
-      updateRecord(record.id, (item) => ({ ...item, hashState: "hesaplaniyor" }));
-      const result = await calculatePreviewHash(record.file);
-      updateRecord(record.id, (item) => ({
-        ...item,
-        sha256: result.hash,
-        hashState: result.state,
-      }));
+        setRecords((current) => [...current, record]);
+        if (records.length === 0 && addedCount === 0) {
+          setActiveId(metadata.fileId);
+          setCurrentTime(0);
+        }
+        addedCount += 1;
+      } catch (error) {
+        failedCount += 1;
+        setNotice(error instanceof Error ? `“${file.name}” eklenemedi: ${error.message}` : `“${file.name}” eklenemedi.`);
+      }
     }
+
+    const messages = [
+      addedCount > 0 ? `${addedCount} ses şifreli kasaya kaydedildi` : "",
+      failedCount > 0 ? `${failedCount} dosya eklenemedi` : "",
+      rejectedCount > 0 ? `${rejectedCount} desteklenmeyen dosya atlandı` : "",
+    ].filter(Boolean);
+    setNotice(messages.join("; ") || "Ses dosyası eklenemedi.");
   }
 
   function updateSegment(
@@ -255,18 +474,24 @@ export default function App() {
     }));
   }
 
-  function removeRecord(recordId: string): void {
+  async function removeRecord(recordId: string): Promise<void> {
     const target = records.find((record) => record.id === recordId);
     if (!target) return;
-    URL.revokeObjectURL(target.objectUrl);
-    const remaining = records.filter((record) => record.id !== recordId);
-    setRecords(remaining);
-    if (activeId === recordId) {
-      setActiveId(remaining[0]?.id ?? null);
-      setCurrentTime(0);
-      setRepeatSegmentId(null);
+
+    try {
+      if (target.vaultMetadata) await deleteStoredAudio(recordId);
+      if (target.objectUrl) URL.revokeObjectURL(target.objectUrl);
+      const remaining = records.filter((record) => record.id !== recordId);
+      setRecords(remaining);
+      if (activeId === recordId) {
+        setActiveId(null);
+        setCurrentTime(0);
+        setRepeatSegmentId(null);
+      }
+      setNotice("Ses dosyası ve şifreli kasa kaydı kaldırıldı.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Dosya kasadan kaldırılamadı: ${error.message}` : "Dosya kasadan kaldırılamadı.");
     }
-    setNotice("Ses dosyası bellekten çıkarıldı.");
   }
 
   function handleMetadata(): void {
@@ -335,6 +560,56 @@ export default function App() {
     });
   }
 
+  async function createEncryptedBackup(): Promise<void> {
+    if (vaultState !== "unlocked" || backupInputBusy) return;
+    setBackupInputBusy(true);
+    try {
+      await persistVaultRecords(recordsRef.current);
+      const backup = await exportLocalVaultBackup();
+      const dateStamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
+      saveBinaryFile(`MİHENK-yerel-kasa-${dateStamp}.mihenkbackup`, backup);
+      backup.fill(0);
+      setNotice("Kasa yedeği oluşturuldu. İçindeki veriler mevcut kasa parolasıyla açılır.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Kasa yedeği oluşturulamadı: ${error.message}` : "Şifreli yedek oluşturulamadı.");
+    } finally {
+      setBackupInputBusy(false);
+    }
+  }
+
+  async function restoreEncryptedBackup(file: File | undefined): Promise<void> {
+    if (!file) return;
+    if (vaultBusy || backupInputBusy) return;
+    if (file.size > MAX_VAULT_BACKUP_BYTES) {
+      setVaultError("Yedek dosyası 512 MiB sınırını aşıyor.");
+      return;
+    }
+
+    setBackupInputBusy(true);
+    setVaultError("");
+    let restored = false;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      try {
+        await restoreLocalVaultBackup(bytes);
+        restored = true;
+      } finally {
+        bytes.fill(0);
+      }
+      setVaultPassword("");
+      setVaultPasswordConfirm("");
+      setVaultState("locked");
+      setNotice("Kasa yedeği geri yüklendi. Salt yapılandırmasını yenilemek için uygulama yeniden başlatılıyor.");
+      await relaunch();
+    } catch (error) {
+      setVaultError(error instanceof Error ? error.message : "Şifreli yedek geri yüklenemedi.");
+      setVaultState(restored ? "locked" : "not-created");
+    } finally {
+      setBackupInputBusy(false);
+      if (backupInputRef.current) backupInputRef.current.value = "";
+    }
+  }
+
   function exportText(): void {
     if (!activeRecord) return;
     saveTextFile(
@@ -359,7 +634,7 @@ export default function App() {
   const activeDuration = activeRecord?.durationSeconds ?? 0;
 
   async function installAvailableUpdate(): Promise<void> {
-    if (!availableUpdate || records.length > 0 || updateState === "installing") return;
+    if (!availableUpdate || isPlaying || loadingRecordId !== null || vaultState !== "unlocked" || updateState === "installing") return;
     setUpdateState("installing");
     setUpdateProgress(0);
     setUpdateError("");
@@ -379,11 +654,105 @@ export default function App() {
           setUpdateProgress(100);
         }
       });
+
+      // Kalıcı kasa güncelleme öncesi kaydedilir ve kilitlenir.
+      setVaultState("locking");
+      await persistVaultRecords(recordsRef.current);
+      audioRef.current?.pause();
+      await lockLocalVault();
+      for (const record of recordsRef.current) {
+        if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
+      }
+      setRecords([]);
+      setActiveId(null);
+      setVaultState("locked");
       await relaunch();
     } catch (error) {
-      setUpdateError(error instanceof Error ? error.message : "Güncelleme kurulamadı.");
+      const message = error instanceof Error ? error.message : "Güncelleme kurulamadı.";
+      setUpdateError(message);
+      setVaultError(message);
+      const actualState = await getVaultState().catch(() => "locked" as VaultState);
+      setVaultState(actualState);
       setUpdateState("error");
     }
+  }
+
+  if (vaultState !== "unlocked") {
+    const newVault = vaultState === "not-created";
+    const busy = vaultBusy || vaultState === "creating" || vaultState === "unlocking" || vaultState === "locking";
+    return (
+      <main className="vault-gate-shell">
+        <section className="vault-gate-card" aria-labelledby="vault-title">
+          <div className="brand-mark vault-brand-mark">M</div>
+          <p className="eyebrow">MİHENK · YEREL GÖREV KASASI</p>
+          <h1 id="vault-title">{vaultState === "checking" ? "Yerel kasa kontrol ediliyor" : vaultState === "unavailable" ? "Masaüstü uygulaması gerekli" : newVault ? "Yerel kasanızı oluşturun" : "Yerel kasanızı açın"}</h1>
+          <p className="vault-gate-description">
+            Görev sesleri bu cihazdaki parola korumalı kasaya şifrelenerek kaydedilir. Kasa parolası MİHENK hesabınızdan bağımsızdır.
+          </p>
+          {vaultState === "checking" && <p role="status">Kasa durumu okunuyor…</p>}
+          {vaultState === "unavailable" && (
+            <div className="vault-gate-notice">
+              MİHENK yerel kasa işlevi masaüstü uygulamasında çalışır. Tarayıcı önizlemesi kalıcı ses saklamaz.
+              {vaultError && <p>{vaultError}</p>}
+            </div>
+          )}
+          {(vaultState === "locked" || vaultState === "not-created") && (
+            <form className="vault-gate-form" onSubmit={(event) => { event.preventDefault(); void submitVaultPassword(); }}>
+              <label>
+                <span>Kasa parolası</span>
+                <input
+                  type="password"
+                  value={vaultPassword}
+                  onChange={(event) => setVaultPassword(event.currentTarget.value)}
+                  autoComplete={newVault ? "new-password" : "current-password"}
+                  minLength={12}
+                  required
+                  autoFocus
+                />
+              </label>
+              {newVault && (
+                <label>
+                  <span>Kasa parolası (tekrar)</span>
+                  <input
+                    type="password"
+                    value={vaultPasswordConfirm}
+                    onChange={(event) => setVaultPasswordConfirm(event.currentTarget.value)}
+                    autoComplete="new-password"
+                    minLength={12}
+                    required
+                  />
+                </label>
+              )}
+              {vaultError && <p className="vault-gate-error" role="alert">{vaultError}</p>}
+              <button className="primary-button vault-submit-button" type="submit" disabled={busy || backupInputBusy}>
+                {busy ? "İşleniyor…" : newVault ? "Şifreli kasa oluştur" : "Kasayı aç"}
+              </button>
+            </form>
+          )}
+          {newVault && (
+            <div className="vault-restore-panel">
+              <input
+                ref={backupInputRef}
+                className="visually-hidden"
+                type="file"
+                accept=".mihenkbackup,application/octet-stream"
+                onChange={(event) => void restoreEncryptedBackup(event.currentTarget.files?.[0])}
+              />
+              <button
+                className="secondary-button vault-submit-button"
+                type="button"
+                onClick={() => backupInputRef.current?.click()}
+                disabled={backupInputBusy || busy}
+              >{backupInputBusy ? "Yedek doğrulanıyor…" : "Kasa yedeğinden geri yükle"}</button>
+            </div>
+          )}
+          <div className="vault-gate-notice">
+            <strong>Önizleme sınırları</strong>
+            Her ses dosyası en fazla 128 MiB olabilir. Şifreli yedek snapshot, salt ve materyalleri birlikte taşır; geri yükleme yalnız boş kasaya yapılır. Kasa parolası kaybolursa yedek de açılamaz. Yalnızca sentetik veya kullanım izni bulunan test kayıtlarıyla deneyin.
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -422,7 +791,7 @@ export default function App() {
             <span className="note-dot" />
             <div>
               <strong>Yerel önizleme</strong>
-              <p>Dosyalar bu oturumun belleğinde kalır.</p>
+              <p>Çalışma bu cihazda şifreli kasada saklanır.</p>
             </div>
           </div>
           <div className="version-line">
@@ -442,6 +811,10 @@ export default function App() {
           <div className="topbar-status">
             <span className="status-pill"><span className="status-dot" /> Cihaz içinde</span>
             <span className="prototype-pill">GELİŞTİRME ÖNİZLEMESİ</span>
+            <button className="vault-backup-button" type="button" onClick={() => void createEncryptedBackup()} disabled={backupInputBusy || vaultBusy}>
+              {backupInputBusy ? "Yedek hazırlanıyor…" : "Kasa yedeği indir"}
+            </button>
+            <button className="vault-lock-button" type="button" onClick={() => void lockVault()} disabled={vaultBusy || backupInputBusy}>Kasayı kilitle</button>
           </div>
         </header>
 
@@ -451,9 +824,9 @@ export default function App() {
               <strong>MİHENK {availableUpdate.version} güncellemesi hazır.</strong>
               <p>{availableUpdate.body || "Yeni sürüm indirilebilir."}</p>
               <small>
-                {records.length > 0
-                  ? "Açık ses oturumu tamamlanınca güncelleme otomatik kurulacak."
-                  : "Güncelleme otomatik indirilecek ve uygulama yeniden başlatılacak."}
+                {isPlaying || loadingRecordId !== null
+                  ? "Dinleme veya şifreli kayıt açma işlemi tamamlanınca güncelleme otomatik kurulacak."
+                  : "Kasa güncelleme öncesi kaydedilip kilitlenecek; uygulama yeniden başlatılacak."}
               </small>
             </div>
           </div>
@@ -504,8 +877,9 @@ export default function App() {
             <div>
               <strong>Prototip sınırı</strong>
               <span>
-                Bu sürüm ASR çalıştırmaz ve kalıcı kayıt yapmaz. Ses dosyaları dışarı gönderilmez;
-                uygulamayı kapattığınızda bellekteki çalışma silinir. Gerçek vaka materyali kullanmayın.
+                Ses dosyaları yerel kasaya AES-GCM ile şifrelenerek kaydedilir; parola koruması Stronghold ile sağlanır.
+                Bu önizlemede dosya başına 128 MiB sınırı vardır; dinleme sırasında dosya bellekte çözülür.
+                Kasa yedeğini boş kasaya geri yükleyebilirsiniz; aynı parola gerekir. Paket ayrıca şifrelenmez, ancak içindeki Stronghold snapshot ve AES-GCM materyalleri şifrelidir. SHA-256 denetimi imza değildir. ASR henüz bağlı değildir. Gerçek vaka materyali kullanmayın.
               </span>
             </div>
           </div>
@@ -569,26 +943,24 @@ export default function App() {
                 ) : records.map((record, index) => (
                   <div key={record.id} className={`record-item ${record.id === activeId ? "selected" : ""}`}>
                     <button className="record-select" type="button" onClick={() => {
-                      setActiveId(record.id);
-                      setCurrentTime(0);
-                      setRepeatSegmentId(null);
+                      void selectRecord(record.id);
                     }}>
                       <span className="record-number">{String(index + 1).padStart(2, "0")}</span>
                       <span className="record-main">
                         <strong title={record.file.name}>{record.file.name}</strong>
-                        <small>{formatBytes(record.file.size)} · {formatTime(record.durationSeconds)}</small>
+                        <small>{formatBytes(record.vaultMetadata?.sizeBytes ?? record.file.size)} · {formatTime(record.durationSeconds)}</small>
                         <small className={record.hashState === "hesaplandi" ? "hash-ok" : "hash-muted"}>
                           {hashLabel(record)}
                         </small>
                       </span>
                     </button>
-                    <button className="remove-record" type="button" aria-label={`${record.file.name} kaydını kaldır`} onClick={() => removeRecord(record.id)}>×</button>
+                    <button className="remove-record" type="button" aria-label={`${record.file.name} kaydını kaldır`} onClick={() => void removeRecord(record.id)}>×</button>
                   </div>
                 ))}
               </div>
               <div className="queue-footer">
                 <span>Orijinaller bu prototipte değiştirilmez.</span>
-                <span>{records.length} / ∞</span>
+                <span>{records.length} kayıt · şifreli kasa</span>
               </div>
             </section>
 
@@ -601,13 +973,13 @@ export default function App() {
                 {activeRecord && <span className="file-kind">SES DOSYASI</span>}
               </div>
 
-              {activeRecord ? (
+              {activeRecord && activeRecord.objectUrl ? (
                 <div className="player-content">
                   <div className="active-file-card">
                     <div className="file-icon">♫</div>
                     <div className="active-file-details">
                       <strong title={activeRecord.file.name}>{activeRecord.file.name}</strong>
-                      <span>{activeRecord.file.type || "Ses biçimi tarayıcı tarafından bildirilmedi"} · {formatBytes(activeRecord.file.size)}</span>
+                      <span>{activeRecord.vaultMetadata?.mediaType || activeRecord.file.type || "Ses biçimi tarayıcı tarafından bildirilmedi"} · {formatBytes(activeRecord.vaultMetadata?.sizeBytes ?? activeRecord.file.size)}</span>
                     </div>
                     <span className="file-index">#{String(records.findIndex((item) => item.id === activeRecord.id) + 1).padStart(2, "0")}</span>
                   </div>
@@ -639,8 +1011,10 @@ export default function App() {
                       controls
                       preload="metadata"
                       onLoadedMetadata={handleMetadata}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
                       onTimeUpdate={handleAudioTimeUpdate}
-                      onEnded={() => setCurrentTime(activeRecord.durationSeconds ?? currentTime)}
+                      onEnded={() => { setIsPlaying(false); setCurrentTime(activeRecord.durationSeconds ?? currentTime); }}
                       onError={() => setNotice("Ses açılamadı. Dosya biçimi bu ortamda desteklenmiyor olabilir.")}
                     />
                   </div>
@@ -672,6 +1046,15 @@ export default function App() {
                     <span>Metin bölümleri elle girilir</span>
                     <span className="keyboard-hint">Kısayollar: Space oynat/duraklat · ← / → 5 saniye sar · Ctrl / ⌘ + Enter bölüm ekle. Bölüm kartından aralık tekrarı açılabilir.</span>
                   </div>
+                </div>
+              ) : activeRecord ? (
+                <div className="empty-player">
+                  <div className="empty-audio-icon">◌</div>
+                  <h3>{loadingRecordId === activeRecord.id ? "Şifreli kayıt açılıyor" : "Dinleme için kaydı açın"}</h3>
+                  <p>{loadingRecordId === activeRecord.id ? "Dosya bütünlüğü doğrulanarak belleğe alınıyor." : "Kayıt seçildi; şifreli ses dosyası açılmayı bekliyor."}</p>
+                  {loadingRecordId !== activeRecord.id && (
+                    <button className="secondary-button" type="button" onClick={() => void selectRecord(activeRecord.id)}>Kaydı aç</button>
+                  )}
                 </div>
               ) : (
                 <div className="empty-player">
@@ -788,7 +1171,7 @@ export default function App() {
 
           <footer className="app-footer">
             <span className="footer-state"><span className="status-dot" /> {notice}</span>
-            <span>Sesler cihazdan dışarı gönderilmez · ASR henüz bağlı değil</span>
+            <span>Yerel şifreli kasa · Bulut yok · ASR henüz bağlı değil</span>
           </footer>
         </section>
       </main>

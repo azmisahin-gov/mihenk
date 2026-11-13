@@ -11,6 +11,8 @@ export interface TranscriptSegment {
 
 export type HashState = "bekliyor" | "hesaplaniyor" | "hesaplandi" | "buyuk-dosya" | "desteklenmiyor" | "hata";
 
+import type { VaultAudioMetadata } from "./vault";
+
 export interface AudioRecord {
   id: string;
   file: File;
@@ -19,6 +21,7 @@ export interface AudioRecord {
   sha256: string | null;
   hashState: HashState;
   segments: TranscriptSegment[];
+  vaultMetadata?: VaultAudioMetadata;
 }
 
 export const MAX_PREVIEW_HASH_BYTES = 128 * 1024 * 1024;

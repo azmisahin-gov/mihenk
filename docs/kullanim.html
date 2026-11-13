@@ -101,7 +101,7 @@
           <h2>7. Bu önizlemede bulunmayan işlevler</h2>
           <ul>
             <li>Otomatik konuşma tanıma (ASR) ve model indirme/çalıştırma yoktur.</li>
-            <li>Kalıcı veya şifreli görev kasası, otomatik kayıt, yedekleme ve geri yükleme yoktur.</li>
+            <li>Görev bazında yalıtım, kasa parolası kurtarma/sıfırlama ve görev/rapor yönetimi henüz yoktur.</li>
             <li>Ses dosyasından konuşmacı kimliği, cinsiyet veya yaş çıkarımı yapılmaz.</li>
             <li>Ses özgünlüğü/manipülasyon analizi, ses karşılaştırması veya adli ses incelemesi yapılmaz.</li>
             <li>UDF oluşturma, UYAP API erişimi/otomasyonu, bilirkişi adına görüş üretme, imza atma veya resmî teslim işlemi yoktur.</li>
@@ -109,9 +109,13 @@
         </section>
 
         <section id="guvenlik">
-          <h2>8. Güvenli test ve geri bildirim</h2>
-          <p>Bu aşamada gerçek dava, soruşturma, kişi veya kurum verisi içeren sesleri, transkriptleri, ekran görüntülerini ya da dosya numaralarını GitHub'a veya hata bildirimlerine eklemeyin. Hata bildirirken yalnızca sentetik örnek, uygulama sürümü ve kişisel veri içermeyen hata adımlarını paylaşın.</p>
-          <p>Uygulamayı kapatmadan önce TXT veya JSON taslağınızı dışa aktarın; bunlar da yalnızca geçici taslak kopyalarıdır ve güvenli kasa yerine geçmez.</p>
+          <h2>8. Şifreli kasa ve güvenli test</h2>
+          <p>Uygulama ilk açıldığında bu cihazda parola korumalı yerel kasa oluşturun. Sonraki açılışlarda aynı parolayla kasayı açın. Parola en az 12 karakter olmalıdır; MİHENK parolayı sunucuya göndermez.</p>
+          <p>Eklenen ses dosyaları 1 MiB bloklar hâlinde AES-256-GCM ile şifrelenerek uygulamanın yerel veri klasörüne kaydedilir. Kasa anahtarları ve görev metaverisi Stronghold snapshot içinde korunur. Dinleme sırasında ses bellekte açılır. Bu önizlemede dosya başına 128 MiB sınırı vardır.</p>
+          <p>Üst çubuktaki <strong>Kasa yedeği indir</strong> düğmesi Stronghold snapshot'ını, Argon2 salt dosyasını ve AES-GCM ile şifrelenmiş materyalleri tek bir .mihenkbackup dosyasında birleştirir. Paket kendi başına ayrıca şifrelenmez; içindeki Stronghold snapshot ve AES-GCM ses materyalleri zaten şifrelidir. Paket içi SHA-256 denetimi kazara bozulmayı saptar; imzalı özgünlük doğrulaması değildir. Dosyayı cihazdan ayrı, güvenli bir ortamda saklayın.</p>
+          <p>Yeni veya boş bir kurulumda <strong>Kasa yedeğinden geri yükle</strong> seçeneğini kullanın. Yedek önce paket içi SHA-256 kontrolünden geçer; bu kontrol kötü niyetli değişikliğe karşı imza değildir. Dosyalar yerleştirildikten sonra snapshot en son etkinleştirilir. Geri yükleme tamamlanınca kasayı, yedek alınırken kullanılan parola ile açın. Mevcut kasanın üzerine yazılmaz.</p>
+          <p><strong>Önemli:</strong> Kasa parolası kaybolursa şu an parola sıfırlama veya ayrı kurtarma anahtarı yoktur; şifreli yedek de aynı parolayı gerektirir. Bu nedenle yalnızca sentetik veya kullanım izni bulunan test sesleriyle deneyin; gerçek dava/soruşturma materyali kullanmayın.</p>
+          <p>Kasa parolasını güvenli, cihazdan ayrı bir yerde saklayın. Hata bildirirken gerçek sesleri, transkriptleri, ekran görüntülerini veya dosya numaralarını GitHub'a eklemeyin.</p>
         </section>
       </article>
 
