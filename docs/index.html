@@ -127,7 +127,8 @@
           <div class="asset-list" id="appimage-assets"><span class="empty-state">Henüz AppImage paketi yayımlanmadı.</span></div>
         </article>
       </div>
-      <p class="integrity-note">Güvenlik: İndirme bağlantıları GitHub Releases kaynaklıdır. İmzalı otomatik güncelleme, uygulama içindeki Tauri imza doğrulamasıyla ayrıca denetlenir. İmza doğrulaması, bilirkişilik delil zinciri doğrulaması anlamına gelmez.</p>
+      <p class="integrity-note"><strong>Windows güvenlik uyarısı:</strong> Windows Setup.exe ve MSI paketleri henüz Authenticode yayıncı sertifikasıyla imzalanmıyor. Bu nedenle Windows SmartScreen “Windows bilgisayarınızı korudu” veya UAC “bilinmeyen yayımcı” uyarısı gösterebilir. Paket yanındaki Tauri <code>.sig</code> dosyaları yalnızca uygulama içi otomatik güncelleme imzasıdır; Windows yayıncı imzası değildir. Yayıncı imzası ve gerçek kurulum testi tamamlanmadan bu paketler üretim kullanımı için onaylanmış sayılmaz.</p>
+      <p class="integrity-note">İndirme bağlantıları GitHub Releases kaynaklıdır. İmzalı otomatik güncelleme, uygulama içindeki Tauri imza doğrulamasıyla ayrıca denetlenir. Bu doğrulama Authenticode veya bilirkişilik delil zinciri doğrulaması anlamına gelmez.</p>
     </section>
 
     <section class="section release-section" id="surumler">
