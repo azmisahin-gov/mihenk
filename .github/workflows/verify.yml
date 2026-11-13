@@ -1,0 +1,25 @@
+name: Ön yüz doğrulaması
+
+on:
+  push:
+    branches: ["main", "feat/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  arayuz:
+    name: TypeScript ve üretim derlemesi
+    runs-on: ubuntu-latest
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Bağımlılıkları kur
+        run: npm install --no-audit --no-fund
+      - name: TypeScript denetimi
+        run: npm run check
+      - name: Üretim ön yüzünü derle
+        run: npm run build

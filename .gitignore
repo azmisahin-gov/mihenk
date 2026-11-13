@@ -1,0 +1,28 @@
+# Node / Vite
+node_modules/
+dist/
+.vite/
+*.local
+
+# Rust / Tauri
+/src-tauri/target/
+/src-tauri/gen/
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Local test materials and outputs
+test-verileri/
+yerel-veriler/
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.opus
+*.aac
+*.wma
