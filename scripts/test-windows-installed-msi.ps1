@@ -64,7 +64,7 @@ foreach ($entry in $appEntries) {
 }
 
 if (-not $appPath) {
-    $searchRoots = @($env:ProgramFiles, $env:ProgramFilesX86) |
+    $searchRoots = @($env:ProgramFiles, [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) |
         Where-Object { $_ -and (Test-Path -LiteralPath $_) } |
         Select-Object -Unique
     foreach ($root in $searchRoots) {
