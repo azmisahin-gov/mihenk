@@ -71,9 +71,14 @@ fn startup_log(event: &str, detail: &str) {
 }
 
 fn configure_startup_log(app: &tauri::App) {
-    if let Ok(log_dir) = app.path().app_log_dir() {
-        let _ = fs::create_dir_all(&log_dir);
-        let _ = STARTUP_LOG_PATH.set(log_dir.join("startup.log"));
+    // Windows'ta tanılama yolu kullanıcı belgeleriyle tutarlı ve kullanıcıya
+    // gösterilebilir olsun: %LOCALAPPDATA%\\com.mihenk.desktop\\logs.
+    // Diğer platformlarda yerel veri dizinini, bulunamazsa Tauri log dizinini kullan.
+    let log_path = fallback_startup_log_path()
+        .or_else(|| app.path().app_log_dir().ok().map(|directory| directory.join("startup.log")));
+
+    if let Some(path) = log_path {
+        let _ = STARTUP_LOG_PATH.set(path);
     }
     startup_log("baslangic", "MİHENK masaüstü süreci başladı.");
 }
