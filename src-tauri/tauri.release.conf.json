@@ -1,0 +1,17 @@
+{
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "PUBLIC_KEY_GITHUB_VARIABLE_ILE_DERLEMEDE_EKLENECEK",
+      "endpoints": [
+        "https://github.com/azmisahin-gov/mihenk/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
