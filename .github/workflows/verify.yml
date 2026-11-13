@@ -49,7 +49,7 @@ jobs:
         with:
           node-version: "22.16.0"
       - name: Rust kur
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.99.1
       - name: Windows için libsodium arşivini doğrulayarak hazırla
         if: runner.os == 'Windows'
         shell: pwsh
@@ -64,6 +64,7 @@ jobs:
             "scripts/test-windows-release-binary.ps1",
             "scripts/test-windows-loader-baseline.ps1",
             "scripts/inspect-windows-pe-dependencies.ps1",
+            "scripts/test-windows-forbidden-dll-imports.ps1",
             "scripts/prepare-webview2-runtime-windows.ps1"
           )
           foreach ($path in $paths) {
