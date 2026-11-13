@@ -41,6 +41,15 @@ function installerAssets(release) {
   });
 }
 
+function displayAssetName(asset) {
+  const name = String(asset.name ?? "");
+  if (/\\.exe$/i.test(name)) return "Windows kurulum sihirbazı · kullanıcı hesabı (EXE)";
+  if (/\\.msi$/i.test(name)) return "Windows bilgisayar geneli kurulumu · yönetici izni (MSI)";
+  if (/\\.deb$/i.test(name)) return "Pardus / Debian paketi (DEB)";
+  if (/\\.appimage(\\.tar\\.gz)?$/i.test(name)) return "Linux taşınabilir paketi (AppImage)";
+  return name;
+}
+
 function makeAssetLink(asset) {
   const url = safeDownloadUrl(asset.browser_download_url);
   if (!url) return null;
@@ -50,7 +59,8 @@ function makeAssetLink(asset) {
   link.target = "_blank";
   link.rel = "noopener noreferrer";
   const name = document.createElement("span");
-  name.textContent = asset.name;
+  name.textContent = displayAssetName(asset);
+  name.title = asset.name;
   const size = document.createElement("span");
   size.className = "asset-size";
   size.textContent = formatSize(asset.size);
