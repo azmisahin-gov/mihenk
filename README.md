@@ -88,6 +88,7 @@ README, issue, pull request başlık/açıklamaları ve commit mesajları Türk�
 
 - **Windows Setup.exe (önerilen):** Varsayılan NSIS kurulumu yalnızca geçerli Windows kullanıcısına, `%LOCALAPPDATA%` altına yapılır; normalde yönetici izni istemez.
 - **Windows MSI:** WiX paketi varsayılan olarak Program Files içine bilgisayar geneli kurulum yapar ve yönetici izni gerektirir. EXE ve MSI alternatif kurulum biçimleridir; aynı bilgisayara ikisini birden kurmayın.
+- **Windows WebView2:** Kurulum paketleri çevrimdışı WebView2 Runtime yükleyicisini içerir. Bu, runtime'ın cihazda bulunmadığı ve internet erişiminin olmadığı ortamlarda da açılışı mümkün kılar; Windows kurulum dosyaları bu nedenle yaklaşık 127 MiB daha büyük olur.
 - **Pardus / Debian tabanlı Linux:** .deb paketi.
 - **Linux:** AppImage paketi.
 
