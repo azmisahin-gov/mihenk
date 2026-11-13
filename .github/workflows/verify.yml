@@ -60,7 +60,8 @@ jobs:
         run: |
           $paths = @(
             "scripts/test-windows-installed-msi.ps1",
-            "scripts/test-windows-installed-nsis.ps1"
+            "scripts/test-windows-installed-nsis.ps1",
+            "scripts/prepare-webview2-runtime-windows.ps1"
           )
           foreach ($path in $paths) {
             $tokens = $null

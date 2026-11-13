@@ -199,6 +199,10 @@ jobs:
             exit 1
           }
           echo "Linux yayın ikilisi 20 saniye açık kaldı."
+      - name: Windows Evergreen WebView2 Runtime'ı hazırla
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/prepare-webview2-runtime-windows.ps1
       - name: Windows NSIS Setup.exe kurulumunu ve açılışını doğrula
         id: nsis_smoke
         if: runner.os == 'Windows'
