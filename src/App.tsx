@@ -137,6 +137,24 @@ export default function App() {
     setNotice(`${formatTime(startSeconds)} konumuna yeni taslak bölümü eklendi.`);
   }
 
+  function markSegmentEnd(segmentId: string): void {
+    if (!activeRecord) return;
+    const endSeconds = audioRef.current?.currentTime ?? currentTime;
+    const segment = activeRecord.segments.find((item) => item.id === segmentId);
+    if (!segment) return;
+    if (endSeconds < segment.startSeconds) {
+      setNotice("Bölüm bitişi, başlangıç zamanından önce olamaz.");
+      return;
+    }
+    updateRecord(activeRecord.id, (record) => ({
+      ...record,
+      segments: record.segments.map((item) => (
+        item.id === segmentId ? { ...item, endSeconds } : item
+      )),
+    }));
+    setNotice(`${formatTime(endSeconds)} bölüm bitişi olarak kaydedildi.`);
+  }
+
   function removeSegment(segmentId: string): void {
     if (!activeRecord) return;
     updateRecord(activeRecord.id, (record) => ({
@@ -495,7 +513,15 @@ export default function App() {
                           <button className="timestamp-button" type="button" onClick={() => jumpTo(segment.startSeconds)}>
                             <span>▶</span> {formatTime(segment.startSeconds)}
                           </button>
-                          <span className="segment-number">BÖLÜM {String(index + 1).padStart(2, "0")}</span>
+                          <span className="segment-number">
+                            {formatTime(segment.startSeconds)}{segment.endSeconds === null ? " · Bitiş işaretlenmedi" : ` – ${formatTime(segment.endSeconds)}`}
+                          </span>
+                          <button
+                            className="segment-end-button"
+                            type="button"
+                            onClick={() => markSegmentEnd(segment.id)}
+                            aria-label="Geçerli oynatma konumunu bölüm bitişi olarak kaydet"
+                          >Bitişi işaretle</button>
                           <button className="segment-delete" type="button" aria-label="Bölümü sil" onClick={() => removeSegment(segment.id)}>×</button>
                         </div>
                         <textarea
