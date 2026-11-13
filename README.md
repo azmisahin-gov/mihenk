@@ -19,15 +19,15 @@ MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürüt
 - Düzenlenmiş taslağı TXT veya JSON olarak kullanıcının cihazına dışa aktarma.
 - Küçük dosyalarda tarayıcı içi SHA-256 ön kontrolü.
 
-**Henüz bağlı olmayanlar:** ASR motoru, kalıcı görev/veri deposu, güvenli yerel dosya kasası, uzun dosyalarda akışlı hash, gerçek görev/rapor modeli ve UYAP/UDF entegrasyonu.
+**Henüz bağlı olmayanlar:** ASR motoru, kalıcı görev/veri deposunun tam iş akışı, kasa parolası kurtarma ve şifreli yedek/geri yükleme, uzun dosyalarda akışlı hash, gerçek görev/rapor modeli ve UYAP/UDF entegrasyonu.
 
 ## Güvenli kullanım sınırı
 
-Bu ilk arayüz prototipi, seçilen ses dosyalarını uygulama açık kaldığı sürece bellekte tutar. Uygulama kapatıldığında dosya seçimi ve düzenleme durumu kaybolur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
+Yerel kasa önizlemesi, içe alınan sesleri cihazdaki Stronghold snapshot ve AES-256-GCM şifreli blok dosyalarında saklar. Kasa parolası olmadan yerel kayıtlar açılamaz. Bu ilk dilimde dosya başına 128 MiB sınırı vardır; dinleme sırasında kayıt bellekte açılır. Kasa parolası kurtarma, şifreli yedekleme/geri yükleme henüz yoktur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
 
 SHA-256 göstergesi yalnızca küçük dosyalardaki seçilmiş dosyanın ön kontrolüdür. Delil zinciri, teslim öncesi köken doğrulaması veya dosyanın özgünlüğü hakkında kanıt sayılmaz. 128 MiB üzerindeki dosyalarda bu prototip hash üretmez.
 
-**Gerçek dava/soruşturma materyalini bu prototipte kullanmayın.** Gerçek materyalle kullanım için görev yalıtımı, kalıcı şifreli kasa, erişim kontrolü, yedekleme/geri yükleme, güvenli güncelleme ve hukuk/veri koruma incelemesi tamamlanmalıdır.
+**Gerçek dava/soruşturma materyalini bu önizlemede kullanmayın.** Gerçek materyalle kullanım için kasa parolası kurtarma, şifreli yedekleme/geri yükleme, görev yalıtımı, tam arayüz testleri, güvenlik incelemesi ve hukuk/veri koruma değerlendirmesi tamamlanmalıdır.
 
 ## Geliştirme
 
