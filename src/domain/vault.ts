@@ -485,7 +485,7 @@ export async function exportLocalVaultBackup(): Promise<Uint8Array<ArrayBuffer>>
 export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void> {
   if (activeStronghold) throw new Error("Geri yüklemeden önce açık kasayı kilitleyin.");
   if (backup.byteLength > MAX_VAULT_BACKUP_BYTES) {
-    throw new Error("Şifreli yedek 512 MiB sınırını aşıyor.");
+    throw new Error("Kasa yedek paketi 512 MiB sınırını aşıyor.");
   }
   if (await getVaultState() !== "not-created") {
     throw new Error("Geri yükleme yalnızca bu cihazda kasa yokken yapılabilir.");
