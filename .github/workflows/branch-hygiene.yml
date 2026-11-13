@@ -1,0 +1,72 @@
+name: Eski geliştirme dallarını temizle
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/branch-hygiene.yml"
+  pull_request:
+    branches: ["main"]
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  eski-dallari-temizle:
+    name: Eski dalları güvenli biçimde temizle
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Açık PR dallarını koruyarak eski dalları sil
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OPEN_PR_HEADS="$(gh api --paginate "repos/\${GITHUB_REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].head.ref')"
+
+          STALE_BRANCHES=(
+            "docs/turkce-repo-kilavuzu"
+            "feat/yerel-gorev-kasasi"
+            "feat/yerel-kasa-yedek-geri-yukle"
+            "feat/56-12-klavye-is-akisi"
+            "feat/56-12-ses-calisma-alani"
+            "fix/appimage-kare-simge"
+            "fix/onizleme-tek-yayin"
+            "fix/preview-single-release-id"
+            "fix/tauri-imza-bom-temizligi"
+            "fix/yayin-surum-env"
+            "fix/windows-startup-downloads"
+          )
+
+          for branch in "\${STALE_BRANCHES[@]}"; do
+            if grep -Fqx "$branch" <<< "$OPEN_PR_HEADS"; then
+              echo "Açık PR tarafından kullanıldığı için korunuyor: $branch"
+              continue
+            fi
+
+            if gh api --method DELETE "repos/\${GITHUB_REPOSITORY}/git/refs/heads/$branch"; then
+              echo "Eski dal silindi: $branch"
+            else
+              echo "Dal zaten silinmiş veya GitHub tarafından korunuyor: $branch"
+            fi
+          done
+
+  birlesen-pr-dalini-temizle:
+    name: Birleşen PR dalını temizle
+    if: github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref != 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Birleşen dalı sil
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: \${{ github.event.pull_request.head.ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method DELETE "repos/\${GITHUB_REPOSITORY}/git/refs/heads/\${HEAD_REF}" || {
+            echo "Birleşen dal zaten silinmiş olabilir: \${HEAD_REF}"
+          }
