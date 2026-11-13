@@ -130,5 +130,5 @@ GitHub Actions PR aşamasında kilitli bağımlılıkları, ön yüz derlemesini
 - Kararlı sürüm, `vX.Y.Z` etiketiyle başlatılır. Paket sürümleri birbiriyle karşılaştırılır; Linux ve Windows kurulumları/imzaları ile yayın ikilisi açılış testleri tamamlanınca taslak Release yayımlanır.
 - Bir PR birleştirilince aynı depodaki çalışma dalı otomatik silinir. Eski dalların ilk temizliği de tamamlanmıştır.
 
-**Depo yönetişimi notu:** PR doğrulaması otomatik çalışır; ancak GitHub `main` dalında zorunlu durum denetimi kuralı henüz etkinleştirilmemiştir. Üretim disiplini için `main` dalına PR zorunluluğu ve üç CI denetiminin zorunlu olması repo ayarlarında ayrıca etkinleştirilmelidir.
+**Depo yönetişimi notu:** PR doğrulaması otomatik çalışır. Bu bağlantı, yönetici izni gerektiren `main` dalı koruma kurallarını okuyamıyor; bu nedenle PR zorunluluğu ve üç CI denetiminin zorunlu olması depo sahibi tarafından GitHub ayarlarında ayrıca doğrulanmalıdır. Birleştirme sonrası dalları temizleyen iş akışı ayrıca çalışır.
 
