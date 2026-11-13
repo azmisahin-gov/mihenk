@@ -108,8 +108,15 @@
           </ul>
         </section>
 
+        <section id="baslangic-hatasi">
+          <h2>8. Windows'ta uygulama açılmazsa</h2>
+          <p>Uygulama açılıp hemen kapanırsa veya başlangıç hatası penceresi gösterirse Windows tanılama günlüğünü açın:</p>
+          <p><code>%LOCALAPPDATA%\\com.mihenk.desktop\\logs\\startup.log</code></p>
+          <p>Dosyada son açılış denemesinin <code>[setup_error]</code>, <code>[runtime_error]</code> veya <code>[panic]</code> satırlarını kontrol edin. Bu günlük yerel bilgisayarda kalır; kendiliğinden gönderilmez. Hata bildirirken ses, transkript, kişi adı, dosya numarası veya UYAP belgesi eklemeyin. Yalnızca uygulama sürümünü ve kişisel veri içermeyen teknik hata satırlarını paylaşın.</p>
+        </section>
+
         <section id="guvenlik">
-          <h2>8. Şifreli kasa, yedekleme ve güvenli test</h2>
+          <h2>9. Şifreli kasa, yedekleme ve güvenli test</h2>
           <p>İlk açılışta en az 12 karakterli parola ile yerel kasa oluşturun. Sonraki açılışlarda aynı parola ile kasayı açın. Parola MİHENK hesabından bağımsızdır; bir sunucuya gönderilmez.</p>
           <p>Ses dosyaları 1 MiB bloklar hâlinde AES-256-GCM ile şifrelenerek uygulamanın yerel veri klasörüne kaydedilir. Kasa metaverisi ve dosya anahtarları Argon2 tabanlı parola korumalı Stronghold snapshot içinde tutulur. Dinleme sırasında ses bellekte çözülür. Bu önizlemede dosya başına 128 MiB sınırı vardır.</p>
           <p>Üst çubuktaki <strong>Kasa yedeği indir</strong> düğmesi Stronghold snapshot'ını, Argon2 salt dosyasını ve zaten AES-GCM ile şifrelenmiş materyalleri tek bir <code>.mihenkbackup</code> dosyasında birleştirir. Paket kendi başına ek bir parola katmanıyla şifrelenmez; içindeki materyaller şifrelidir. Paket içi SHA-256 özetleri kazara bozulmayı saptar, kötü niyetli değişikliğe karşı imza değildir.</p>
