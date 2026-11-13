@@ -116,6 +116,14 @@ fn show_startup_error() {
 }
 
 fn main() {
+    // Bu kayıt Tauri/WebView2 kurulumundan önce yazılır. Dosya yoksa süreç
+    // Rust main() giriş noktasına ulaşmadan Windows DLL yüklemesinde kapanmıştır.
+    startup_log("process_entry", "Rust main() giriş noktasına ulaşıldı.");
+    startup_log(
+        "process_entry",
+        if cfg!(debug_assertions) { "Derleme profili: debug." } else { "Derleme profili: release." },
+    );
+
     std::panic::set_hook(Box::new(|panic| {
         startup_log("panic", &panic.to_string());
         show_startup_error();
