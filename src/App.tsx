@@ -584,20 +584,23 @@ export default function App() {
 
     setBackupInputBusy(true);
     setVaultError("");
+    let restored = false;
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       try {
         await restoreLocalVaultBackup(bytes);
+        restored = true;
       } finally {
         bytes.fill(0);
       }
       setVaultPassword("");
       setVaultPasswordConfirm("");
       setVaultState("locked");
-      setNotice("Şifreli yedek bu cihaza geri yüklendi. Kasayı açmak için yedek oluşturulurken kullanılan parolayı girin.");
+      setNotice("Şifreli yedek geri yüklendi. Salt yapılandırmasını yenilemek için uygulama yeniden başlatılıyor.");
+      await relaunch();
     } catch (error) {
       setVaultError(error instanceof Error ? error.message : "Şifreli yedek geri yüklenemedi.");
-      setVaultState("not-created");
+      setVaultState(restored ? "locked" : "not-created");
     } finally {
       setBackupInputBusy(false);
       if (backupInputRef.current) backupInputRef.current.value = "";
