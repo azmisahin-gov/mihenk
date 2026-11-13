@@ -5,6 +5,10 @@ New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 
 $baseUrl = "https://download.libsodium.org/libsodium/releases"
 $artifacts = @(
+    # libsodium-sys-stable önce kaynak arşivini, gerekirse Windows MSVC
+    # önceden derlenmiş arşivini aynı klasörden alabilir.
+    "LATEST.tar.gz",
+    "LATEST.tar.gz.minisig",
     "libsodium-1.0.22-stable-msvc.zip",
     "libsodium-1.0.22-stable-msvc.zip.minisig"
 )
