@@ -42,14 +42,13 @@ function installerAssets(release) {
 }
 
 function displayAssetName(asset) {
-  const name = String(asset.name ?? "");
-  if (/\\.exe$/i.test(name)) return "Windows kurulum sihirbazı · kullanıcı hesabı (EXE)";
-  if (/\\.msi$/i.test(name)) return "Windows bilgisayar geneli kurulumu · yönetici izni (MSI)";
-  if (/\\.deb$/i.test(name)) return "Pardus / Debian paketi (DEB)";
-  if (/\\.appimage(\\.tar\\.gz)?$/i.test(name)) return "Linux taşınabilir paketi (AppImage)";
-  return name;
+  const name = String(asset.name ?? "").toLowerCase();
+  if (name.endsWith(".exe")) return "Windows kurulum sihirbazı · kullanıcı hesabı (EXE)";
+  if (name.endsWith(".msi")) return "Windows bilgisayar geneli kurulumu · yönetici izni (MSI)";
+  if (name.endsWith(".deb")) return "Pardus / Debian paketi (DEB)";
+  if (name.endsWith(".appimage") || name.endsWith(".appimage.tar.gz")) return "Linux taşınabilir paketi (AppImage)";
+  return asset.name;
 }
-
 function makeAssetLink(asset) {
   const url = safeDownloadUrl(asset.browser_download_url);
   if (!url) return null;
@@ -138,39 +137,47 @@ function showRelease(targetId, release, unavailableText) {
 async function loadReleases() {
   const status = byId("page-status");
   try {
-    const response = await fetch(`${releasesUrl}?per_page=20`, {
+    const response = await fetch(releasesUrl + "?per_page=20", {
       headers: { Accept: "application/vnd.github+json" },
       cache: "no-cache"
     });
-    if (!response.ok) throw new Error(`GitHub Releases yanıtı: ${response.status}`);
+    if (!response.ok) throw new Error("GitHub Releases yanıtı: " + response.status);
     const releases = await response.json();
     const stable = releases.find((release) => !release.draft && !release.prerelease) || null;
     const preview = releases.find((release) => !release.draft && (release.prerelease || release.tag_name === "preview")) || null;
+    const downloadRelease = stable || preview;
 
-    if (!stable) {
-      byId("latest-version").textContent = "Henüz sürüm yok";
-      byId("latest-date").textContent = "İlk kararlı sürüm bekleniyor";
-      byId("stable-chip").textContent = "Kararlı sürüm henüz yayımlanmadı";
-      status.textContent = "Henüz indirilebilir kararlı sürüm yayımlanmadı.";
-    } else {
+    if (stable) {
       byId("latest-version").textContent = stable.name || stable.tag_name;
       byId("latest-date").textContent = formatDate(stable.published_at);
-      byId("stable-chip").textContent = `Kararlı sürüm: ${stable.tag_name}`;
+      byId("stable-chip").textContent = "Kararlı sürüm: " + stable.tag_name;
       status.textContent = "Kararlı sürüm bilgisi güncel.";
+    } else if (preview) {
+      byId("latest-version").textContent = preview.name || preview.tag_name;
+      byId("latest-date").textContent = "Geliştirme önizlemesi · " + formatDate(preview.published_at);
+      byId("stable-chip").textContent = "Kararlı sürüm yok · Önizleme indiriliyor";
+      status.textContent = "Kararlı sürüm henüz yayımlanmadı. İndirme kartlarında test amaçlı geliştirme önizlemesi gösteriliyor.";
+    } else {
+      byId("latest-version").textContent = "Henüz sürüm yok";
+      byId("latest-date").textContent = "İlk kararlı sürüm bekleniyor";
+      byId("stable-chip").textContent = "Henüz indirilebilir paket yok";
+      status.textContent = "Henüz indirilebilir kararlı veya önizleme sürümü yayımlanmadı.";
     }
 
     showRelease("stable-release", stable, "Henüz kararlı sürüm yayımlanmadı.");
     showRelease("preview-release", preview, "Henüz geliştirme önizlemesi yayımlanmadı.");
 
-    const stableAssets = installerAssets(stable);
-    showAssets("windows-assets", stableAssets, (asset) => /\.(exe|msi)$/i.test(asset.name), "Henüz Windows paketi yayımlanmadı.");
-    showAssets("debian-assets", stableAssets, (asset) => /\.deb$/i.test(asset.name), "Henüz DEB paketi yayımlanmadı.");
-    showAssets("appimage-assets", stableAssets, (asset) => /\.appimage(\.tar\.gz)?$/i.test(asset.name), "Henüz AppImage paketi yayımlanmadı.");
+    const downloadableAssets = installerAssets(downloadRelease);
+    const emptyMessage = stable
+      ? "Kararlı kanalda bu platform için paket yok."
+      : "Önizleme kanalında bu platform için paket yok.";
+    showAssets("windows-assets", downloadableAssets, (asset) => asset.name.toLowerCase().endsWith(".exe") || asset.name.toLowerCase().endsWith(".msi"), emptyMessage);
+    showAssets("debian-assets", downloadableAssets, (asset) => asset.name.toLowerCase().endsWith(".deb"), emptyMessage);
+    showAssets("appimage-assets", downloadableAssets, (asset) => asset.name.toLowerCase().endsWith(".appimage") || asset.name.toLowerCase().endsWith(".appimage.tar.gz"), emptyMessage);
   } catch (error) {
     console.error("MİHENK yayın bilgisi alınamadı:", error);
     status.textContent = "Yayın bilgisi şu anda alınamadı. GitHub Releases sayfasını açabilirsiniz.";
     byId("stable-chip").textContent = "Yayın durumu kontrol edilemiyor";
   }
 }
-
 void loadReleases();
