@@ -1,5 +1,5 @@
-import type { AudioRecord } from "./audio";
-import { formatTime } from "./audio";
+import type { AudioRecord } from "./audio.ts";
+import { formatTime } from "./audio.ts";
 
 export interface TranscriptExport {
   schemaVersion: "0.1";
