@@ -5,7 +5,15 @@ import {
   buildVaultBackup,
   parseVaultBackup,
   VAULT_BACKUP_HEADER_BYTES,
+  isVaultMaterialFileName,
 } from "../src/domain/vault-backup.ts";
+
+test("kasa materyali yedeklemesinde yalnız doğru kimlikli mhn uzantısı kabul edilir", () => {
+  assert.equal(isVaultMaterialFileName("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mhn"), true);
+  assert.equal(isVaultMaterialFileName("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.mhn"), false);
+  assert.equal(isVaultMaterialFileName("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.part"), false);
+  assert.equal(isVaultMaterialFileName("../secret.mhn"), false);
+});
 
 function sampleEntries() {
   return [
