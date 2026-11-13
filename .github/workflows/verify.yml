@@ -23,3 +23,40 @@ jobs:
         run: npm run check
       - name: Üretim ön yüzünü derle
         run: npm run build
+
+  masaustu:
+    name: Tauri masaüstü derleme denetimi
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+      - name: Rust kur
+        uses: dtolnay/rust-toolchain@stable
+      - name: Linux bağımlılıklarını kur
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - name: JavaScript bağımlılıklarını kur
+        run: npm install --no-audit --no-fund
+      - name: Ön yüzü derle
+        run: npm run build
+      - name: Tauri Rust kabuğunu denetle
+        run: cargo check --manifest-path src-tauri/Cargo.toml
