@@ -2,7 +2,7 @@ name: Ön yüz doğrulaması
 
 on:
   push:
-    branches: ["main", "feat/56-12-ses-calisma-alani", "fix/appimage-kare-simge"]
+    branches: ["main", "feat/56-12-ses-calisma-alani", "feat/yerel-gorev-kasasi", "fix/appimage-kare-simge", "fix/tauri-imza-bom-temizligi"]
     paths:
       - "src/**"
       - "src-tauri/**"
