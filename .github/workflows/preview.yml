@@ -74,7 +74,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Rust kur
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.99.1
       - name: Windows için libsodium arşivini doğrulayarak hazırla
         if: runner.os == 'Windows'
         shell: pwsh
