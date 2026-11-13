@@ -25,6 +25,8 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Kilitli JavaScript bağımlılıklarını kur
         run: npm ci --no-audit --no-fund
+      - name: Birim testleri
+        run: npm test
       - name: TypeScript denetimi
         run: npm run check
       - name: Üretim ön yüzünü derle
