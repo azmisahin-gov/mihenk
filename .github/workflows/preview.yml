@@ -122,6 +122,10 @@ jobs:
           fs.writeFileSync("src-tauri/tauri.generated.conf.json", JSON.stringify(config, null, 2) + "\n");
           NODE
           echo "VITE_APP_VERSION=$PREVIEW_VERSION" >> "$GITHUB_ENV"
+      - name: Windows runner Rust/MSVC loader baseline denetimi
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-windows-loader-baseline.ps1
       - name: Windows ham yayın ikilisini paketlemeden önce derle
         if: runner.os == 'Windows'
         shell: pwsh
