@@ -77,6 +77,10 @@ if (-not $appPath) {
     }
 }
 
+if ($appPath -and -not $appPath.StartsWith($env:ProgramFiles, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "MSI uygulamayı Program Files yerine başka bir konuma kurdu: $appPath"
+}
+
 if (-not $appPath) {
     $displayNames = ($appEntries | ForEach-Object { $_.DisplayName }) -join "; "
     $msiTail = if (Test-Path -LiteralPath $msiLog) {
