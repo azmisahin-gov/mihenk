@@ -59,6 +59,14 @@ Tauri geliştirme ortamı Linux'ta WebKitGTK 4.1 ve derleme bağımlılıkları 
 
 Tauri geliştirme ortamında Microsoft C++ Build Tools ve WebView2 gerekir.
 
+### Windows'ta uygulama açılmıyorsa
+
+Uygulama başlangıçta kapanırsa MİHENK artık yerel tanılama günlüğü yazar:
+
+`%LOCALAPPDATA%\\com.mihenk.desktop\\logs\\startup.log`
+
+Bu dosyayı açılış hatasının saatine göre kontrol edin. Hata bildirirken ses, transkript, kişi bilgisi veya UYAP belgesi paylaşmayın; yalnızca günlükteki teknik hata satırlarını ve uygulama sürümünü paylaşın. Günlük dosyası yerel kalır; kendiliğinden GitHub'a yüklenmez.
+
 ## Teknoloji adayı
 
 İlk masaüstü prototip, geçici olarak Tauri 2 + React + TypeScript + Vite kullanır. Bu seçim nihai platform mimarisi değildir; hedef cihaz, Windows/Pardus paketlemesi, kaynak tüketimi, güvenlik ve bakım denemelerinden sonra tekrar değerlendirilecektir.
