@@ -96,15 +96,32 @@ jobs:
         shell: pwsh
         run: |
           $app = Join-Path $PWD "src-tauri/target/debug/mihenk.exe"
-          $process = Start-Process -FilePath $app -PassThru
+          if (-not (Test-Path $app)) {
+            throw "Masaüstü ikilisi bulunamadı: $app"
+          }
+
+          $stdout = Join-Path $env:RUNNER_TEMP "mihenk-stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "mihenk-stderr.log"
+          $webViewData = Join-Path $env:RUNNER_TEMP "mihenk-webview2"
+          New-Item -ItemType Directory -Force -Path $webViewData | Out-Null
+          $env:WEBVIEW2_USER_DATA_FOLDER = $webViewData
+
+          $process = Start-Process -FilePath $app -WorkingDirectory (Split-Path $app) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
           try {
-            Start-Sleep -Seconds 10
-            $process.Refresh()
-            if ($process.HasExited) {
-              throw "MİHENK masaüstü süreci 10 saniyelik açılış kontrolü tamamlanmadan kapandı."
+            for ($attempt = 1; $attempt -le 15; $attempt++) {
+              Start-Sleep -Seconds 1
+              $process.Refresh()
+              if ($process.HasExited) {
+                $outText = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+                $errText = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                throw "MİHENK başlatıldıktan sonra kapandı. Çıkış kodu: $($process.ExitCode). stdout: $outText stderr: $errText"
+              }
             }
+
+            Write-Output "MİHENK Windows süreci 15 saniye boyunca açık kaldı. PID: $($process.Id)"
           }
           finally {
+            $process.Refresh()
             if (-not $process.HasExited) {
               Stop-Process -Id $process.Id -Force
             }
