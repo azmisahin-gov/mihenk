@@ -54,19 +54,26 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/prepare-libsodium-windows.ps1
-      - name: Windows MSI kurulum testi betiğinin sözdizimini doğrula
+      - name: Windows kurulum testi betiklerinin sözdizimini doğrula
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Join-Path $PWD "scripts/test-windows-installed-msi.ps1"),
-            [ref]$tokens,
-            [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | Format-List | Out-String | Write-Error
+          $paths = @(
+            "scripts/test-windows-installed-msi.ps1",
+            "scripts/test-windows-installed-nsis.ps1"
+          )
+          foreach ($path in $paths) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Join-Path $PWD $path),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              throw ("PowerShell sözdizimi hatası: " + $path + " " + ($errors | Out-String))
+            }
+            Write-Host ("PowerShell sözdizimi başarılı: " + $path)
           }
       - name: Linux bağımlılıklarını kur
         if: runner.os == 'Linux'
