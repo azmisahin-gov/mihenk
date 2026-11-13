@@ -633,10 +633,6 @@ export default function App() {
 
   const activeDuration = activeRecord?.durationSeconds ?? 0;
 
-  function activeVaultOpen(): boolean {
-    return vaultState === "unlocked";
-  }
-
   async function installAvailableUpdate(): Promise<void> {
     if (!availableUpdate || isPlaying || loadingRecordId !== null || vaultState !== "unlocked" || updateState === "installing") return;
     setUpdateState("installing");
