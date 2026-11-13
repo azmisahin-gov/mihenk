@@ -399,10 +399,10 @@ export default function App() {
 
                   <div className="audio-stage">
                     <div className="stage-caption">
-                      <span>OYNATMA KONTROLÜ</span>
+                      <span>OYNATMA KONTROLÜ · TEMSİLİ SES GÖRSELİ</span>
                       <span>{formatTime(currentTime)} / {formatTime(activeRecord.durationSeconds)}</span>
                     </div>
-                    <div className="wave-placeholder" aria-hidden="true">
+                    <div className="wave-placeholder" aria-hidden="true" title="Temsili görsel; gerçek dalga formu hesaplanmıyor">
                       {Array.from({ length: 72 }, (_, index) => (
                         <span key={index} style={{ height: `${12 + ((index * 17 + 13) % 40)}%` }} />
                       ))}
