@@ -12,6 +12,11 @@
     "windows": {
       "wix": {
         "language": "tr-TR"
+      },
+      "nsis": {
+        "languages": [
+          "Turkish"
+        ]
       }
     }
   },
