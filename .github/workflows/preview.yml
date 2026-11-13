@@ -81,6 +81,7 @@ jobs:
           config.plugins.updater.endpoints = ["https://github.com/azmisahin-gov/mihenk/releases/download/preview/latest.json"];
           fs.writeFileSync("src-tauri/tauri.generated.conf.json", JSON.stringify(config, null, 2) + "\n");
           NODE
+          echo "VITE_APP_VERSION=$PREVIEW_VERSION" >> "$GITHUB_ENV"
       - name: Güncelleme imza anahtarını UTF-8 BOM karakterinden arındır
         shell: bash
         run: |
@@ -101,7 +102,6 @@ jobs:
             { encoding: "utf8", mode: 0o600 },
           );
           NODE
-          echo "VITE_APP_VERSION=$PREVIEW_VERSION" >> "$GITHUB_ENV"
       - name: Önizleme etiketini güncel main commitine taşı
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
