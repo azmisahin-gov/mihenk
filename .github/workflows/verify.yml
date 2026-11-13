@@ -29,6 +29,8 @@ jobs:
         run: npm test
       - name: TypeScript denetimi
         run: npm run check
+      - name: İndirme sayfası JavaScript sözdizimini doğrula
+        run: node --check docs/site.js
       - name: Üretim ön yüzünü derle
         run: npm run build
 
