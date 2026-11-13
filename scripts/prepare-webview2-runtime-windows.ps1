@@ -3,7 +3,9 @@ $ErrorActionPreference = "Stop"
 function Get-WebView2RuntimeVersion {
     $roots = @(
         "HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients"
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients",
+        "HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients",
+        "HKCU:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients"
     )
     $versions = @()
 
