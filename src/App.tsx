@@ -74,6 +74,7 @@ export default function App() {
   const [vaultBusy, setVaultBusy] = useState(false);
   const [vaultError, setVaultError] = useState("");
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
@@ -136,7 +137,7 @@ export default function App() {
 
   useEffect(() => () => {
     for (const record of recordsRef.current) {
-      URL.revokeObjectURL(record.objectUrl);
+      if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
     }
   }, []);
 
@@ -551,8 +552,12 @@ export default function App() {
 
   const activeDuration = activeRecord?.durationSeconds ?? 0;
 
+  function activeVaultOpen(): boolean {
+    return vaultState === "unlocked";
+  }
+
   async function installAvailableUpdate(): Promise<void> {
-    if (!availableUpdate || records.length > 0 || updateState === "installing") return;
+    if (!availableUpdate || isPlaying || loadingRecordId !== null || vaultState !== "unlocked" || updateState === "installing") return;
     setUpdateState("installing");
     setUpdateProgress(0);
     setUpdateError("");
@@ -572,9 +577,23 @@ export default function App() {
           setUpdateProgress(100);
         }
       });
+
+      // Kalıcı kasa güncelleme öncesi kaydedilir ve kilitlenir.
+      await persistVaultRecords(recordsRef.current);
+      audioRef.current?.pause();
+      for (const record of recordsRef.current) {
+        if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
+      }
+      await lockLocalVault();
+      setRecords([]);
+      setActiveId(null);
+      setVaultState("locked");
       await relaunch();
     } catch (error) {
-      setUpdateError(error instanceof Error ? error.message : "Güncelleme kurulamadı.");
+      const message = error instanceof Error ? error.message : "Güncelleme kurulamadı.";
+      setUpdateError(message);
+      setVaultError(message);
+      if (!activeVaultOpen()) setVaultState("locked");
       setUpdateState("error");
     }
   }
@@ -706,9 +725,9 @@ export default function App() {
               <strong>MİHENK {availableUpdate.version} güncellemesi hazır.</strong>
               <p>{availableUpdate.body || "Yeni sürüm indirilebilir."}</p>
               <small>
-                {records.length > 0
-                  ? "Açık ses oturumu tamamlanınca güncelleme otomatik kurulacak."
-                  : "Güncelleme otomatik indirilecek ve uygulama yeniden başlatılacak."}
+                {isPlaying || loadingRecordId !== null
+                  ? "Dinleme veya şifreli kayıt açma işlemi tamamlanınca güncelleme otomatik kurulacak."
+                  : "Kasa güncelleme öncesi kaydedilip kilitlenecek; uygulama yeniden başlatılacak."}
               </small>
             </div>
           </div>
@@ -893,8 +912,10 @@ export default function App() {
                       controls
                       preload="metadata"
                       onLoadedMetadata={handleMetadata}
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
                       onTimeUpdate={handleAudioTimeUpdate}
-                      onEnded={() => setCurrentTime(activeRecord.durationSeconds ?? currentTime)}
+                      onEnded={() => { setIsPlaying(false); setCurrentTime(activeRecord.durationSeconds ?? currentTime); }}
                       onError={() => setNotice("Ses açılamadı. Dosya biçimi bu ortamda desteklenmiyor olabilir.")}
                     />
                   </div>
