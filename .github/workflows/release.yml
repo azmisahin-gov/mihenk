@@ -152,6 +152,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/inspect-windows-pe-dependencies.ps1 -Stage pre-bundle
+      - name: Windows paketleme öncesi hatalı Vertdll importunu reddet
+        id: pre_bundle_imports
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: ./scripts/test-windows-forbidden-dll-imports.ps1
       - name: Windows Evergreen WebView2 Runtime'ı hazırla
         if: runner.os == 'Windows'
         shell: pwsh
@@ -200,6 +206,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/inspect-windows-pe-dependencies.ps1 -Stage post-bundle
+      - name: Windows paketleme sonrası hatalı Vertdll importunu reddet
+        id: post_bundle_imports
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: ./scripts/test-windows-forbidden-dll-imports.ps1
       - name: İmza anahtarını sonraki adımların ortamından temizle
         shell: bash
         run: |
@@ -268,12 +280,16 @@ jobs:
         env:
           PRE_BUNDLE_OUTCOME: ${{ steps.pre_bundle_smoke.outcome }}
           POST_BUNDLE_OUTCOME: ${{ steps.post_bundle_smoke.outcome }}
+          PRE_BUNDLE_IMPORTS_OUTCOME: ${{ steps.pre_bundle_imports.outcome }}
+          POST_BUNDLE_IMPORTS_OUTCOME: ${{ steps.post_bundle_imports.outcome }}
           NSIS_OUTCOME: ${{ steps.nsis_smoke.outcome }}
           MSI_OUTCOME: ${{ steps.msi_smoke.outcome }}
         run: |
           $failures = @()
           if ($env:PRE_BUNDLE_OUTCOME -ne "success") { $failures += "Ham EXE (paketleme öncesi): $($env:PRE_BUNDLE_OUTCOME)" }
           if ($env:POST_BUNDLE_OUTCOME -ne "success") { $failures += "Paketlenmiş EXE: $($env:POST_BUNDLE_OUTCOME)" }
+          if ($env:PRE_BUNDLE_IMPORTS_OUTCOME -ne "success") { $failures += "Ham EXE DLL import denetimi: $($env:PRE_BUNDLE_IMPORTS_OUTCOME)" }
+          if ($env:POST_BUNDLE_IMPORTS_OUTCOME -ne "success") { $failures += "Paketlenmiş EXE DLL import denetimi: $($env:POST_BUNDLE_IMPORTS_OUTCOME)" }
           if ($env:NSIS_OUTCOME -ne "success") { $failures += "NSIS Setup.exe: $($env:NSIS_OUTCOME)" }
           if ($env:MSI_OUTCOME -ne "success") { $failures += "MSI: $($env:MSI_OUTCOME)" }
           if ($failures.Count -gt 0) {
