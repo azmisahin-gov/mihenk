@@ -161,7 +161,7 @@ jobs:
             echo "Yayın ikilisi bulunamadı: $APP" >&2
             exit 1
           fi
-          STARTUP_LOG="\${XDG_DATA_HOME:-$HOME/.local/share}/com.mihenk.desktop/logs/startup.log"
+          STARTUP_LOG="${XDG_DATA_HOME:-$HOME/.local/share}/com.mihenk.desktop/logs/startup.log"
           OUTPUT_LOG="$RUNNER_TEMP/mihenk-release-linux.log"
           rm -f "$STARTUP_LOG"
           xvfb-run -a bash -c '
