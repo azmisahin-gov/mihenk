@@ -143,7 +143,46 @@ finally {
             Write-Warning "Geçici NSIS test kurulumunun kaldırma kodu: $($uninstall.ExitCode)"
         }
     }
+    # NSIS uninstaller sometimes leaves its ARP registration behind when
+    # a prior application launch failed. Remove only entries pointing at
+    # this exact temporary test directory; never touch a user's installation.
+    $uninstallRoots = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+        "HKCU:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+    )
+
+    foreach ($root in $uninstallRoots) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+
+        foreach ($key in Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue) {
+            $entry = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+            if (-not $entry.DisplayName -or $entry.DisplayName -notlike "*HENK*") { continue }
+
+            $pointsToTestInstall = $false
+            if ($entry.InstallLocation) {
+                $entryLocation = $entry.InstallLocation.TrimEnd('\')
+                $testLocation = $installDir.TrimEnd('\')
+                $pointsToTestInstall = $entryLocation.Equals($testLocation, [System.StringComparison]::OrdinalIgnoreCase)
+            }
+
+            if (-not $pointsToTestInstall -and $entry.DisplayIcon) {
+                $iconPath = $entry.DisplayIcon -replace ',[0-9]+$', ''
+                $iconPath = $iconPath.Trim('"')
+                $testAppPath = Join-Path $installDir "mihenk.exe"
+                $pointsToTestInstall = $iconPath.Equals($testAppPath, [System.StringComparison]::OrdinalIgnoreCase)
+            }
+
+            if ($pointsToTestInstall) {
+                Write-Host ("Geçici NSIS kayıt defteri girdisi temizleniyor: " + $key.PSPath)
+                Remove-Item -LiteralPath $key.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
     if (Test-Path -LiteralPath $installDir) {
         Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
+

@@ -71,4 +71,12 @@ Write-Host ("Kurulum sonrası WebView2 Runtime: " + $after.ToString())
 if ($before -and $after -lt $before) {
     throw "WebView2 Runtime sürümü geriledi: önce $before, sonra $after"
 }
+
+# Microsoft'un 6 Kasım 2026 tarihli kararlı sürüm taban çizgisi.
+# Daha yeni Evergreen sürümlerini kabul eder; eski runner imajının kalmasını engeller.
+$minimumRuntime = [version]"157.0.4341.42"
+if ($after -lt $minimumRuntime) {
+    throw "WebView2 Runtime güncel kararlı sürüm taban çizgisine ulaşmadı. Beklenen en az $minimumRuntime, bulunan $after"
+}
+
 Write-Host "Windows smoke testleri güncel Evergreen WebView2 Runtime üzerinde çalıştırılacak."
