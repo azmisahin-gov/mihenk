@@ -74,15 +74,18 @@ README, issue, pull request başlık/açıklamaları ve commit mesajları Türk�
 
 ## Kurulum ve otomatik güncelleme
 
-> **Yayın durumu (13 Kasım 2026):** İlk 56.12 masaüstü prototipi `main` dalındadır. İmzalı geliştirme önizlemesi için Windows ve Linux kurulum paketleri üretilmektedir; ilk paketler doğrulanıp GitHub Releases bölümüne eklenmeden indirme bağlantısı kullanıma açılmış sayılmaz. Bu sürüm yalnızca sentetik/açık test verisi içindir.
+> **Yayın durumu (13 Kasım 2026):** `0.1.0-7` imzalı geliştirme önizlemesi GitHub Releases bölümünde yayımlanmıştır. Windows NSIS/EXE, Windows MSI, Linux AppImage ve Debian/ PARDUS DEB paketleri aynı önizleme kaydındadır. Henüz kararlı sürüm yoktur; indirme sayfası kararlı sürüm yayımlanana kadar önizleme paketlerini açıkça etiketleyerek gösterir. Bu sürüm yalnızca sentetik veya kullanım izni bulunan test verisi içindir.
 
 ### Hedeflenen kullanıcı indirmeleri
 
-- **Windows:** NSIS kurulum dosyası (.exe) ve MSI paketi.
+- **Windows Setup.exe (önerilen):** Varsayılan NSIS kurulumu yalnızca geçerli Windows kullanıcısına, `%LOCALAPPDATA%` altına yapılır; normalde yönetici izni istemez.
+- **Windows MSI:** WiX paketi varsayılan olarak Program Files içine bilgisayar geneli kurulum yapar ve yönetici izni gerektirir. EXE ve MSI alternatif kurulum biçimleridir; aynı bilgisayara ikisini birden kurmayın.
 - **Pardus / Debian tabanlı Linux:** .deb paketi.
 - **Linux:** AppImage paketi.
 
-İlk paket yayımlandığında kararlı indirme adresi: https://github.com/azmisahin-gov/mihenk/releases/latest
+Sürüm ve indirme sayfası: https://azmisahin-gov.github.io/mihenk/  
+Tüm GitHub sürümleri: https://github.com/azmisahin-gov/mihenk/releases  
+Kararlı sürüm adresi (kararlı etiket yayımlandığında): https://github.com/azmisahin-gov/mihenk/releases/latest
 
 Geliştirme önizlemesi ile kararlı sürüm ayrı kanallardır. Önizleme sürümü kuran kullanıcılar yalnızca önizleme kanalından güncelleme alır; kararlı sürüm kullanıcıları önizleme koduna otomatik geçirilmez.
 
@@ -101,7 +104,7 @@ Tauri güncelleme imzası Windows Authenticode yayıncı sertifikasının veya U
 - `main` dalına birleştirilen değişiklikler, önizleme yayın iş akışını tetikler.
 - `vX.Y.Z` biçimindeki etiket kararlı sürüm paketlerini ve güncelleme manifestini üretir.
 - Yayından önce `package.json`, `src-tauri/tauri.conf.json` ve `src-tauri/Cargo.toml` sürümleri eşitlenir.
-- Uygulama açılışında güncelleme kontrolü yapılır; manifest imzası doğrulandıktan sonra yeni sürüm indirilip kurulabilir. Bu uçtan uca akış henüz yayımlanmış paket üzerinden test edilmemiştir.
+- Uygulama açılışında güncelleme kontrolü yapılır; manifest imzası doğrulandıktan sonra yeni sürüm indirilip kurulabilir. Güncelleme akışının gerçek kullanıcı cihazlarında ve her kurulum türünde uçtan uca kabul testi henüz tamamlanmamıştır.
 
 **Platform sınırı:** Tauri Updater Linux'ta AppImage ve Debian `.deb`, Windows'ta NSIS ve MSI paketlerini destekler. Debian güncellemesi sistem paket kurulumunu (`dpkg`) ve gerekli yönetici yetkisini isteyebilir. Windows kurulumları için Authenticode yayıncı sertifikası ayrıca gerekir; Tauri güncelleme imzası bunun yerine geçmez.
 
