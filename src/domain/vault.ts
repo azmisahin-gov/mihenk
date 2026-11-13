@@ -138,6 +138,7 @@ function validateMetadata(meta: VaultAudioMetadata): void {
     meta.noncePrefix.some((part) => !Number.isInteger(part) || part < 0 || part > 255) ||
     typeof meta.fileName !== "string" ||
     typeof meta.mediaType !== "string" ||
+    !Array.isArray(meta.noncePrefix) ||
     !Array.isArray(meta.segments)
   ) {
     throw new Error("Şifreli ses kaydının üst verisi geçersiz veya desteklenmiyor.");
@@ -262,7 +263,6 @@ export async function importAudioToVault(file: File): Promise<VaultAudioMetadata
   const finalPath = audioRelativePath(fileId, "mhn");
   let fileHandle: Awaited<ReturnType<typeof open>> | null = null;
   let renamed = false;
-  let metadataSaved = false;
 
   try {
     const key = await importVaultFileKey(rawKey);
@@ -316,7 +316,6 @@ export async function importAudioToVault(file: File): Promise<VaultAudioMetadata
     if (!Array.isArray(ids)) throw new Error("Kasa materyal listesi bozuk.");
     await writeJson(store, STORE_AUDIO_INDEX_KEY, [...ids, fileId]);
     await stronghold.save();
-    metadataSaved = true;
     return metadata;
   } catch (error) {
     if (fileHandle) await fileHandle.close().catch(() => undefined);
@@ -325,8 +324,8 @@ export async function importAudioToVault(file: File): Promise<VaultAudioMetadata
     const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY).catch(() => null);
     if (Array.isArray(ids)) {
       await writeJson(store, STORE_AUDIO_INDEX_KEY, ids.filter((id) => id !== fileId)).catch(() => undefined);
-      await stronghold.save().catch(() => undefined);
     }
+    await stronghold.save().catch(() => undefined);
     if (renamed) {
       await remove(finalPath, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
     } else {
@@ -336,7 +335,6 @@ export async function importAudioToVault(file: File): Promise<VaultAudioMetadata
   } finally {
     rawKey.fill(0);
     noncePrefix.fill(0);
-    void metadataSaved;
   }
 }
 
