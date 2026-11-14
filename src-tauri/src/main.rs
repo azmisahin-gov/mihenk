@@ -5,7 +5,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     sync::OnceLock,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use tauri::Manager;
@@ -14,6 +14,7 @@ mod audio_playback;
 mod vault_backup;
 
 static STARTUP_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
+const ORPHAN_IMPORT_MIN_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
 fn fallback_startup_log_path() -> Option<PathBuf> {
     #[cfg(target_os = "windows")]
@@ -101,14 +102,24 @@ fn cleanup_interrupted_audio_imports(materials_dir: &Path) -> std::io::Result<us
         if !entry.file_type()?.is_file() {
             continue;
         }
-        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+        let file_name = entry.file_name();
+        let Some(name) = file_name.to_str() else {
             continue;
         };
-        if !is_interrupted_audio_part_name(&name) {
+        if !is_interrupted_audio_part_name(name) {
             continue;
         }
         let path = entry.path();
-        if fs::symlink_metadata(&path)?.file_type().is_file() {
+        let metadata = fs::symlink_metadata(&path)?;
+        if !metadata.file_type().is_file() {
+            continue;
+        }
+        let modified = match metadata.modified() {
+            Ok(modified) => modified,
+            Err(_) => continue,
+        };
+        let age = SystemTime::now().duration_since(modified).unwrap_or_default();
+        if age >= ORPHAN_IMPORT_MIN_AGE {
             fs::remove_file(path)?;
             removed += 1;
         }
@@ -186,13 +197,21 @@ mod tests {
         fs::create_dir_all(&directory).unwrap();
         let part = directory.join("0123456789abcdef0123456789abcdef.part");
         let encrypted = directory.join("0123456789abcdef0123456789abcdef.mhn");
+        let recent_part = directory.join("abcdef0123456789abcdef0123456789.part");
         fs::write(&part, b"partial").unwrap();
         fs::write(&encrypted, b"encrypted").unwrap();
+        fs::write(&recent_part, b"active-or-recent").unwrap();
+        let stale_time = SystemTime::now() - ORPHAN_IMPORT_MIN_AGE - Duration::from_secs(1);
+        fs::File::open(&part)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(stale_time))
+            .unwrap();
 
         let result = cleanup_interrupted_audio_imports(&directory);
         assert_eq!(result.unwrap(), 1);
         assert!(!part.exists());
         assert!(encrypted.exists());
+        assert!(recent_part.exists());
         fs::remove_dir_all(&directory).unwrap();
     }
 }
