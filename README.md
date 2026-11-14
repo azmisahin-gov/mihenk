@@ -15,6 +15,7 @@ MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda
 - Zaman aralığına bağlı transkript bölümleri, manuel bölüm ekleme ve ses konumuna atlama.
 - Şifreli kasa yedeği ve geri yükleme; toplam 2 GiB ve tek dosya 256 MiB sınırı.
 - Atama profili ve transkript değişikliklerini kasada otomatik kaydetme.
+- Görev sorularına ayrı uzman yanıtı ve görev içindeki transkript segmentlerine dayanak bağlantısı; DOCX/ODT taslaklarında yanıtsız soru, eksik dayanak, kontrol edilmemiş segment ve insan onayı kalite kontrol listesi.
 
 ## ASR sınırları ve kabul durumu
 
