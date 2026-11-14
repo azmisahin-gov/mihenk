@@ -20,3 +20,7 @@ serde_json = { version = "=1.0.154" }
 tauri-plugin-fs = { version = "=2.7.1" }
 tauri-plugin-stronghold = { version = "=2.4.0" }
 zeroize = { version = "=1.9.1" }
+sha1 = { version = "=0.10.6" }
+reqwest = { version = "=0.13.5", default-features = false, features = ["blocking", "rustls"] }
+sherpa-onnx = { version = "=2.0.1" }
+symphonia = { version = "=0.6.1", default-features = false, features = ["aiff", "aac", "alac", "flac", "isomp4", "mp3", "ogg", "pcm", "vorbis", "wav"] }
