@@ -32,6 +32,7 @@ import {
  } from "./vault-crypto";
 import { readFileChunks } from "./file-chunks.ts";
 import { Sha256 } from "./sha256.ts";
+import type { TranscriptRevisionEvent } from "./transcript";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
@@ -76,6 +77,8 @@ export interface VaultAudioMetadata {
     speaker: string;
     status: "taslak" | "belirsiz" | "uzman-onayli";
     source?: "asr" | "uzman";
+    rawAsrText?: string;
+    revisions?: TranscriptRevisionEvent[];
   }>;
   formatVersion: 1;
 }
