@@ -38,6 +38,7 @@ import {
   unlockLocalVault,
   exportLocalVaultBackup,
   restoreLocalVaultBackup,
+  type AudioTechnicalMetadata,
   type VaultAudioMetadata,
   type VaultAssignment,
   type VaultState,
@@ -48,6 +49,28 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SerialTaskQueue } from "./domain/save-queue";
 
 const AUDIO_EXTENSION = /\.(wav|mp3|m4a|aac|ogg|flac|aiff?)$/i;
+
+function audioTechnicalSummary(metadata?: AudioTechnicalMetadata): string | null {
+  if (!metadata) return null;
+  if (metadata.readStatus !== "ok") {
+    return metadata.readMessage
+      ? `Teknik envanter okunamadı: ${metadata.readMessage}`
+      : "Teknik envanter okunamadı.";
+  }
+
+  const parts = [
+    metadata.containerFormat,
+    metadata.codec,
+    metadata.channelCount === null ? null : `${metadata.channelCount} kanal`,
+    metadata.channelLayout,
+    metadata.sampleRateHz === null ? null : `${metadata.sampleRateHz.toLocaleString("tr-TR")} Hz`,
+    metadata.bitsPerSample === null ? null : `${metadata.bitsPerSample} bit`,
+    metadata.averageFileBitrateBps === null
+      ? null
+      : `${Math.round(metadata.averageFileBitrateBps / 1000).toLocaleString("tr-TR")} kbps ort. dosya`,
+  ];
+  return parts.filter((part): part is string => typeof part === "string" && part.length > 0).join(" · ");
+}
 
 function saveTextFile(fileName: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
@@ -1477,6 +1500,11 @@ export default function App() {
                       <span className="record-main">
                         <strong title={record.file.name}>{record.file.name}</strong>
                         <small>{formatBytes(record.vaultMetadata?.sizeBytes ?? record.file.size)} · {formatTime(record.durationSeconds)}</small>
+                        {record.vaultMetadata?.technicalMetadata && (
+                          <small className={record.vaultMetadata.technicalMetadata.readStatus === "ok" ? "technical-ok" : "hash-muted"}>
+                            {audioTechnicalSummary(record.vaultMetadata.technicalMetadata)}
+                          </small>
+                        )}
                         <small className={record.hashState === "hesaplandi" ? "hash-ok" : "hash-muted"}>
                           {hashLabel(record)}
                         </small>
