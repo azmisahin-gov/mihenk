@@ -926,6 +926,39 @@ export default function App() {
             />
           </div>
 
+          <div className="assignment-toolbar">
+            <div className="assignment-picker">
+              <label htmlFor="active-assignment">GÖREV ALANI</label>
+              <select
+                id="active-assignment"
+                value={activeAssignmentId ?? ""}
+                onChange={(event) => switchAssignment(event.currentTarget.value)}
+                disabled={assignments.length === 0}
+              >
+                {assignments.map((assignment) => (
+                  <option key={assignment.id} value={assignment.id}>{assignment.name}</option>
+                ))}
+              </select>
+              <small>Sesler ve transkriptler seçili görev alanında tutulur.</small>
+            </div>
+            <form className="assignment-create" onSubmit={(event) => { event.preventDefault(); void addAssignment(); }}>
+              <label htmlFor="new-assignment-name">YENİ GÖREV ALANI</label>
+              <div>
+                <input
+                  id="new-assignment-name"
+                  type="text"
+                  maxLength={100}
+                  value={assignmentNameDraft}
+                  onChange={(event) => setAssignmentNameDraft(event.currentTarget.value)}
+                  placeholder="Örn. Görev A / İnceleme 01"
+                  aria-label="Yeni görev alanı etiketi"
+                />
+                <button className="secondary-button" type="submit" disabled={!assignmentNameDraft.trim()}>Görev oluştur</button>
+              </div>
+              <small>Etikette kişi adı veya resmî dosya numarası kullanmayın.</small>
+            </form>
+          </div>
+
           <div className="prototype-warning" role="status">
             <span className="warning-icon">i</span>
             <div>
@@ -941,8 +974,8 @@ export default function App() {
           <div className="stats-row">
             <div className="stat-card">
               <span className="stat-label">KAYIT SAYISI</span>
-              <strong>{records.length}</strong>
-              <span className="stat-foot">Bu oturumda eklenen</span>
+              <strong>{assignmentRecords.length}</strong>
+              <span className="stat-foot">Seçili görev alanında</span>
             </div>
             <div className="stat-card">
               <span className="stat-label">TOPLAM SES SÜRESİ</span>
@@ -951,7 +984,7 @@ export default function App() {
             </div>
             <div className="stat-card">
               <span className="stat-label">TRANSKRİPT DURUMU</span>
-              <strong>{records.reduce((sum, record) => sum + record.segments.length, 0)}</strong>
+              <strong>{assignmentRecords.reduce((sum, record) => sum + record.segments.length, 0)}</strong>
               <span className="stat-foot">Elle eklenen bölümler</span>
             </div>
             <div className="stat-card engine-card">
@@ -966,7 +999,7 @@ export default function App() {
               <div className="panel-header">
                 <div>
                   <h2>Kayıt kuyruğu</h2>
-                  <p>{records.length} ses dosyası</p>
+                  <p>{assignmentRecords.length} ses dosyası</p>
                 </div>
                 <button className="icon-button" type="button" aria-label="Ses dosyası ekle" onClick={() => fileInputRef.current?.click()}>+</button>
               </div>
@@ -988,13 +1021,13 @@ export default function App() {
               </div>
 
               <div className="record-list">
-                {records.length === 0 ? (
+                {assignmentRecords.length === 0 ? (
                   <div className="empty-list">
                     <span className="empty-symbol">◌</span>
                     <strong>Henüz kayıt yok</strong>
                     <p>İlk ses dosyanızı ekleyerek başlayın.</p>
                   </div>
-                ) : records.map((record, index) => (
+                ) : assignmentRecords.map((record, index) => (
                   <div key={record.id} className={`record-item ${record.id === activeId ? "selected" : ""}`}>
                     <button className="record-select" type="button" onClick={() => {
                       void selectRecord(record.id);
@@ -1014,7 +1047,7 @@ export default function App() {
               </div>
               <div className="queue-footer">
                 <span>Orijinaller bu prototipte değiştirilmez.</span>
-                <span>{records.length} kayıt · şifreli kasa</span>
+                <span>{assignmentRecords.length} kayıt · seçili görev</span>
               </div>
             </section>
 
@@ -1035,7 +1068,7 @@ export default function App() {
                       <strong title={activeRecord.file.name}>{activeRecord.file.name}</strong>
                       <span>{activeRecord.vaultMetadata?.mediaType || activeRecord.file.type || "Ses biçimi tarayıcı tarafından bildirilmedi"} · {formatBytes(activeRecord.vaultMetadata?.sizeBytes ?? activeRecord.file.size)}</span>
                     </div>
-                    <span className="file-index">#{String(records.findIndex((item) => item.id === activeRecord.id) + 1).padStart(2, "0")}</span>
+                    <span className="file-index">#{String(assignmentRecords.findIndex((item) => item.id === activeRecord.id) + 1).padStart(2, "0")}</span>
                   </div>
 
                   <div className="audio-stage">
