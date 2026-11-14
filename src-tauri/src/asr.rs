@@ -222,13 +222,10 @@ fn download_asset(
             asset.name
         ));
     }
-    if response
-        .content_length()
-        .is_some_and(|length| length == 0 || length > asset.max_bytes)
-    {
-        return Err(format!("SEDA dosyasının bildirdiği boyut geçersiz: {}", asset.name));
-    }
-
+    // Hugging Face's Xet/LFS-compatible redirects can expose transfer
+    // Content-Length metadata that is not the final reconstructed file size.
+    // Treat headers as advisory only: enforce the byte cap while reading,
+    // then verify the exact manifest length and SHA-256 of the resulting file.
     let part_path = directory.join(format!("{}.part", asset.name));
     let final_path = directory.join(asset.name);
     let mut output = File::create(&part_path)
@@ -259,11 +256,8 @@ fn download_asset(
         .map_err(|_| format!("SEDA dosyası diske sabitlenemedi: {}", asset.name))?;
     drop(output);
 
-    if let Some(expected_length) = response.content_length() {
-        if total != expected_length {
-            return Err(format!("SEDA dosyası eksik indirildi: {}", asset.name));
-        }
-    }
+    // Actual bytes, rather than the HTTP transfer header, are authoritative.
+    // verify_asset rejects truncated, altered, or oversized model files.
     verify_asset(&part_path, asset)?;
     fs::rename(part_path, final_path)
         .map_err(|_| format!("SEDA dosyası kurulamadı: {}", asset.name))?;
@@ -346,10 +340,6 @@ pub fn install_seda_model(app_data_dir: &Path) -> Result<SedaModelStatus, String
         let _ = remove_path_if_exists(&staging);
     }
     result
-}
-
-pub fn seda_model_directory(app_data_dir: &Path) -> PathBuf {
-    model_dir(app_data_dir)
 }
 
 #[tauri::command]
