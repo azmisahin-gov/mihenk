@@ -618,7 +618,6 @@ export async function clearStoredAudioPlaybackSessions(): Promise<void> {
 
 export async function deleteStoredAudio(fileId: string): Promise<void> {
   const store = requireStore();
-  await clearStoredAudioPlaybackSessions();
   const stronghold = requireStronghold();
   assertVaultFileId(fileId);
   const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
