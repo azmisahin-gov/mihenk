@@ -360,7 +360,9 @@ pub async fn get_seda_model_status_command(
         .path()
         .app_data_dir()
         .map_err(|_| "Yerel model klasörüne erişilemedi.".to_string())?;
-    Ok(get_seda_model_status(&root))
+    tauri::async_runtime::spawn_blocking(move || get_seda_model_status(&root))
+        .await
+        .map_err(|_| "SEDA model durumu denetimi beklenmedik biçimde sonlandı.".to_string())
 }
 
 #[tauri::command]
