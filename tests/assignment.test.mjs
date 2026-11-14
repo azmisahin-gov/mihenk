@@ -7,6 +7,7 @@ import {
   filterByAssignment,
   normalizeAssignmentName,
   resolveActiveAssignment,
+  resolveStoredAssignmentId,
 } from "../src/domain/assignment.ts";
 
 const first = createAssignmentRecord("Dosya A", "2026-11-14T00:00:00.000Z", "a".repeat(32));
@@ -46,4 +47,21 @@ test("geçersiz veya boş tercih edilen görev yerine ilk mevcut görev seçilir
   assert.equal(resolveActiveAssignment([first, second], second.id), second.id);
   assert.equal(resolveActiveAssignment([first, second], "c".repeat(32)), first.id);
   assert.equal(resolveActiveAssignment([], null), null);
+});
+
+test("eski kasadaki görev kimliği olmayan ses varsayılan alana taşınır", () => {
+  assert.equal(resolveStoredAssignmentId(undefined, [first.id, second.id], first.id), first.id);
+  assert.equal(resolveStoredAssignmentId(null, [first.id, second.id], first.id), first.id);
+});
+
+test("bilinen görev kimliği korunur; bozuk veya yetim görev kimliği reddedilir", () => {
+  assert.equal(resolveStoredAssignmentId(second.id, [first.id, second.id], first.id), second.id);
+  assert.throws(
+    () => resolveStoredAssignmentId("not-an-id", [first.id, second.id], first.id),
+    /geçersiz/,
+  );
+  assert.throws(
+    () => resolveStoredAssignmentId("c".repeat(32), [first.id, second.id], first.id),
+    /var olmayan/,
+  );
 });
