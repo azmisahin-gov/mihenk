@@ -26,6 +26,9 @@ const ZIP_CENTRAL_HEADER = 0x02014b50;
 const ZIP_END = 0x06054b50;
 
 function xmlEscape(value: string): string {
+  if (/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]/u.test(value)) {
+    throw new Error("Belgeye aktarılamayan XML kontrol karakteri bulundu; kaynak metni düzeltin.");
+  }
   return value.replace(/[&<>"']/gu, (character) => {
     switch (character) {
       case "&": return "&amp;";
@@ -165,7 +168,7 @@ function createStoredZip(entries: ZipEntry[]): Uint8Array {
     writeU16(localView, 6, 0x0800);
     writeU16(localView, 8, 0);
     writeU16(localView, 10, 0);
-    writeU16(localView, 12, 0);
+    writeU16(localView, 12, 0x21);
     writeU32(localView, 14, checksum);
     writeU32(localView, 18, data.byteLength);
     writeU32(localView, 22, data.byteLength);
@@ -182,7 +185,7 @@ function createStoredZip(entries: ZipEntry[]): Uint8Array {
     writeU16(centralView, 8, 0x0800);
     writeU16(centralView, 10, 0);
     writeU16(centralView, 12, 0);
-    writeU16(centralView, 14, 0);
+    writeU16(centralView, 14, 0x21);
     writeU32(centralView, 16, checksum);
     writeU32(centralView, 20, data.byteLength);
     writeU32(centralView, 24, data.byteLength);
