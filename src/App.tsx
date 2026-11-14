@@ -9,7 +9,7 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { createVaultAudioRecord } from "./domain/vault-audio-record";
-import { findActiveTranscriptSegmentId, mergeAsrTranscriptSegments, recordTranscriptEdit } from "./domain/transcript";
+import { findActiveTranscriptSegmentId, mergeAsrTranscriptSegments, recordTranscriptEdit, type TranscriptAnnotationType } from "./domain/transcript";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
 import { buildDocxReport, buildOdtReport } from "./domain/report";
 import {
@@ -1714,9 +1714,19 @@ export default function App() {
                                       {" → "}{formatTime(revision.after.startSeconds)}–{formatTime(revision.after.endSeconds)}
                                     </p>
                                   )}
+                                  {revision.before.channel !== revision.after.channel && (
+                                    <p className="segment-audit-change">
+                                      Kaynak kanal: {revision.before.channel ?? "—"} → {revision.after.channel ?? "—"}
+                                    </p>
+                                  )}
                                   {revision.before.speaker !== revision.after.speaker && (
                                     <p className="segment-audit-change">
-                                      Etiket: {revision.before.speaker} → {revision.after.speaker}
+                                      Anonim konuşmacı: {revision.before.speaker || "—"} → {revision.after.speaker || "—"}
+                                    </p>
+                                  )}
+                                  {revision.before.annotationType !== revision.after.annotationType && (
+                                    <p className="segment-audit-change">
+                                      Anotasyon: {revision.before.annotationType} → {revision.after.annotationType}
                                     </p>
                                   )}
                                   {revision.before.status !== revision.after.status && (
@@ -1730,10 +1740,17 @@ export default function App() {
                           </details>
                         )}
                         <div className="segment-meta">
+                          {segment.channel && (
+                            <div className="segment-channel">
+                              <span>Kaynak kanal</span>
+                              <strong>{segment.channel}</strong>
+                            </div>
+                          )}
                           <label>
-                            <span>Konuşmacı</span>
+                            <span>Anonim konuşmacı etiketi</span>
                             <input
                               value={segment.speaker}
+                              placeholder="Örn. Konuşmacı 1"
                               onChange={(event) => {
                                 const value = event.currentTarget.value;
                                 updateSegment(segment.id, (item) => ({ ...item, speaker: value }));
@@ -1742,7 +1759,24 @@ export default function App() {
                             />
                           </label>
                           <label>
-                            <span>Durum</span>
+                            <span>Anotasyon türü</span>
+                            <select
+                              value={segment.annotationType ?? "speech"}
+                              onChange={(event) => {
+                                const value = event.currentTarget.value as TranscriptAnnotationType;
+                                updateSegment(segment.id, (item) => ({ ...item, annotationType: value }));
+                              }}
+                              aria-label="Transkript anotasyon türü"
+                            >
+                              <option value="speech">Konuşma</option>
+                              <option value="partially_unintelligible">Kısmen anlaşılmayan konuşma</option>
+                              <option value="unintelligible">Anlaşılmayan konuşma</option>
+                              <option value="vocalization">Vokalizasyon</option>
+                              <option value="environmental_event">Çevresel ses olayı</option>
+                            </select>
+                          </label>
+                          <label>
+                            <span>Kontrol durumu</span>
                             <select
                               value={segment.status}
                               onChange={(event) => {
