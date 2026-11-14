@@ -106,7 +106,7 @@ test("ODT XML'i metni kaçışlar ve taslak uyarısını içerir", () => {
 test("DOCX ve ODT XML için geçersiz kontrol karakteri sessizce bozulmak yerine reddedilir", () => {
   const invalid = {
     ...input,
-    segments: [{ ...input.segments[0], text: "geçersiz\\u0001metin" }],
+    segments: [{ ...input.segments[0], text: "geçersiz" + String.fromCharCode(1) + "metin" }],
   };
   assert.throws(() => buildDocxReport(invalid), /XML kontrol karakteri/);
   assert.throws(() => buildOdtReport(invalid), /XML kontrol karakteri/);
