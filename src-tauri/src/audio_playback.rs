@@ -9,6 +9,7 @@ use std::{
     path::Path,
     sync::Mutex,
 };
+use sha2::{Digest, Sha256};
 use tauri::{
     http::{
         header::{
@@ -163,6 +164,84 @@ pub fn open_vault_audio_reader(
         cached_chunk_index: None,
         cached_plaintext: Zeroizing::new(Vec::new()),
     })
+}
+
+fn format_sha256(bytes: &[u8]) -> String {
+    let mut result = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(result, "{byte:02x}");
+    }
+    result
+}
+
+/// Re-reads authenticated plaintext from the encrypted vault in bounded
+/// buffers and compares its digest and length with the source import.
+fn verify_reader_sha256<R: Read>(
+    reader: &mut R,
+    expected_size: u64,
+    expected_sha256: &str,
+) -> Result<String, String> {
+    let mut hasher = Sha256::new();
+    let mut buffer = Zeroizing::new(vec![0u8; 64 * 1024]);
+    let mut total = 0u64;
+
+    loop {
+        let count = reader
+            .read(buffer.as_mut_slice())
+            .map_err(|_| "Şifreli ses kopyası bağımsız olarak okunamadı.".to_string())?;
+        if count == 0 {
+            break;
+        }
+        total = total
+            .checked_add(count as u64)
+            .ok_or_else(|| "Şifreli ses kopyasının boyutu geçersiz.".to_string())?;
+        if total > expected_size {
+            return Err("Şifreli ses kopyası beklenen kaynak boyutunu aşıyor.".into());
+        }
+        hasher.update(&buffer[..count]);
+    }
+
+    if total != expected_size {
+        return Err("Şifreli ses kopyasının okunan boyutu kaynakla eşleşmiyor.".into());
+    }
+    let actual_sha256 = format_sha256(&hasher.finalize());
+    if actual_sha256 != expected_sha256 {
+        return Err("Şifreli ses kopyasının SHA-256 özeti kaynakla eşleşmiyor.".into());
+    }
+    Ok(actual_sha256)
+}
+
+#[tauri::command]
+pub async fn verify_stored_audio_copy_command(
+    app: tauri::AppHandle,
+    file_id: String,
+    size_bytes: u64,
+    nonce_prefix: Vec<u8>,
+    raw_key: Vec<u8>,
+    expected_sha256: String,
+) -> Result<String, String> {
+    let raw_key = Zeroizing::new(raw_key);
+    if expected_sha256.len() != 64
+        || !expected_sha256.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err("Kaynak SHA-256 bilgisi geçersiz.".into());
+    }
+
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|_| "Yerel ses kasasına erişilemedi.".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut reader = open_vault_audio_reader(
+            &app_data_dir,
+            &file_id,
+            size_bytes,
+            &nonce_prefix,
+            raw_key.as_slice(),
+        )?;
+        verify_reader_sha256(&mut reader, size_bytes, &expected_sha256)
+    })
+    .await
+    .map_err(|_| "Şifreli ses kopyası doğrulaması beklenmedik biçimde sonlandı.".to_string())?
 }
 
 fn is_hex_id(value: &str) -> bool {
@@ -667,4 +746,28 @@ mod tests {
         let end = parse_range("bytes=0-", MAX_VAULT_AUDIO_BYTES).unwrap().1;
         assert_eq!(end + 1, MAX_RESPONSE_BYTES);
     }
+    #[test]
+    fn verifies_independent_readback_sha256_and_byte_count() {
+        let mut reader = Cursor::new(b"abc".to_vec());
+        let actual = verify_reader_sha256(
+            &mut reader,
+            3,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ).unwrap();
+        assert_eq!(actual, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    #[test]
+    fn rejects_readback_hash_or_length_mismatch() {
+        let mut wrong_hash = Cursor::new(b"abc".to_vec());
+        assert!(verify_reader_sha256(&mut wrong_hash, 3, &"0".repeat(64)).is_err());
+
+        let mut wrong_length = Cursor::new(b"abc".to_vec());
+        assert!(verify_reader_sha256(
+            &mut wrong_length,
+            4,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ).is_err());
+    }
+
 }
