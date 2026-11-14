@@ -33,10 +33,6 @@ import {
   encryptVaultChunk,
   importVaultFileKey,
  } from "./vault-crypto";
-import {
-  parseVaultBackup,
-  MAX_VAULT_BACKUP_BYTES,
-} from "./vault-backup";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
@@ -634,125 +630,14 @@ export async function exportLocalVaultBackup(fileName: string): Promise<boolean>
 }
 
 /**
- * Geri yükleme yalnızca boş bir kasa alanına yapılır. Snapshot en son taşınır;
- * böylece snapshot görünür olmadan önce tüm materyal ve salt dosyaları yerleşmiş olur.
+ * Yedek seçimi, paket doğrulaması ve disk yazımı Rust tarafında 64 KiB
+ * tamponlarla yapılır. İşlem yalnızca boş kasaya izin verir.
  */
-export async function restoreLocalVaultBackup(backup: Uint8Array): Promise<void> {
+export async function restoreLocalVaultBackup(): Promise<boolean> {
   if (activeStronghold) throw new Error("Geri yüklemeden önce açık kasayı kilitleyin.");
-  if (backup.byteLength > MAX_VAULT_BACKUP_BYTES) {
-    throw new Error("Kasa yedek paketi 512 MiB sınırını aşıyor.");
-  }
   if (await getVaultState() !== "not-created") {
     throw new Error("Geri yükleme yalnızca bu cihazda kasa yokken yapılabilir.");
   }
-
-  const files = await parseVaultBackup(backup);
-  const snapshotData = files.get(snapshotRelativePath());
-  const saltData = files.get(saltRelativePath());
-  if (!snapshotData || !saltData || saltData.byteLength === 0) {
-    for (const data of files.values()) data.fill(0);
-    throw new Error("Yedekte kasa snapshot'ı veya Argon2 salt dosyası eksik.");
-  }
-
-  const materials = [...files.entries()].filter(([path]) => path.startsWith(`${MATERIALS_DIR}/`));
-  const stagingPaths = [
-    ...materials.map(([path]) => `${path}.restore.part`),
-    `${saltRelativePath()}.restore.part`,
-    `${snapshotRelativePath()}.restore.part`,
-  ];
-  const committed: string[] = [];
-  const staged: string[] = [];
-  let previousSalt: Uint8Array | null = null;
-  let completed = false;
-
-  try {
-    // Snapshot yoksa yeni kurulumun oluşturduğu salt tek başına kasa verisi taşımaz.
-    const existingSalt = await exists(saltRelativePath(), { baseDir: BaseDirectory.AppData });
-    if (existingSalt) {
-      previousSalt = await readFile(saltRelativePath(), { baseDir: BaseDirectory.AppData });
-    }
-
-    if (await exists(MATERIALS_DIR, { baseDir: BaseDirectory.AppData })) {
-      const existingMaterials = await readDir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData });
-      if (existingMaterials.length > 0) {
-        throw new Error("Materyal klasörü boş değil; geri yükleme var olan dosyaların üzerine yazmayacak.");
-      }
-    }
-
-    const finalPaths = [
-      snapshotRelativePath(),
-      ...materials.map(([path]) => path),
-    ];
-    for (const path of finalPaths) {
-      if (await exists(path, { baseDir: BaseDirectory.AppData })) {
-        throw new Error("Kasa klasöründe mevcut dosya veya önceki geri yüklemeden kalıntı var. Üzerine yazılmadı.");
-      }
-    }
-    for (const path of stagingPaths) {
-      if (await exists(path, { baseDir: BaseDirectory.AppData })) {
-        throw new Error("Önceki geri yüklemeden kalan geçici dosya var. Elle inceleme gerekiyor.");
-      }
-    }
-
-    await mkdir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-
-    const orderedEntries: Array<[string, Uint8Array]> = [
-      ...materials,
-      [saltRelativePath(), saltData],
-      [snapshotRelativePath(), snapshotData],
-    ];
-    for (const [path, data] of orderedEntries) {
-      const stagingPath = `${path}.restore.part`;
-      staged.push(stagingPath);
-      await writeFile(stagingPath, data, { baseDir: BaseDirectory.AppData });
-      const written = await readFile(stagingPath, { baseDir: BaseDirectory.AppData });
-      const valid = sameBytes(written, data);
-      written.fill(0);
-      if (!valid) throw new Error("Geri yüklenen geçici dosya diskte doğrulanamadı.");
-    }
-
-    // Materyal ve salt önce, Stronghold snapshot'ı son olarak görünür olur.
-    for (const [path] of materials) {
-      await rename(`${path}.restore.part`, path, {
-        oldPathBaseDir: BaseDirectory.AppData,
-        newPathBaseDir: BaseDirectory.AppData,
-      });
-      committed.push(path);
-      staged.splice(staged.indexOf(`${path}.restore.part`), 1);
-    }
-
-    if (previousSalt) {
-      await remove(saltRelativePath(), { baseDir: BaseDirectory.AppData });
-    }
-    await rename(`${saltRelativePath()}.restore.part`, saltRelativePath(), {
-      oldPathBaseDir: BaseDirectory.AppData,
-      newPathBaseDir: BaseDirectory.AppData,
-    });
-    committed.push(saltRelativePath());
-    staged.splice(staged.indexOf(`${saltRelativePath()}.restore.part`), 1);
-
-    await rename(`${snapshotRelativePath()}.restore.part`, snapshotRelativePath(), {
-      oldPathBaseDir: BaseDirectory.AppData,
-      newPathBaseDir: BaseDirectory.AppData,
-    });
-    committed.push(snapshotRelativePath());
-    staged.splice(staged.indexOf(`${snapshotRelativePath()}.restore.part`), 1);
-    completed = true;
-  } catch (error) {
-    for (const path of staged) {
-      await remove(path, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
-    }
-    for (const path of committed.reverse()) {
-      await remove(path, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
-    }
-    // Başarısız geri yükleme boş kurulumda önceden bulunan salt dosyasını geri koyar.
-    if (previousSalt) {
-      await writeFile(saltRelativePath(), previousSalt, { baseDir: BaseDirectory.AppData }).catch(() => undefined);
-    }
-    throw error;
-  } finally {
-    previousSalt?.fill(0);
-    for (const data of files.values()) data.fill(0);
-    void completed;
-  }
+  return invoke<boolean>("restore_local_vault_backup");
 }
+

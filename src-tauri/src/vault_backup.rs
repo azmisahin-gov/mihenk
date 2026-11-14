@@ -1,5 +1,6 @@
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashSet,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -418,6 +419,350 @@ pub async fn export_local_vault_backup(
         .join("mihenk-vault");
 
     write_vault_backup(&vault_dir, &destination)?;
+    Ok(true)
+}
+
+
+
+fn archive_material_name(path: &str) -> Option<&str> {
+    path.strip_prefix("mihenk-vault/materials/")
+        .filter(|name| is_material_file_name(name))
+}
+
+fn optional_regular_file(path: &Path, label: &str) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() => Ok(true),
+        Ok(_) => Err(format!("{label} normal bir dosya değil.")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(_) => Err(format!("{label} doğrulanamadı.")),
+    }
+}
+
+fn validate_restore_target(vault_dir: &Path) -> Result<bool, String> {
+    let directory = fs::symlink_metadata(vault_dir)
+        .map_err(|_| "Yerel kasa dizinine erişilemedi.".to_string())?;
+    if !directory.file_type().is_dir() {
+        return Err("Yerel kasa yolu normal bir klasör değil.".into());
+    }
+
+    if optional_regular_file(&vault_dir.join("secure.hold"), "Mevcut kasa snapshot'ı")? {
+        return Err("Bu cihazda kasa zaten var. Geri yükleme yalnızca boş kasaya yapılabilir.".into());
+    }
+
+    let materials_dir = vault_dir.join("materials");
+    match fs::symlink_metadata(&materials_dir) {
+        Ok(metadata) if metadata.file_type().is_dir() => {
+            let entries = fs::read_dir(&materials_dir)
+                .map_err(|_| "Mevcut materyal klasörü okunamadı.".to_string())?;
+            for entry in entries {
+                entry.map_err(|_| "Mevcut materyal klasörü doğrulanamadı.".to_string())?;
+                return Err("Materyal klasörü boş değil; geri yükleme mevcut dosyaların üzerine yazmayacak.".into());
+            }
+        }
+        Ok(_) => return Err("Kasa materyal yolu normal bir klasör değil.".into()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err("Kasa materyal klasörü doğrulanamadı.".into()),
+    }
+
+    optional_regular_file(&vault_dir.join("stronghold.salt"), "Mevcut Stronghold salt dosyası")
+}
+
+fn create_restore_stage(vault_dir: &Path) -> Result<PathBuf, String> {
+    for _ in 0..128 {
+        let candidate = unique_sibling_path(vault_dir, "mihenk-restore")?;
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return Err("Geri yükleme için geçici klasör oluşturulamadı.".into()),
+        }
+    }
+    Err("Geri yükleme için güvenli geçici klasör adı oluşturulamadı.".into())
+}
+
+fn read_archive_exact<R: Read>(
+    reader: &mut R,
+    buffer: &mut [u8],
+    consumed: &mut u64,
+    archive_length: u64,
+) -> Result<(), String> {
+    let next = consumed
+        .checked_add(buffer.len() as u64)
+        .ok_or_else(|| "Yedek paket boyutu geçersiz.".to_string())?;
+    if next > archive_length {
+        return Err("Yedek kaydı eksik veya kesilmiş.".into());
+    }
+    reader
+        .read_exact(buffer)
+        .map_err(|_| "Yedek kaydı eksik veya kesilmiş.".to_string())?;
+    *consumed = next;
+    Ok(())
+}
+
+fn stage_backup_archive<R: Read>(
+    reader: &mut R,
+    archive_length: u64,
+    stage_dir: &Path,
+) -> Result<Vec<String>, String> {
+    if !(HEADER_BYTES..=MAX_BACKUP_BYTES).contains(&archive_length) {
+        return Err("Yedek dosyası boş, eksik veya 512 MiB sınırını aşıyor.".into());
+    }
+
+    let mut consumed = 0u64;
+    let mut header = [0u8; HEADER_BYTES as usize];
+    read_archive_exact(reader, &mut header, &mut consumed, archive_length)?;
+    if &header[..8] != MAGIC {
+        return Err("Bu dosya MİHENK şifreli yedeği değil.".into());
+    }
+    if u32::from_le_bytes(header[8..12].try_into().unwrap()) != BACKUP_VERSION {
+        return Err("Yedek biçimi sürümü desteklenmiyor.".into());
+    }
+    let count = u32::from_le_bytes(header[12..16].try_into().unwrap()) as usize;
+    if !(2..=MAX_BACKUP_FILES).contains(&count) {
+        return Err("Yedek dosya sayısı geçersiz.".into());
+    }
+
+    let mut seen = HashSet::with_capacity(count);
+    let mut material_names = Vec::new();
+    let mut has_snapshot = false;
+    let mut has_salt = false;
+    let mut total_bytes = HEADER_BYTES;
+
+    for _ in 0..count {
+        let mut record_header = [0u8; 2 + 8 + HASH_BYTES];
+        read_archive_exact(reader, &mut record_header, &mut consumed, archive_length)?;
+        let path_length = u16::from_le_bytes(record_header[..2].try_into().unwrap()) as usize;
+        let size = u64::from_le_bytes(record_header[2..10].try_into().unwrap());
+        let expected_digest: [u8; HASH_BYTES] =
+            record_header[10..10 + HASH_BYTES].try_into().unwrap();
+
+        if path_length == 0 || path_length > MAX_PATH_BYTES || size == 0 || size > MAX_ENTRY_BYTES {
+            return Err("Yedek kaydının yol veya boyut bilgisi geçersiz.".into());
+        }
+
+        let record_bytes = (2u64 + 8 + HASH_BYTES as u64)
+            .checked_add(path_length as u64)
+            .and_then(|value| value.checked_add(size))
+            .ok_or_else(|| "Yedek paket boyutu hesaplanamadı.".to_string())?;
+        total_bytes = total_bytes
+            .checked_add(record_bytes)
+            .ok_or_else(|| "Yedek paket boyutu hesaplanamadı.".to_string())?;
+        if total_bytes > MAX_BACKUP_BYTES || total_bytes > archive_length {
+            return Err("Yedek paketi boyut sınırını aşıyor veya eksik.".into());
+        }
+
+        let mut path_bytes = vec![0u8; path_length];
+        read_archive_exact(reader, &mut path_bytes, &mut consumed, archive_length)?;
+        let path = String::from_utf8(path_bytes)
+            .map_err(|_| "Yedek dosya yolu UTF-8 biçiminde değil.".to_string())?;
+        if !seen.insert(path.clone()) {
+            return Err("Yedekte yinelenen dosya yolu var.".into());
+        }
+
+        let staged_path = if path == SNAPSHOT_PATH {
+            has_snapshot = true;
+            stage_dir.join("secure.hold")
+        } else if path == SALT_PATH {
+            has_salt = true;
+            stage_dir.join("stronghold.salt")
+        } else if let Some(name) = archive_material_name(&path) {
+            material_names.push(name.to_string());
+            let materials_stage = stage_dir.join("materials");
+            fs::create_dir_all(&materials_stage)
+                .map_err(|_| "Geçici kasa materyal klasörü oluşturulamadı.".to_string())?;
+            materials_stage.join(name)
+        } else {
+            return Err("Yedek içinde izin verilmeyen bir dosya yolu var.".into());
+        };
+
+        let mut output = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&staged_path)
+            .map_err(|_| "Yedek içeriği için geçici dosya oluşturulamadı.".to_string())?;
+        let mut hasher = Sha256::new();
+        let mut remaining = size;
+        let mut buffer = [0u8; IO_CHUNK_BYTES];
+
+        while remaining > 0 {
+            let chunk_length = remaining.min(IO_CHUNK_BYTES as u64) as usize;
+            read_archive_exact(reader, &mut buffer[..chunk_length], &mut consumed, archive_length)?;
+            hasher.update(&buffer[..chunk_length]);
+            output
+                .write_all(&buffer[..chunk_length])
+                .map_err(|_| "Yedek içeriği geçici dosyaya yazılamadı.".to_string())?;
+            remaining -= chunk_length as u64;
+        }
+
+        let actual_digest: [u8; HASH_BYTES] = hasher.finalize().into();
+        if actual_digest != expected_digest {
+            return Err("Yedek bütünlük kontrolü başarısız; dosya değiştirilmiş olabilir.".into());
+        }
+        output
+            .sync_all()
+            .map_err(|_| "Geri yükleme geçici dosyası diske eşitlenemedi.".to_string())?;
+    }
+
+    if !has_snapshot || !has_salt {
+        return Err("Yedekte kasa snapshot'ı veya Argon2 salt dosyası eksik.".into());
+    }
+    if consumed != archive_length {
+        return Err("Yedek dosyasının sonunda beklenmeyen veri var.".into());
+    }
+    let mut trailing = [0u8; 1];
+    if reader.read(&mut trailing).map_err(|_| "Yedek dosyasının sonu doğrulanamadı.".to_string())? != 0 {
+        return Err("Yedek dosyasının sonunda beklenmeyen veri var.".into());
+    }
+
+    Ok(material_names)
+}
+
+fn publish_restored_archive(
+    vault_dir: &Path,
+    stage_dir: &Path,
+    material_names: &[String],
+    had_salt: bool,
+) -> Result<(), String> {
+    if validate_restore_target(vault_dir)? != had_salt {
+        return Err("Geri yükleme sırasında yerel kasa durumu değişti; hiçbir dosyanın üzerine yazılmadı.".into());
+    }
+
+    let materials_dir = vault_dir.join("materials");
+    let materials_dir_created = match fs::symlink_metadata(&materials_dir) {
+        Ok(_) => false,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            fs::create_dir(&materials_dir)
+                .map_err(|_| "Kasa materyal klasörü oluşturulamadı.".to_string())?;
+            true
+        }
+        Err(_) => return Err("Kasa materyal klasörü doğrulanamadı.".into()),
+    };
+
+    let salt_path = vault_dir.join("stronghold.salt");
+    let previous_salt_path = stage_dir.join("previous-salt");
+    let mut previous_salt_moved = false;
+    let mut salt_installed = false;
+    let mut installed_materials: Vec<PathBuf> = Vec::new();
+
+    let publish_result = (|| -> Result<(), String> {
+        for name in material_names {
+            let staged_path = stage_dir.join("materials").join(name);
+            let destination = materials_dir.join(name);
+            if fs::symlink_metadata(&destination).is_ok() {
+                return Err("Kasa materyal dosyası zaten var; üzerine yazılmadı.".into());
+            }
+            fs::rename(&staged_path, &destination)
+                .map_err(|_| "Doğrulanmış materyal dosyası kasaya taşınamadı.".to_string())?;
+            installed_materials.push(destination);
+        }
+
+        if had_salt {
+            fs::rename(&salt_path, &previous_salt_path)
+                .map_err(|_| "Önceki Stronghold salt dosyası korunamadı.".to_string())?;
+            previous_salt_moved = true;
+        }
+
+        fs::rename(stage_dir.join("stronghold.salt"), &salt_path)
+            .map_err(|_| "Doğrulanmış Stronghold salt dosyası kasaya taşınamadı.".to_string())?;
+        salt_installed = true;
+
+        fs::rename(stage_dir.join("secure.hold"), vault_dir.join("secure.hold"))
+            .map_err(|_| "Doğrulanmış Stronghold snapshot'ı kasaya taşınamadı.".to_string())?;
+        Ok(())
+    })();
+
+    if let Err(error) = publish_result {
+        let mut rollback_ok = true;
+        if salt_installed && fs::remove_file(&salt_path).is_err() {
+            rollback_ok = false;
+        }
+        if previous_salt_moved && fs::rename(&previous_salt_path, &salt_path).is_err() {
+            rollback_ok = false;
+        }
+        for path in installed_materials.iter().rev() {
+            if fs::remove_file(path).is_err() {
+                rollback_ok = false;
+            }
+        }
+        if materials_dir_created && fs::remove_dir(&materials_dir).is_err() {
+            rollback_ok = false;
+        }
+        if !rollback_ok {
+            return Err(format!(
+                "{error} Geri alma işlemi tam tamamlanamadı; kasa klasörünü elle inceleyin. Geçici kurtarma klasörü: {}",
+                stage_dir.display()
+            ));
+        }
+        return Err(error);
+    }
+
+    Ok(())
+}
+
+fn restore_vault_backup_from_reader<R: Read>(
+    reader: &mut R,
+    archive_length: u64,
+    vault_dir: &Path,
+) -> Result<(), String> {
+    let had_salt = validate_restore_target(vault_dir)?;
+    let stage_dir = create_restore_stage(vault_dir)?;
+
+    let material_names = match stage_backup_archive(reader, archive_length, &stage_dir) {
+        Ok(names) => names,
+        Err(error) => {
+            let _ = fs::remove_dir_all(&stage_dir);
+            return Err(error);
+        }
+    };
+
+    if let Err(error) = publish_restored_archive(vault_dir, &stage_dir, &material_names, had_salt) {
+        if stage_dir.join("previous-salt").exists() {
+            return Err(format!(
+                "{error} Önceki salt dosyası geçici kurtarma klasöründe korunuyor: {}",
+                stage_dir.display()
+            ));
+        }
+        let _ = fs::remove_dir_all(&stage_dir);
+        return Err(error);
+    }
+
+    let _ = fs::remove_dir_all(&stage_dir);
+    Ok(())
+}
+
+fn restore_vault_backup_file(archive_path: &Path, vault_dir: &Path) -> Result<(), String> {
+    let mut archive = File::open(archive_path)
+        .map_err(|_| "Seçilen kasa yedeği açılamadı.".to_string())?;
+    let metadata = archive
+        .metadata()
+        .map_err(|_| "Seçilen kasa yedeği doğrulanamadı.".to_string())?;
+    if !metadata.is_file() || metadata.len() < HEADER_BYTES || metadata.len() > MAX_BACKUP_BYTES {
+        return Err("Seçilen yedek dosyasının boyutu geçersiz veya 512 MiB sınırını aşıyor.".into());
+    }
+    restore_vault_backup_from_reader(&mut archive, metadata.len(), vault_dir)
+}
+
+#[tauri::command]
+pub async fn restore_local_vault_backup(app: tauri::AppHandle) -> Result<bool, String> {
+    let selected = app
+        .dialog()
+        .file()
+        .set_title("MİHENK şifreli kasa yedeğini seç")
+        .add_filter("MİHENK şifreli kasa yedeği", &["mihenkbackup"])
+        .blocking_pick_file();
+
+    let Some(selected) = selected else {
+        return Ok(false);
+    };
+    let archive_path = selected
+        .into_path()
+        .map_err(|_| "Seçilen yedek dosyasının yolu çözümlenemedi.".to_string())?;
+    let vault_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "Yerel kasa dizinine erişilemedi.".to_string())?
+        .join("mihenk-vault");
+
+    restore_vault_backup_file(&archive_path, &vault_dir)?;
     Ok(true)
 }
 

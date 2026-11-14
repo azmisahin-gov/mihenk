@@ -33,7 +33,6 @@ import {
   type VaultAssignment,
   type VaultState,
 } from "./domain/vault";
-import { MAX_VAULT_BACKUP_BYTES } from "./domain/vault-backup";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
@@ -130,7 +129,6 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [backupInputBusy, setBackupInputBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const backupInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -771,24 +769,17 @@ export default function App() {
     }
   }
 
-  async function restoreEncryptedBackup(file: File | undefined): Promise<void> {
-    if (!file) return;
-    if (vaultBusy || backupInputBusy) return;
-    if (file.size > MAX_VAULT_BACKUP_BYTES) {
-      setVaultError("Yedek dosyası 512 MiB sınırını aşıyor.");
-      return;
-    }
+  async function restoreEncryptedBackup(): Promise<void> {
+    if (vaultBusy || backupInputBusy || vaultState !== "not-created") return;
 
     setBackupInputBusy(true);
     setVaultError("");
     let restored = false;
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      try {
-        await restoreLocalVaultBackup(bytes);
-        restored = true;
-      } finally {
-        bytes.fill(0);
+      restored = await restoreLocalVaultBackup();
+      if (!restored) {
+        setNotice("Kasa yedeği seçme işlemi iptal edildi.");
+        return;
       }
       setVaultPassword("");
       setVaultPasswordConfirm("");
@@ -800,7 +791,6 @@ export default function App() {
       setVaultState(restored ? "locked" : "not-created");
     } finally {
       setBackupInputBusy(false);
-      if (backupInputRef.current) backupInputRef.current.value = "";
     }
   }
 
@@ -966,17 +956,10 @@ export default function App() {
           )}
           {newVault && (
             <div className="vault-restore-panel">
-              <input
-                ref={backupInputRef}
-                className="visually-hidden"
-                type="file"
-                accept=".mihenkbackup,application/octet-stream"
-                onChange={(event) => void restoreEncryptedBackup(event.currentTarget.files?.[0])}
-              />
               <button
                 className="secondary-button vault-submit-button"
                 type="button"
-                onClick={() => backupInputRef.current?.click()}
+                onClick={() => void restoreEncryptedBackup()}
                 disabled={backupInputBusy || busy}
               >{backupInputBusy ? "Yedek doğrulanıyor…" : "Kasa yedeğinden geri yükle"}</button>
             </div>

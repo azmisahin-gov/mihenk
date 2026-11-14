@@ -142,6 +142,7 @@ fn main() {
             audio_playback::close_audio_playback_session,
             audio_playback::clear_audio_playback_sessions,
             vault_backup::export_local_vault_backup,
+            vault_backup::restore_local_vault_backup,
         ])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
