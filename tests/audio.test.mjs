@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { File } from "node:buffer";
 import test from "node:test";
 
@@ -61,6 +62,28 @@ test("küçük dosyanın SHA-256 özeti bilinen değerle eşleşir", async () =>
     result.hash,
     "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
   );
+});
+
+test("128 MiB altındaki büyük dosya SHA-256 özeti parçalı okunur", async () => {
+  const contents = Buffer.alloc(3 * 1024 * 1024 + 123, 0x61);
+  const file = new File([contents], "buyuk-ornek.wav", { type: "audio/wav" });
+  const originalSlice = file.slice.bind(file);
+  let largestSlice = 0;
+
+  Object.defineProperty(file, "arrayBuffer", {
+    value: () => { throw new Error("Dosyanın tamamı okunmamalı."); },
+  });
+  Object.defineProperty(file, "slice", {
+    value: (start, end, contentType) => {
+      largestSlice = Math.max(largestSlice, end - start);
+      return originalSlice(start, end, contentType);
+    },
+  });
+
+  const result = await calculatePreviewHash(file);
+  assert.equal(result.state, "hesaplandi");
+  assert.equal(result.hash, createHash("sha256").update(contents).digest("hex"));
+  assert.equal(largestSlice, 1024 * 1024);
 });
 
 test("işaretli ses aralığı bitince yalnızca geçerli başlangıca döner", () => {
