@@ -787,28 +787,6 @@ export default function App() {
   }
 
   async function addFiles(fileList: FileList | File[]): Promise<void> {
-    function navigateToWorkspaceSection(section: "tasks" | "audio" | "transcripts" | "reports"): void {
-    const targetIds: Record<typeof section, string> = {
-      tasks: "tasks-section",
-      audio: "audio-section",
-      transcripts: "transcripts-section",
-      reports: "reports-section",
-    };
-    let target = document.getElementById(targetIds[section]);
-    if (!target && section === "audio") {
-      target = document.getElementById("recordings-section");
-      setNotice("Bir ses kaydı seçtiğinizde dinleme alanı burada açılır.");
-    } else if (!target && section === "reports") {
-      target = document.getElementById("transcripts-section");
-      setNotice("Rapor taslakları için önce bir ses kaydı seçin.");
-    }
-
-    if (!target) return;
-    setActiveNavigation(section);
-    target.scrollIntoView({ behavior: "smooth", block: "start" });
-    target.focus({ preventScroll: true });
-  }
-
   if (vaultState !== "unlocked") {
       setNotice("Ses eklemeden önce yerel kasayı açın.");
       return;
@@ -1275,6 +1253,28 @@ export default function App() {
       setVaultState(actualState);
       setUpdateState("error");
     }
+  }
+
+  function navigateToWorkspaceSection(section: "tasks" | "audio" | "transcripts" | "reports"): void {
+    const targetIds: Record<typeof section, string> = {
+      tasks: "tasks-section",
+      audio: "audio-section",
+      transcripts: "transcripts-section",
+      reports: "reports-section",
+    };
+    let target = document.getElementById(targetIds[section]);
+    if (!target && section === "audio") {
+      target = document.getElementById("recordings-section");
+      setNotice("Bir ses kaydı seçtiğinizde dinleme alanı burada açılır.");
+    } else if (!target && section === "reports") {
+      target = document.getElementById("transcripts-section");
+      setNotice("Rapor taslakları için önce bir ses kaydı seçin.");
+    }
+
+    if (!target) return;
+    setActiveNavigation(section);
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    target.focus({ preventScroll: true });
   }
 
   if (vaultState !== "unlocked") {
