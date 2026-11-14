@@ -2695,7 +2695,6 @@ dependencies = [
  "aes-gcm",
  "reqwest",
  "serde_json",
- "sha1 0.10.6",
  "sha2 0.10.9",
  "sherpa-onnx",
  "symphonia",
@@ -4333,17 +4332,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4eceb519ec34d8290aaf6e46f435102f2bfa63f22b05a144fb16ab266d3b198"
 dependencies = [
  "stable_deref_trait",
-]
-
-[[package]]
-name = "sha1"
-version = "0.10.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3bf829a2d51ab4a5ddf1352d8470c140cadc8301b2ae1789db023f01cedd6ba"
-dependencies = [
- "cfg-if",
- "cpufeatures 0.2.17",
- "digest 0.10.7",
 ]
 
 [[package]]
@@ -6738,7 +6726,7 @@ dependencies = [
  "nix 0.31.3",
  "pbkdf2 0.13.0",
  "ppmd-rust",
- "sha1 0.11.0",
+ "sha1",
  "time",
  "typed-path",
  "windows-sys 0.61.2",
