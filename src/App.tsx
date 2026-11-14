@@ -847,7 +847,9 @@ export default function App() {
     updateRecord(activeRecord.id, (record) => ({
       ...record,
       segments: record.segments.map((item) => (
-        item.id === segmentId ? { ...item, endSeconds, source: "uzman" } : item
+        item.id === segmentId
+          ? recordTranscriptEdit(item, { ...item, endSeconds })
+          : item
       )),
     }));
     setNotice(`${formatTime(endSeconds)} bölüm bitişi olarak kaydedildi.`);
