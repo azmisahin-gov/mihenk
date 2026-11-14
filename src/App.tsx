@@ -47,7 +47,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { SerialTaskQueue } from "./domain/save-queue";
 
-const AUDIO_EXTENSION = /\.(wav|mp3|m4a|aac|ogg|flac|opus|wma|aiff?)$/i;
+const AUDIO_EXTENSION = /\.(wav|mp3|m4a|aac|ogg|flac|aiff?)$/i;
 
 function saveTextFile(fileName: string, content: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
@@ -706,7 +706,7 @@ export default function App() {
     }
 
     const incoming = Array.from(fileList);
-    const accepted = incoming.filter((file) => file.type.startsWith("audio/") || AUDIO_EXTENSION.test(file.name));
+    const accepted = incoming.filter((file) => AUDIO_EXTENSION.test(file.name));
     const rejectedCount = incoming.length - accepted.length;
     if (accepted.length === 0) {
       setNotice("Seçilen dosyalarda tanınan bir ses dosyası bulunamadı.");
@@ -769,7 +769,7 @@ export default function App() {
     updateRecord(activeRecord.id, (record) => ({
       ...record,
       segments: record.segments.map((segment) => (
-        segment.id === segmentId ? update(segment) : segment
+        segment.id === segmentId ? { ...update(segment), source: "uzman" } : segment
       )),
     }));
   }
@@ -807,11 +807,12 @@ export default function App() {
     setAsrBusyRecordId(recordId);
     setNotice("Şifreli ses blokları doğrulanarak yerel SEDA transkripsiyonu hazırlanıyor…");
     try {
-      const generated = await saveQueueRef.current.enqueue(() => transcribeStoredAudio(metadata));
+      const jobId = crypto.randomUUID().replaceAll("-", "").toLowerCase();
+      const generated = await saveQueueRef.current.enqueue(() => transcribeStoredAudio(metadata, jobId));
       setRecords((current) => current.map((record) => record.id === recordId
         ? {
             ...record,
-            segments: [...record.segments, ...generated].sort((a, b) => (
+            segments: [...record.segments.filter((segment) => segment.source !== "asr"), ...generated].sort((a, b) => (
               a.startSeconds - b.startSeconds
             )),
           }
@@ -847,7 +848,7 @@ export default function App() {
     updateRecord(activeRecord.id, (record) => ({
       ...record,
       segments: record.segments.map((item) => (
-        item.id === segmentId ? { ...item, endSeconds } : item
+        item.id === segmentId ? { ...item, endSeconds, source: "uzman" } : item
       )),
     }));
     setNotice(`${formatTime(endSeconds)} bölüm bitişi olarak kaydedildi.`);
@@ -1429,7 +1430,7 @@ export default function App() {
                 className="secondary-button"
                 type="button"
                 onClick={() => void installLocalSedaModel()}
-                disabled={sedaInstalling || sedaModelStatus?.installed || vaultState !== "unlocked"}
+                disabled={sedaInstalling || sedaModelStatus?.installed}
               >{sedaInstalling ? "Model kuruluyor…" : sedaModelStatus?.installed ? "Model hazır" : "Yerel modeli kur"}</button>
             </div>
           </div>
@@ -1629,6 +1630,7 @@ export default function App() {
                           <button className="timestamp-button" type="button" onClick={() => jumpTo(segment.startSeconds)}>
                             <span>▶</span> {formatTime(segment.startSeconds)}
                           </button>
+                          <span className={`segment-source ${segment.source === "asr" ? "machine" : "expert"}`}>{segment.source === "asr" ? "MAKİNE TASLAĞI" : "UZMAN"}</span>
                           <span className="segment-number">
                             {formatTime(segment.startSeconds)}{segment.endSeconds === null ? " · Bitiş işaretlenmedi" : ` – ${formatTime(segment.endSeconds)}`}
                           </span>
