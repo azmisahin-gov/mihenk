@@ -32,7 +32,7 @@ import {
  } from "./vault-crypto";
 import { readFileChunks } from "./file-chunks.ts";
 import { Sha256 } from "./sha256.ts";
-import type { TranscriptAnnotationType, TranscriptRevisionEvent } from "./transcript";
+import { normalizeStoredTranscriptSegment, type TranscriptAnnotationType, type TranscriptRevisionEvent } from "./transcript";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
@@ -439,19 +439,7 @@ export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
     const metadata = await readJson<VaultAudioMetadata>(store, audioMetaKey(fileId));
     if (!metadata) throw new Error("Kasa materyal listesinde kaydı bulunmayan dosya var.");
     validateMetadata(metadata);
-    const segments = metadata.segments.map((segment) => {
-      const legacyAsrChannel = segment.source === "asr"
-        && !segment.channel
-        && /^Kanal \\d+$/.test(segment.speaker);
-      return {
-        ...segment,
-        ...(legacyAsrChannel ? { channel: segment.speaker, speaker: "" } : {}),
-        ...(segment.source === "asr" && segment.rawAsrText === undefined
-          ? { rawAsrText: segment.text }
-          : {}),
-        annotationType: segment.annotationType ?? "speech",
-      };
-    });
+    const segments = metadata.segments.map(normalizeStoredTranscriptSegment);
     records.push({ ...metadata, segments });
   }
   return records;
