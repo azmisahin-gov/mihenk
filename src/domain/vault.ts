@@ -598,9 +598,9 @@ export interface SedaTranscriptSegment {
   startSeconds: number;
   endSeconds: number | null;
   text: string;
-  channel: string | null;
+  channel?: string | null;
   speaker: string;
-  annotationType: TranscriptAnnotationType;
+  annotationType?: TranscriptAnnotationType;
   status: "taslak";
   source: "asr";
 }
