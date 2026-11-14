@@ -8,7 +8,7 @@ MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda
 - En fazla 240 MiB ses dosyası için 1 MiB sabit parçalarla şifreli içe aktarma ve tam kaynak SHA-256 özeti.
 - AES-256-GCM şifreli yerel kasa ve kimlik doğrulamalı, en fazla 1 MiB aralıklı ses oynatma.
 - Dosyayı diske çözmeden, doğrulanmış şifreli kasa bloklarından okuyan yerel Symphonia decoder hattı.
-- İsteğe bağlı yerel SEDA v0.1 Türkçe ASR modeli kurulumu; sabit model revision ve dosya hash kontrolleri.
+- İsteğe bağlı yerel SEDA v0.1 Türkçe ASR modeli kurulumu; sabit model revision, ONNX SHA-256 ve token biçim denetimleri.
 - Yerel SEDA akışlı transkripsiyon; model kurulduktan sonra ses işleme ağ bağlantısı kullanmaz. Çok kanallı kayıtlarda her kanal ayrı anonim kanal etiketiyle taslak üretir.
 - Makine çıktıları yalnızca `taslak` durumundadır. Uzman düzeltmeleri kaynak türüyle ayrılır; ASR tekrar çalıştığında yalnızca düzeltilmemiş makine taslakları yenilenir.
 - Zaman aralığına bağlı transkript bölümleri, manuel bölüm ekleme ve ses konumuna atlama.
@@ -17,7 +17,7 @@ MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda
 
 ## ASR sınırları ve kabul durumu
 
-SEDA v0.1 akustik ONNX ağırlıkları ve token dosyası Apache-2.0 lisanslı sabit revision'dan indirilir. İsteğe bağlı `lm/` dosyaları CC BY-SA 4.0 nedeniyle kurulum dışında tutulur. İlk kurulum için internet gerekir; onaylı dosyalar indirildikten sonra model CPU üzerinde yerel çalışır. ASR sırasında kaynak ses bulut servisine gönderilmez.
+SEDA v0.1 akustik ONNX ağırlıkları ve token dosyası Apache-2.0 lisanslı sabit revision'dan indirilir. İsteğe bağlı `lm/` dosyaları CC BY-SA 4.0 nedeniyle kurulum dışında tutulur. İlk kurulum için internet gerekir; onaylı dosyalar indirildikten sonra model CPU üzerinde yerel çalışır. CI'da Sherpa native runtime arşivleri de sabit SHA-256 ile doğrulanır. ASR sırasında kaynak ses bulut servisine gönderilmez.
 
 SEDA girdisi 16 kHz mono gerektirir. MİHENK çok kanallı dosyalarda kanalları ayrı işleyip `Kanal 1`, `Kanal 2` gibi etiketlerle gösterir; bu, kişi kimliği veya otomatik konuşmacı diyârizasyonu değildir. ASR'nin verdiği zaman aralıkları akış/endpoint segment sınırlarıdır; kelime düzeyinde forced alignment değildir. Ham metin küçük harf ve noktalama normalizasyonu yapılmadan taslak olarak saklanır. Her bölüm uzman tarafından sesle karşılaştırılmalıdır.
 
