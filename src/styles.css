@@ -425,3 +425,29 @@ audio { width: 100%; height: 34px; }
   .assignment-profile-grid { grid-template-columns: 1fr; }
   .assignment-profile-heading { align-items: flex-start; flex-direction: column; }
 }
+
+
+.vault-save-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 20px;
+  padding: 6px 9px;
+  color: #68796f;
+  background: #f3f6f3;
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.vault-save-state.pending, .vault-save-state.saving {
+  color: #8a6b30;
+  background: #fbf5e8;
+}
+.vault-save-state.saved {
+  color: #39745e;
+  background: #eff6f1;
+}
+.vault-save-state.error {
+  color: #a33e35;
+  background: #fbedeb;
+}
