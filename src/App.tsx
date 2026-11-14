@@ -122,6 +122,7 @@ export default function App() {
   const [vaultPassword, setVaultPassword] = useState("");
   const [vaultPasswordConfirm, setVaultPasswordConfirm] = useState("");
   const [vaultBusy, setVaultBusy] = useState(false);
+  const [vaultSaveStatus, setVaultSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [vaultError, setVaultError] = useState("");
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -131,6 +132,7 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveRevisionRef = useRef(0);
 
   useEffect(() => {
     recordsRef.current = records;
@@ -333,13 +335,22 @@ export default function App() {
       }
     };
 
+    const revision = ++saveRevisionRef.current;
+    setVaultSaveStatus("saving");
     const queued = saveQueueRef.current.then(write, write);
     saveQueueRef.current = queued.catch(() => undefined);
-    await queued;
+    try {
+      await queued;
+      if (revision === saveRevisionRef.current) setVaultSaveStatus("saved");
+    } catch (error) {
+      if (revision === saveRevisionRef.current) setVaultSaveStatus("error");
+      throw error;
+    }
   }
 
   useEffect(() => {
     if (vaultState !== "unlocked" || records.length === 0) return;
+    setVaultSaveStatus("pending");
     const timeout = window.setTimeout(() => {
       void persistVaultRecords(records).catch((error) => {
         setNotice(error instanceof Error ? `Kasa kaydı yapılamadı: ${error.message}` : "Kasa kaydı yapılamadı.");
@@ -370,6 +381,7 @@ export default function App() {
       setVaultPassword("");
       setVaultPasswordConfirm("");
       setVaultState("unlocked");
+      setVaultSaveStatus("saved");
       setNotice(creating ? "Şifreli yerel kasa oluşturuldu." : "Yerel kasa açıldı.");
     } catch (error) {
       await lockLocalVault().catch(() => undefined);
@@ -397,6 +409,7 @@ export default function App() {
         if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
       }
       setRecords([]);
+      setVaultSaveStatus("idle");
       setAssignments([]);
       setActiveAssignmentId(null);
       setActiveId(null);
@@ -451,6 +464,7 @@ export default function App() {
     try {
       const created = await createVaultAssignment(name);
       setAssignments((current) => [...current, created]);
+      setVaultSaveStatus("saved");
       setActiveAssignmentId(created.id);
       setAssignmentNameDraft("");
       audioRef.current?.pause();
@@ -483,6 +497,7 @@ export default function App() {
       };
       const updated = await updateVaultAssignment(activeAssignment.id, input);
       setAssignments((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setVaultSaveStatus("saved");
       setAssignmentProfileDraft({
         name: updated.name,
         localReference: updated.localReference,
@@ -1013,6 +1028,13 @@ export default function App() {
           </div>
           <div className="topbar-status">
             <span className="status-pill"><span className="status-dot" /> Cihaz içinde</span>
+            <span className={`vault-save-state ${vaultSaveStatus}`} role="status" aria-live="polite">
+              {vaultSaveStatus === "pending" ? "Kaydetme bekliyor"
+                : vaultSaveStatus === "saving" ? "Kaydediliyor…"
+                  : vaultSaveStatus === "saved" ? "Şifreli kasaya kaydedildi"
+                    : vaultSaveStatus === "error" ? "Kayıt hatası"
+                      : "Kayıt durumu bekleniyor"}
+            </span>
             <span className="prototype-pill">GELİŞTİRME ÖNİZLEMESİ</span>
             <button className="vault-backup-button" type="button" onClick={() => void createEncryptedBackup()} disabled={backupInputBusy || vaultBusy}>
               {backupInputBusy ? "Yedek hazırlanıyor…" : "Kasa yedeği indir"}
