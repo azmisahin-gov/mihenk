@@ -375,6 +375,9 @@ pub struct AsrTranscriptSegment {
     pub start_seconds: f64,
     pub end_seconds: Option<f64>,
     pub text: String,
+    /// Anonymous channel identity from the source stream, not a speaker identity.
+    pub channel: Option<String>,
+    /// Human-assigned anonymous speaker label; SEDA does not infer identity.
     pub speaker: String,
     pub status: &'static str,
     pub source: &'static str,
@@ -419,7 +422,8 @@ fn append_endpoint(
                 start_seconds: start,
                 end_seconds: Some(end),
                 text: text.to_string(),
-                speaker: format!("Kanal {}", channel.channel_index + 1),
+                channel: Some(format!("Kanal {}", channel.channel_index + 1)),
+                speaker: String::new(),
                 status: "taslak",
                 source: "asr",
             });
