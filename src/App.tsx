@@ -479,6 +479,15 @@ export default function App() {
       };
       const updated = await updateVaultAssignment(activeAssignment.id, input);
       setAssignments((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setAssignmentProfileDraft({
+        name: updated.name,
+        localReference: updated.localReference,
+        authority: updated.authority,
+        appointedAt: updated.appointedAt,
+        dueAt: updated.dueAt,
+        scope: updated.scope,
+        questionsText: updated.questions.join("\\n"),
+      });
       setNotice("Görev profili şifreli kasaya kaydedildi.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Görev profili kaydedilemedi.");
@@ -706,6 +715,10 @@ export default function App() {
   }
 
   async function createEncryptedBackup(): Promise<void> {
+    if (assignmentProfileDirty) {
+      setNotice("Yedek oluşturmadan önce görev profilindeki değişiklikleri kaydedin.");
+      return;
+    }
     if (vaultState !== "unlocked" || backupInputBusy) return;
     setBackupInputBusy(true);
     try {
