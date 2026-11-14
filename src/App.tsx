@@ -273,6 +273,16 @@ export default function App() {
   const assignmentProfileDirty = Boolean(
     activeAssignment && hasAssignmentProfileChanges(activeAssignment, assignmentProfileDraft),
   );
+  const assignmentDraftQuestions = parseAssignmentQuestions(assignmentProfileDraft.questionsText)
+    .map((question) => question.normalize("NFC").trim())
+    .filter(Boolean);
+  const assignmentEvidenceOptions = useMemo(
+    () => assignmentRecords.flatMap((record) => record.segments.map((segment) => ({
+      ref: `${record.id}:${segment.id}`,
+      label: `${record.vaultMetadata?.fileName ?? record.file.name} · ${formatTime(segment.startSeconds)} · ${segment.text.trim().slice(0, 72) || "[Metin yok]"}`,
+    }))),
+    [assignmentRecords],
+  );
 
   // Güncellemeler ses çalarken veya şifreli dosya belleğe alınırken bekler.
   // Kayıtlar artık kalıcı olduğundan kuyruk sayısı güncellemeyi engellemez.
@@ -1455,6 +1465,57 @@ export default function App() {
                     onChange={(event) => updateAssignmentProfileField("questionsText", event.currentTarget.value)}
                     placeholder="1. ...&#10;2. ..." />
                 </label>
+                {assignmentDraftQuestions.length > 0 && (
+                  <section className="assignment-question-answers assignment-profile-wide" aria-label="Soru yanıtları ve dayanakları">
+                    <div className="assignment-question-answers-heading">
+                      <strong>Soru yanıtları ve dayanak segmentleri</strong>
+                      <span>Yanıtlar seçili görevin şifreli profilinde saklanır. Her soru için ayrı yanıt ve ses dayanağı girin.</span>
+                    </div>
+                    {assignmentDraftQuestions.map((question, index) => {
+                      const answer = assignmentProfileDraft.questionAnswers.find((item) => item.question === question)
+                        ?? { question, answer: "", supportingSegmentRefs: [], updatedAt: "" };
+                      return (
+                        <article className="assignment-question-card" key={question + "-" + index}>
+                          <div className="assignment-question-title">{index + 1}. {question}</div>
+                          <label>
+                            <span>Uzman yanıtı / sonucu</span>
+                            <textarea
+                              rows={3}
+                              maxLength={10000}
+                              value={answer.answer}
+                              onChange={(event) => updateAssignmentQuestionAnswer(question, { answer: event.currentTarget.value })}
+                              placeholder="Yanıtınızı, kapsam ve sınırlılıkları belirterek yazın. Otomatik kanaat üretilmez."
+                            />
+                          </label>
+                          <fieldset className="assignment-evidence-picker">
+                            <legend>Destekleyen transkript segmentleri</legend>
+                            {assignmentEvidenceOptions.length === 0 ? (
+                              <small>Bu görev alanında henüz segment yok. Ses ekleyip transkript taslağı oluşturduğunuzda dayanak seçebilirsiniz.</small>
+                            ) : (
+                              <div className="assignment-evidence-options">
+                                {assignmentEvidenceOptions.map((option) => (
+                                  <label key={option.ref}>
+                                    <input
+                                      type="checkbox"
+                                      checked={answer.supportingSegmentRefs.includes(option.ref)}
+                                      onChange={(event) => {
+                                        const nextRefs = event.currentTarget.checked
+                                          ? [...answer.supportingSegmentRefs, option.ref]
+                                          : answer.supportingSegmentRefs.filter((ref) => ref !== option.ref);
+                                        updateAssignmentQuestionAnswer(question, { supportingSegmentRefs: nextRefs });
+                                      }}
+                                    />
+                                    <span>{option.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </fieldset>
+                        </article>
+                      );
+                    })}
+                  </section>
+                )}
               </div>
             </form>
           )}
