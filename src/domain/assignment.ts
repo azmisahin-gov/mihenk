@@ -166,3 +166,19 @@ export function resolveActiveAssignment(
   }
   return assignments[0]?.id ?? null;
 }
+
+
+export function hasAssignmentProfileChanges(
+  current: AssignmentRecord,
+  draft: Omit<AssignmentProfileInput, "questions"> & { questionsText: string },
+): boolean {
+  return (
+    current.name !== draft.name ||
+    current.localReference !== draft.localReference ||
+    current.authority !== draft.authority ||
+    current.appointedAt !== draft.appointedAt ||
+    current.dueAt !== draft.dueAt ||
+    current.scope !== draft.scope ||
+    current.questions.join("\n") !== draft.questionsText
+  );
+}
