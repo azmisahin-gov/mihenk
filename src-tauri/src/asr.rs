@@ -496,7 +496,7 @@ fn transcribe_seda(
     job_id: String,
     size_bytes: u64,
     nonce_prefix: Vec<u8>,
-    raw_key: Vec<u8>,
+    raw_key: Zeroizing<Vec<u8>>,
     file_name: String,
 ) -> Result<Vec<AsrTranscriptSegment>, String> {
     if job_id.len() != 32 || !job_id.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
@@ -505,8 +505,7 @@ fn transcribe_seda(
     if !get_seda_model_status(app_data_dir).installed {
         return Err("Önce Yerel Model bölümünden SEDA v0.1'i kurun.".into());
     }
-    let key = Zeroizing::new(raw_key);
-    let reader = open_vault_audio_reader(app_data_dir, &file_id, size_bytes, &nonce_prefix, key.as_slice())?;
+    let reader = open_vault_audio_reader(app_data_dir, &file_id, size_bytes, &nonce_prefix, raw_key.as_slice())?;
     let mut hint = Hint::new();
     if let Some(extension) = Path::new(&file_name).extension().and_then(|value| value.to_str()) {
         hint.with_extension(extension);
@@ -615,6 +614,7 @@ pub async fn transcribe_stored_audio_command(
     raw_key: Vec<u8>,
     file_name: String,
 ) -> Result<Vec<AsrTranscriptSegment>, String> {
+    let raw_key = Zeroizing::new(raw_key);
     let app_data_dir = app.path().app_data_dir()
         .map_err(|_| "Yerel ses kasasına erişilemedi.".to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
