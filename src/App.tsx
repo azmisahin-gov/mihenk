@@ -9,6 +9,7 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { createVaultAudioRecord } from "./domain/vault-audio-record";
+import { mergeAsrTranscriptSegments, recordTranscriptEdit } from "./domain/transcript";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
 import { buildDocxReport, buildOdtReport } from "./domain/report";
 import {
@@ -769,7 +770,7 @@ export default function App() {
     updateRecord(activeRecord.id, (record) => ({
       ...record,
       segments: record.segments.map((segment) => (
-        segment.id === segmentId ? { ...update(segment), source: "uzman" } : segment
+        segment.id === segmentId ? recordTranscriptEdit(segment, update(segment)) : segment
       )),
     }));
   }
@@ -812,9 +813,7 @@ export default function App() {
       setRecords((current) => current.map((record) => record.id === recordId
         ? {
             ...record,
-            segments: [...record.segments.filter((segment) => segment.source !== "asr"), ...generated].sort((a, b) => (
-              a.startSeconds - b.startSeconds
-            )),
+            segments: mergeAsrTranscriptSegments(record.segments, generated),
           }
         : record));
       setNotice(`SEDA ${generated.length} makine taslağı bölümü oluşturdu. Her bölümü ses kaydından dinleyerek uzman kontrolü yapın.`);
@@ -1630,7 +1629,11 @@ export default function App() {
                           <button className="timestamp-button" type="button" onClick={() => jumpTo(segment.startSeconds)}>
                             <span>▶</span> {formatTime(segment.startSeconds)}
                           </button>
-                          <span className={`segment-source ${segment.source === "asr" ? "machine" : "expert"}`}>{segment.source === "asr" ? "MAKİNE TASLAĞI" : "UZMAN"}</span>
+                          <span className={`segment-source ${segment.source === "asr" ? "machine" : "expert"}`}>
+                            {segment.source === "asr"
+                              ? (segment.revisions?.length ? "MAKİNE TASLAĞI · UZMAN DÜZENLEDİ" : "MAKİNE TASLAĞI")
+                              : "UZMAN"}
+                          </span>
                           <span className="segment-number">
                             {formatTime(segment.startSeconds)}{segment.endSeconds === null ? " · Bitiş işaretlenmedi" : ` – ${formatTime(segment.endSeconds)}`}
                           </span>
@@ -1660,6 +1663,53 @@ export default function App() {
                           rows={3}
                           aria-label={`${formatTime(segment.startSeconds)} zamanındaki transkript`}
                         />
+                        {segment.rawAsrText !== undefined && segment.rawAsrText !== segment.text && (
+                          <details className="segment-audit-details">
+                            <summary>Ham ASR metni · değiştirilemez kaynak</summary>
+                            <p>{segment.rawAsrText || "Boş ASR çıktısı"}</p>
+                          </details>
+                        )}
+                        {segment.revisions && segment.revisions.length > 0 && (
+                          <details className="segment-audit-details">
+                            <summary>Değişiklik geçmişi ({segment.revisions.length})</summary>
+                            <div className="segment-audit-list">
+                              {segment.revisions.map((revision) => (
+                                <article className="segment-audit-event" key={revision.id}>
+                                  <small>
+                                    {new Date(revision.changedAt).toLocaleString("tr-TR")}
+                                    {" · "}{revision.reason}
+                                    {" · "}{revision.editorId ?? "Yerel uzman kimliği tanımlı değil"}
+                                  </small>
+                                  {revision.before.text !== revision.after.text && (
+                                    <div className="segment-audit-diff">
+                                      <span>Önceki metin</span>
+                                      <p>{revision.before.text || "—"}</p>
+                                      <span>Yeni metin</span>
+                                      <p>{revision.after.text || "—"}</p>
+                                    </div>
+                                  )}
+                                  {(revision.before.startSeconds !== revision.after.startSeconds
+                                    || revision.before.endSeconds !== revision.after.endSeconds) && (
+                                    <p className="segment-audit-change">
+                                      Zaman: {formatTime(revision.before.startSeconds)}–{formatTime(revision.before.endSeconds)}
+                                      {" → "}{formatTime(revision.after.startSeconds)}–{formatTime(revision.after.endSeconds)}
+                                    </p>
+                                  )}
+                                  {revision.before.speaker !== revision.after.speaker && (
+                                    <p className="segment-audit-change">
+                                      Etiket: {revision.before.speaker} → {revision.after.speaker}
+                                    </p>
+                                  )}
+                                  {revision.before.status !== revision.after.status && (
+                                    <p className="segment-audit-change">
+                                      Durum: {revision.before.status} → {revision.after.status}
+                                    </p>
+                                  )}
+                                </article>
+                              ))}
+                            </div>
+                          </details>
+                        )}
                         <div className="segment-meta">
                           <label>
                             <span>Konuşmacı</span>
