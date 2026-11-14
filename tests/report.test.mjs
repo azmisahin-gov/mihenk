@@ -102,3 +102,12 @@ test("ODT XML'i metni kaçışlar ve taslak uyarısını içerir", () => {
   assert.match(content, /resmî teslim işlemi değildir/);
   assert.ok(content.indexOf("00:04") < content.indexOf("00:14"), "Bölümler başlangıç zamanına göre sıralanmalıdır.");
 });
+
+test("DOCX ve ODT XML için geçersiz kontrol karakteri sessizce bozulmak yerine reddedilir", () => {
+  const invalid = {
+    ...input,
+    segments: [{ ...input.segments[0], text: "geçersiz\\u0001metin" }],
+  };
+  assert.throws(() => buildDocxReport(invalid), /XML kontrol karakteri/);
+  assert.throws(() => buildOdtReport(invalid), /XML kontrol karakteri/);
+});
