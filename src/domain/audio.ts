@@ -13,7 +13,7 @@ export type HashState = "bekliyor" | "hesaplaniyor" | "hesaplandi" | "buyuk-dosy
 
 import type { VaultAudioMetadata } from "./vault";
 import { Sha256 } from "./sha256.ts";
-import { readFileChunks } from "./file-chunks";
+import { readFileChunks } from "./file-chunks.ts";
 import { MAX_VAULT_AUDIO_BYTES } from "./vault-crypto";
 
 export interface AudioRecord {
