@@ -416,7 +416,7 @@ fn create_recognizer(model_directory: &Path) -> Result<OnlineRecognizer, String>
 fn append_endpoint(
     recognizer: &OnlineRecognizer,
     channel: &mut AsrChannel,
-    file_id: &str,
+    job_id: &str,
     segments: &mut Vec<AsrTranscriptSegment>,
     reset_stream: bool,
 ) {
@@ -426,7 +426,7 @@ fn append_endpoint(
         let end = channel.sample_count as f64 / 16_000.0;
         if !text.is_empty() && end > start {
             segments.push(AsrTranscriptSegment {
-                id: format!("asr-{file_id}-{}-{}", channel.channel_index + 1, channel.segment_index + 1),
+                id: format!("asr-{job_id}-{}-{}", channel.channel_index + 1, channel.segment_index + 1),
                 start_seconds: start,
                 end_seconds: Some(end),
                 text: text.to_string(),
@@ -447,7 +447,7 @@ fn feed_channel(
     recognizer: &OnlineRecognizer,
     channel: &mut AsrChannel,
     input: &[f32],
-    file_id: &str,
+    job_id: &str,
     segments: &mut Vec<AsrTranscriptSegment>,
 ) {
     let mut converted = match &channel.resampler {
@@ -461,7 +461,7 @@ fn feed_channel(
             recognizer.decode(&channel.stream);
         }
         if recognizer.is_endpoint(&channel.stream) {
-            append_endpoint(recognizer, channel, file_id, segments, true);
+            append_endpoint(recognizer, channel, job_id, segments, true);
         }
     }
     converted.zeroize();
@@ -470,7 +470,7 @@ fn feed_channel(
 fn finish_channel(
     recognizer: &OnlineRecognizer,
     channel: &mut AsrChannel,
-    file_id: &str,
+    job_id: &str,
     segments: &mut Vec<AsrTranscriptSegment>,
 ) {
     if let Some(resampler) = &channel.resampler {
@@ -485,17 +485,21 @@ fn finish_channel(
     while recognizer.is_ready(&channel.stream) {
         recognizer.decode(&channel.stream);
     }
-    append_endpoint(recognizer, channel, file_id, segments, false);
+    append_endpoint(recognizer, channel, job_id, segments, false);
 }
 
 fn transcribe_seda(
     app_data_dir: &Path,
     file_id: String,
+    job_id: String,
     size_bytes: u64,
     nonce_prefix: Vec<u8>,
     raw_key: Vec<u8>,
     file_name: String,
 ) -> Result<Vec<AsrTranscriptSegment>, String> {
+    if job_id.len() != 32 || !job_id.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)) {
+        return Err("ASR görev kimliği geçersiz.".into());
+    }
     if !get_seda_model_status(app_data_dir).installed {
         return Err("Önce Yerel Model bölümünden SEDA v0.1'i kurun.".into());
     }
@@ -582,7 +586,7 @@ fn transcribe_seda(
         }
         interleaved.zeroize();
         for (state, samples) in channels.as_mut().expect("channel state").iter_mut().zip(planar.iter_mut()) {
-            feed_channel(&recognizer, state, samples, &file_id, &mut segments);
+            feed_channel(&recognizer, state, samples, &job_id, &mut segments);
             samples.zeroize();
         }
     }
@@ -591,7 +595,7 @@ fn transcribe_seda(
         return Err("Ses dosyasında çözümlenebilir örnek bulunamadı.".into());
     };
     for channel in &mut channels {
-        finish_channel(&recognizer, channel, &file_id, &mut segments);
+        finish_channel(&recognizer, channel, &job_id, &mut segments);
     }
     if segments.is_empty() {
         return Err("SEDA konuşma taslağı üretemedi. Uzman dinlemesi ve elle transkripsiyon gerekir.".into());
@@ -603,6 +607,7 @@ fn transcribe_seda(
 pub async fn transcribe_stored_audio_command(
     app: tauri::AppHandle,
     file_id: String,
+    job_id: String,
     size_bytes: u64,
     nonce_prefix: Vec<u8>,
     raw_key: Vec<u8>,
@@ -611,7 +616,7 @@ pub async fn transcribe_stored_audio_command(
     let app_data_dir = app.path().app_data_dir()
         .map_err(|_| "Yerel ses kasasına erişilemedi.".to_string())?;
     tauri::async_runtime::spawn_blocking(move || {
-        transcribe_seda(&app_data_dir, file_id, size_bytes, nonce_prefix, raw_key, file_name)
+        transcribe_seda(&app_data_dir, file_id, job_id, size_bytes, nonce_prefix, raw_key, file_name)
     }).await.map_err(|_| "Yerel ASR görevi beklenmedik biçimde sonlandı.".to_string())?
 }
 
