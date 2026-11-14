@@ -75,6 +75,7 @@ export interface VaultAudioMetadata {
     text: string;
     speaker: string;
     status: "taslak" | "belirsiz" | "uzman-onayli";
+    source?: "asr" | "uzman";
   }>;
   formatVersion: 1;
 }
@@ -557,6 +558,55 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
 export interface VaultAudioPlayback {
   url: string;
   sessionId: string;
+}
+
+export interface SedaModelStatus {
+  modelId: string;
+  revision: string;
+  license: string;
+  installed: boolean;
+  bytesOnDisk: number;
+  message: string;
+}
+
+export interface SedaTranscriptSegment {
+  id: string;
+  startSeconds: number;
+  endSeconds: number | null;
+  text: string;
+  speaker: string;
+  status: "taslak";
+  source: "asr";
+}
+
+export async function getSedaModelStatus(): Promise<SedaModelStatus> {
+  return invoke<SedaModelStatus>("get_seda_model_status_command");
+}
+
+export async function installSedaModel(): Promise<SedaModelStatus> {
+  return invoke<SedaModelStatus>("install_seda_model_command");
+}
+
+export async function transcribeStoredAudio(metadata: VaultAudioMetadata): Promise<SedaTranscriptSegment[]> {
+  const store = requireStore();
+  validateMetadata(metadata);
+  const rawKey = await store.get(audioKeyKey(metadata.fileId));
+  if (!rawKey || rawKey.byteLength !== 32) {
+    rawKey?.fill(0);
+    throw new Error("Ses dosyasının kasa anahtarı bulunamadı.");
+  }
+
+  try {
+    return await invoke<SedaTranscriptSegment[]>("transcribe_stored_audio_command", {
+      fileId: metadata.fileId,
+      sizeBytes: metadata.sizeBytes,
+      noncePrefix: metadata.noncePrefix,
+      rawKey: Array.from(rawKey),
+      fileName: metadata.fileName,
+    });
+  } finally {
+    rawKey.fill(0);
+  }
 }
 
 export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<VaultAudioPlayback> {
