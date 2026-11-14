@@ -43,6 +43,26 @@ export function assertUniqueAssignmentName(
   }
 }
 
+export function resolveStoredAssignmentId(
+  storedAssignmentId: unknown,
+  knownAssignmentIds: readonly string[],
+  fallbackAssignmentId: string,
+): string {
+  if (
+    !isValidAssignmentId(fallbackAssignmentId) ||
+    !knownAssignmentIds.includes(fallbackAssignmentId)
+  ) {
+    throw new Error("Varsayılan görev alanı bulunamadı.");
+  }
+  if (storedAssignmentId === undefined || storedAssignmentId === null || storedAssignmentId === "") {
+    return fallbackAssignmentId;
+  }
+  if (!isValidAssignmentId(storedAssignmentId) || !knownAssignmentIds.includes(storedAssignmentId)) {
+    throw new Error("Ses kaydı var olmayan veya geçersiz bir görev alanına bağlı.");
+  }
+  return storedAssignmentId;
+}
+
 export function createAssignmentRecord(
   name: string,
   now = new Date().toISOString(),
