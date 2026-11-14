@@ -17,11 +17,12 @@ export function normalizeAssignmentName(value: string): string {
     throw new Error("Görev etiketi metin olmalıdır.");
   }
 
-  const normalized = value.normalize("NFC").trim().replace(/\s+/gu, " ");
-  if (!normalized) throw new Error("Görev etiketi boş olamaz.");
-  if (/[\u0000-\u001f\u007f]/u.test(normalized)) {
+  const normalizedSource = value.normalize("NFC");
+  if (/[\u0000-\u001f\u007f]/u.test(normalizedSource)) {
     throw new Error("Görev etiketi kontrol karakteri içeremez.");
   }
+  const normalized = normalizedSource.trim().replace(/\s+/gu, " ");
+  if (!normalized) throw new Error("Görev etiketi boş olamaz.");
   if (normalized.length > MAX_ASSIGNMENT_NAME_LENGTH) {
     throw new Error(`Görev etiketi en fazla ${MAX_ASSIGNMENT_NAME_LENGTH} karakter olabilir.`);
   }
