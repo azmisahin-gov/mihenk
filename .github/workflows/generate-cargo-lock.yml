@@ -1,0 +1,37 @@
+name: Generate pinned Cargo lockfile
+
+on:
+  push:
+    branches:
+      - feat/56-12-local-seda-asr
+    paths:
+      - "src-tauri/Cargo.toml"
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/56-12-local-seda-asr
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Resolve exact Rust dependencies
+        working-directory: src-tauri
+        run: cargo generate-lockfile
+      - name: Commit resolved lockfile
+        run: |
+          if git diff --quiet -- src-tauri/Cargo.lock; then
+            echo "Cargo.lock is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/Cargo.lock
+          git commit -m "chore: lock local SEDA ASR dependencies"
+          git push origin HEAD:feat/56-12-local-seda-asr
