@@ -1,3 +1,12 @@
+export interface AssignmentQuestionAnswer {
+  /** Exact question text from the assignment profile, used as its stable key. */
+  question: string;
+  answer: string;
+  /** Namespaced as `audioRecordId:transcriptSegmentId`; scoped to this assignment. */
+  supportingSegmentRefs: string[];
+  updatedAt: string;
+}
+
 export interface AssignmentRecord {
   id: string;
   name: string;
@@ -7,6 +16,8 @@ export interface AssignmentRecord {
   dueAt: string;
   scope: string;
   questions: string[];
+  /** Optional for backward-compatible reads of older encrypted vaults. */
+  questionAnswers?: AssignmentQuestionAnswer[];
   createdAt: string;
   updatedAt: string;
 }
@@ -19,6 +30,7 @@ export interface AssignmentProfileInput {
   dueAt: string;
   scope: string;
   questions: string[];
+  questionAnswers?: AssignmentQuestionAnswer[];
 }
 
 export const DEFAULT_ASSIGNMENT_NAME = "Genel çalışma";
@@ -134,6 +146,83 @@ export function formatAssignmentQuestions(questions: readonly string[]): string 
   return questions.join("\n");
 }
 
+export function reconcileAssignmentQuestionAnswers(
+  questions: readonly string[],
+  existing: readonly AssignmentQuestionAnswer[] = [],
+): AssignmentQuestionAnswer[] {
+  const byQuestion = new Map<string, AssignmentQuestionAnswer>();
+  for (const item of existing) {
+    if (item && typeof item.question === "string" && !byQuestion.has(item.question)) {
+      byQuestion.set(item.question, item);
+    }
+  }
+
+  const active = new Set(questions);
+  const current = questions.map((question) => {
+    const previous = byQuestion.get(question);
+    return previous
+      ? {
+          question,
+          answer: typeof previous.answer === "string" ? previous.answer : "",
+          supportingSegmentRefs: Array.isArray(previous.supportingSegmentRefs)
+            ? [...new Set(previous.supportingSegmentRefs.filter((ref) => typeof ref === "string"))]
+            : [],
+          updatedAt: typeof previous.updatedAt === "string" ? previous.updatedAt : "",
+        }
+      : { question, answer: "", supportingSegmentRefs: [], updatedAt: "" };
+  });
+
+  // Keep answers for removed questions as recoverable orphans instead of
+  // silently discarding potentially important expert work.
+  const orphaned = existing
+    .filter((item) => item && typeof item.question === "string" && !active.has(item.question))
+    .map((item) => ({
+      question: item.question,
+      answer: typeof item.answer === "string" ? item.answer : "",
+      supportingSegmentRefs: Array.isArray(item.supportingSegmentRefs)
+        ? [...new Set(item.supportingSegmentRefs.filter((ref) => typeof ref === "string"))]
+        : [],
+      updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : "",
+    }));
+
+  return [...current, ...orphaned];
+}
+
+export function normalizeAssignmentQuestionAnswers(
+  questions: readonly string[],
+  answers: readonly AssignmentQuestionAnswer[] = [],
+): AssignmentQuestionAnswer[] {
+  if (!Array.isArray(answers) || answers.length > 200) {
+    throw new Error("Görev soru yanıtları listesi geçersiz veya çok uzun.");
+  }
+
+  const reconciled = reconcileAssignmentQuestionAnswers(questions, answers);
+  const seen = new Set<string>();
+  return reconciled.map((item, index) => {
+    const question = normalizeAssignmentField(item.question, "Yanıt sorusu " + (index + 1), 1000);
+    if (!question || seen.has(question)) {
+      throw new Error("Görev soru yanıtlarında boş veya yinelenen soru var.");
+    }
+    seen.add(question);
+    const answer = normalizeAssignmentField(item.answer, "Uzman yanıtı " + (index + 1), 10_000);
+    const refs = item.supportingSegmentRefs;
+    if (!Array.isArray(refs) || refs.length > 200) {
+      throw new Error("Bir soru için en fazla 200 destek segmenti bağlanabilir.");
+    }
+    const supportingSegmentRefs = [...new Set(refs.map((ref) => {
+      if (typeof ref !== "string" || ref.length < 3 || ref.length > 220 || /[\u0000-\u001f]/u.test(ref)) {
+        throw new Error("Destekleyici segment referansı geçersiz.");
+      }
+      return ref;
+    }))];
+    const updatedAt = typeof item.updatedAt === "string" ? item.updatedAt : "";
+    if (updatedAt && !Number.isFinite(Date.parse(updatedAt))) {
+      throw new Error("Soru yanıtı güncelleme zamanı geçersiz.");
+    }
+    return { question, answer, supportingSegmentRefs, updatedAt };
+  });
+}
+
 function normalizeQuestions(questions: string[]): string[] {
   if (!Array.isArray(questions)) throw new Error("İnceleme soruları listesi geçersiz.");
   if (questions.length > 100) throw new Error("Bir görev alanında en fazla 100 inceleme sorusu olabilir.");
@@ -155,6 +244,10 @@ export function normalizeAssignmentProfile(
     dueAt: normalizeDateField(input.dueAt, "Son tarih"),
     scope: normalizeAssignmentField(input.scope, "İnceleme kapsamı", 4000),
     questions: normalizeQuestions(input.questions),
+    questionAnswers: normalizeAssignmentQuestionAnswers(
+      normalizeQuestions(input.questions),
+      input.questionAnswers ?? current.questionAnswers ?? [],
+    ),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -189,6 +282,11 @@ export function hasAssignmentProfileChanges(
     current.appointedAt !== draft.appointedAt ||
     current.dueAt !== draft.dueAt ||
     current.scope !== draft.scope ||
-    current.questions.join("\n") !== draft.questionsText
+    current.questions.join("\n") !== draft.questionsText ||
+    JSON.stringify(reconcileAssignmentQuestionAnswers(current.questions, current.questionAnswers ?? []))
+      !== JSON.stringify(reconcileAssignmentQuestionAnswers(
+        parseAssignmentQuestions(draft.questionsText).map((question) => question.normalize("NFC").trim()).filter(Boolean),
+        draft.questionAnswers ?? current.questionAnswers ?? [],
+      ))
   );
 }
