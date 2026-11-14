@@ -100,11 +100,11 @@ test("atama profili geçersiz tarih, kontrol karakteri ve aşırı uzun alanlar�
 test("atama profilindeki satır sonları korunur; kontrol karakterleri reddedilir", () => {
   const updated = normalizeAssignmentProfile(first, {
     name: first.name, localReference: "", authority: "", appointedAt: "", dueAt: "",
-    scope: "Birinci satır\\r\\nİkinci satır", questions: [],
+    scope: "Birinci satır\r\nİkinci satır", questions: [],
   });
-  assert.equal(updated.scope, "Birinci satır\\nİkinci satır");
+  assert.equal(updated.scope, "Birinci satır\nİkinci satır");
   assert.throws(() => normalizeAssignmentProfile(first, {
     name: first.name, localReference: "", authority: "", appointedAt: "", dueAt: "",
-    scope: "geçersiz\\u0001veri", questions: [],
+    scope: "geçersiz\u0001veri", questions: [],
   }), /kontrol karakteri/);
 });
