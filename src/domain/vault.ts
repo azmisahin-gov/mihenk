@@ -32,7 +32,7 @@ import {
  } from "./vault-crypto";
 import { readFileChunks } from "./file-chunks.ts";
 import { Sha256 } from "./sha256.ts";
-import type { TranscriptRevisionEvent } from "./transcript";
+import type { TranscriptAnnotationType, TranscriptRevisionEvent } from "./transcript";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
@@ -74,7 +74,9 @@ export interface VaultAudioMetadata {
     startSeconds: number;
     endSeconds: number | null;
     text: string;
+    channel?: string | null;
     speaker: string;
+    annotationType?: TranscriptAnnotationType;
     status: "taslak" | "belirsiz" | "uzman-onayli";
     source?: "asr" | "uzman";
     rawAsrText?: string;
@@ -595,7 +597,9 @@ export interface SedaTranscriptSegment {
   startSeconds: number;
   endSeconds: number | null;
   text: string;
+  channel: string | null;
   speaker: string;
+  annotationType: TranscriptAnnotationType;
   status: "taslak";
   source: "asr";
 }
