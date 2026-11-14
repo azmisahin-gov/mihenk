@@ -50,6 +50,37 @@ jobs:
           node-version: "22.16.0"
       - name: Rust kur
         uses: dtolnay/rust-toolchain@1.99.1
+      - name: Linux Sherpa native arşivini sabit SHA-256 ile hazırla
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_name="sherpa-onnx-v2.0.1-linux-x64-static-lib.tar.bz2"
+          archive_dir="$RUNNER_TEMP/sherpa-onnx-archives"
+          mkdir -p "$archive_dir"
+          curl --fail --location --retry 3 \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/$archive_name" \
+            --output "$archive_dir/$archive_name"
+          printf '%s  %s\n' \
+            "55cfadf65ba50d0afc1a802b7a337942819e51c94a5b5a384def1978f7c70871" \
+            "$archive_dir/$archive_name" | sha256sum --check
+          echo "SHERPA_ONNX_ARCHIVE_DIR=$archive_dir" >> "$GITHUB_ENV"
+      - name: Windows Sherpa native arşivini sabit SHA-256 ile hazırla
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archiveName = "sherpa-onnx-v2.0.1-win-x64-static-MT-Release-lib.tar.bz2"
+          $archiveDir = Join-Path $env:RUNNER_TEMP "sherpa-onnx-archives"
+          New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
+          $archivePath = Join-Path $archiveDir $archiveName
+          $url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/$archiveName"
+          Invoke-WebRequest -Uri $url -OutFile $archivePath
+          $actual = (Get-FileHash -Algorithm SHA256 $archivePath).Hash.ToLowerInvariant()
+          $expected = "23e7b986b197eda0bbc47ff3d7d5c87afd6ef2b9077214ba26b0f1ec52ef0e66"
+          if ($actual -ne $expected) {
+            throw "Sherpa native Windows arşivi SHA-256 doğrulamasını geçemedi: $actual"
+          }
+          "SHERPA_ONNX_ARCHIVE_DIR=$archiveDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Windows için libsodium arşivini doğrulayarak hazırla
         if: runner.os == 'Windows'
         shell: pwsh
