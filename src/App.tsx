@@ -225,6 +225,16 @@ export default function App() {
     });
   }, [activeAssignmentId]);
 
+  const assignmentProfileDirty = Boolean(activeAssignment && (
+    assignmentProfileDraft.name !== activeAssignment.name ||
+    assignmentProfileDraft.localReference !== activeAssignment.localReference ||
+    assignmentProfileDraft.authority !== activeAssignment.authority ||
+    assignmentProfileDraft.appointedAt !== activeAssignment.appointedAt ||
+    assignmentProfileDraft.dueAt !== activeAssignment.dueAt ||
+    assignmentProfileDraft.scope !== activeAssignment.scope ||
+    assignmentProfileDraft.questionsText !== activeAssignment.questions.join("\\n")
+  ));
+
   const activeRecord = useMemo(
     () => assignmentRecords.find((record) => record.id === activeId) ?? null,
     [assignmentRecords, activeId],
@@ -423,6 +433,10 @@ export default function App() {
 
 
   async function addAssignment(): Promise<void> {
+    if (assignmentProfileDirty) {
+      setNotice("Önce mevcut görev profilindeki değişiklikleri kaydedin.");
+      return;
+    }
     const name = assignmentNameDraft.trim();
     if (!name) {
       setNotice("Yeni görev alanına kısa bir etiket verin.");
@@ -470,6 +484,10 @@ export default function App() {
 
   function switchAssignment(assignmentId: string): void {
     if (!assignments.some((assignment) => assignment.id === assignmentId)) return;
+    if (assignmentProfileDirty) {
+      setNotice("Görev değiştirilemedi. Önce mevcut görev profilini kaydedin.");
+      return;
+    }
     audioRef.current?.pause();
     setActiveAssignmentId(assignmentId);
     setActiveId(null);
@@ -1032,10 +1050,10 @@ export default function App() {
               <div className="assignment-profile-heading">
                 <div>
                   <strong>Görev / atama profili</strong>
-                  <span>Bu bilgiler yalnızca bu cihazdaki şifreli kasada saklanır.</span>
+                  <span>Bu bilgiler yalnızca bu cihazdaki şifreli kasada saklanır. {assignmentProfileDirty ? "Kaydedilmemiş değişiklik var." : "Güncel."}</span>
                 </div>
-                <button className="primary-button" type="submit" disabled={assignmentProfileBusy}>
-                  {assignmentProfileBusy ? "Kaydediliyor…" : "Görev profilini kaydet"}
+                <button className="primary-button" type="submit" disabled={assignmentProfileBusy || !assignmentProfileDirty}>
+                  {assignmentProfileBusy ? "Kaydediliyor…" : assignmentProfileDirty ? "Görev profilini kaydet" : "Profil kayıtlı"}
                 </button>
               </div>
               <div className="assignment-profile-grid">
