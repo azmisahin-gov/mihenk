@@ -482,6 +482,123 @@ fn finish_channel(
     append_endpoint(recognizer, channel, job_id, segments, false);
 }
 
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioTechnicalMetadata {
+    pub read_status: String,
+    pub container_format: Option<String>,
+    pub codec: Option<String>,
+    pub codec_short_name: Option<String>,
+    pub channel_count: Option<u32>,
+    pub channel_layout: Option<String>,
+    pub sample_rate_hz: Option<u32>,
+    pub bits_per_sample: Option<u32>,
+    pub bits_per_coded_sample: Option<u32>,
+    pub sample_format: Option<String>,
+    pub duration_seconds: Option<f64>,
+    /// Average whole-file bitrate (file bytes × 8 / duration), including
+    /// container overhead. This is not a codec-reported elementary-stream rate.
+    pub average_file_bitrate_bps: Option<u64>,
+    pub read_message: Option<String>,
+}
+
+fn average_file_bitrate_bps(file_size_bytes: u64, duration_seconds: Option<f64>) -> Option<u64> {
+    let duration = duration_seconds?;
+    if !duration.is_finite() || duration <= 0.0 {
+        return None;
+    }
+    let bitrate = (file_size_bytes as f64 * 8.0 / duration).round();
+    if !bitrate.is_finite() || bitrate < 0.0 || bitrate > u64::MAX as f64 {
+        return None;
+    }
+    Some(bitrate as u64)
+}
+
+fn inspect_audio_stream(
+    source: MediaSourceStream<'_>,
+    file_size_bytes: u64,
+    file_name: &str,
+) -> Result<AudioTechnicalMetadata, String> {
+    let mut hint = Hint::new();
+    if let Some(extension) = Path::new(file_name).extension().and_then(|value| value.to_str()) {
+        hint.with_extension(extension);
+    }
+    let format = symphonia::default::get_probe()
+        .probe(&hint, source, FormatOptions::default(), MetadataOptions::default())
+        .map_err(|error| format!("Ses kapsayıcısı teknik olarak çözümlenemedi: {error}"))?;
+    let track = format
+        .default_track(TrackType::Audio)
+        .ok_or_else(|| "Ses kapsayıcısında varsayılan ses izi bulunamadı.".to_string())?;
+    let codec_parameters = track
+        .codec_params
+        .as_ref()
+        .ok_or_else(|| "Ses codec parametreleri bulunamadı.".to_string())?
+        .audio()
+        .ok_or_else(|| "Seçilen iz ses codec parametreleri içermiyor.".to_string())?;
+
+    let codec_details = symphonia::default::get_codecs()
+        .get_audio_decoder(codec_parameters.codec);
+    let codec_short_name = codec_details.map(|details| details.codec.info.short_name.to_string());
+    let codec = codec_details
+        .map(|details| details.codec.info.long_name.to_string())
+        .or_else(|| Some(format!("Tanınmayan codec ({})", codec_parameters.codec)));
+
+    let media_info = format.media_info();
+    let duration_seconds = media_info
+        .time_base
+        .zip(media_info.duration)
+        .and_then(|(time_base, duration)| time_base.calc_duration(duration))
+        .map(|duration| duration.as_secs_f64())
+        .filter(|duration| duration.is_finite() && *duration > 0.0);
+
+    Ok(AudioTechnicalMetadata {
+        read_status: "ok".into(),
+        container_format: Some(format.format_info().long_name.to_string()),
+        codec,
+        codec_short_name,
+        channel_count: codec_parameters
+            .channels
+            .as_ref()
+            .map(|channels| channels.count() as u32),
+        channel_layout: codec_parameters.channels.as_ref().map(ToString::to_string),
+        sample_rate_hz: codec_parameters.sample_rate,
+        bits_per_sample: codec_parameters.bits_per_sample,
+        bits_per_coded_sample: codec_parameters.bits_per_coded_sample,
+        sample_format: codec_parameters.sample_format.map(|sample_format| format!("{sample_format:?}")),
+        duration_seconds,
+        average_file_bitrate_bps: average_file_bitrate_bps(file_size_bytes, duration_seconds),
+        read_message: None,
+    })
+}
+
+#[tauri::command]
+pub async fn inspect_stored_audio_command(
+    app: tauri::AppHandle,
+    file_id: String,
+    size_bytes: u64,
+    nonce_prefix: Vec<u8>,
+    raw_key: Vec<u8>,
+    file_name: String,
+) -> Result<AudioTechnicalMetadata, String> {
+    let raw_key = Zeroizing::new(raw_key);
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|_| "Yerel ses kasasına erişilemedi.".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let reader = open_vault_audio_reader(
+            &app_data_dir,
+            &file_id,
+            size_bytes,
+            &nonce_prefix,
+            raw_key.as_slice(),
+        )?;
+        let source = MediaSourceStream::new(Box::new(reader), Default::default());
+        inspect_audio_stream(source, size_bytes, &file_name)
+    })
+    .await
+    .map_err(|_| "Ses teknik envanter görevi beklenmedik biçimde sonlandı.".to_string())?
+}
+
 fn transcribe_seda(
     app_data_dir: &Path,
     file_id: String,
@@ -618,6 +735,55 @@ pub async fn transcribe_stored_audio_command(
 mod tests {
     use super::*;
     use std::io::Write;
+
+
+    #[test]
+    fn calculates_average_file_bitrate_without_claiming_codec_bitrate() {
+        assert_eq!(average_file_bitrate_bps(100_000, Some(10.0)), Some(80_000));
+        assert_eq!(average_file_bitrate_bps(100_000, None), None);
+        assert_eq!(average_file_bitrate_bps(100_000, Some(0.0)), None);
+        assert_eq!(average_file_bitrate_bps(100_000, Some(f64::NAN)), None);
+    }
+
+    fn synthetic_stereo_pcm_wav() -> Vec<u8> {
+        let data = [0u8, 0, 0, 0, 1, 0, 1, 0];
+        let mut wav = Vec::with_capacity(44 + data.len());
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36u32 + data.len() as u32).to_le_bytes());
+        wav.extend_from_slice(b"WAVE");
+        wav.extend_from_slice(b"fmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        wav.extend_from_slice(&2u16.to_le_bytes()); // stereo
+        wav.extend_from_slice(&16_000u32.to_le_bytes());
+        wav.extend_from_slice(&64_000u32.to_le_bytes());
+        wav.extend_from_slice(&4u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        wav.extend_from_slice(&data);
+        wav
+    }
+
+    #[test]
+    fn reads_real_container_codec_channel_rate_and_sample_depth_from_wav_header() {
+        use std::io::Cursor;
+
+        let wav = synthetic_stereo_pcm_wav();
+        let size = wav.len() as u64;
+        let source = MediaSourceStream::new(Box::new(Cursor::new(wav)), Default::default());
+        let metadata = inspect_audio_stream(source, size, "synthetic.wav").unwrap();
+
+        assert_eq!(metadata.read_status, "ok");
+        assert!(metadata.container_format.as_deref().unwrap().to_ascii_lowercase().contains("wave"));
+        assert!(metadata.codec.as_deref().unwrap().to_ascii_lowercase().contains("pcm"));
+        assert_eq!(metadata.channel_count, Some(2));
+        assert_eq!(metadata.channel_layout.as_deref(), Some("[FL,FR]"));
+        assert_eq!(metadata.sample_rate_hz, Some(16_000));
+        assert_eq!(metadata.bits_per_sample, Some(16));
+        assert!(metadata.duration_seconds.is_some());
+        assert!(metadata.average_file_bitrate_bps.is_some());
+    }
 
     #[test]
     fn downloads_pinned_seda_model_and_runs_local_cpu_smoke_when_enabled() {

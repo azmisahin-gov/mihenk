@@ -6,6 +6,7 @@ MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda
 
 - Görev/atama alanı, ses materyali kuyruğu ve görev bazlı çalışma alanı.
 - En fazla 240 MiB ses dosyası için 1 MiB sabit parçalarla şifreli içe aktarma ve tam kaynak SHA-256 özeti.
+- İçe alma sonrası AES-GCM kasadaki kopyanın bağımsız read-back SHA-256 doğrulaması; Symphonia ile decoder tabanlı kapsayıcı/codec/kanal/örnekleme/bit derinliği/süre envanteri (desteklenmeyen metadata açıkça belirtilir).
 - AES-256-GCM şifreli yerel kasa ve kimlik doğrulamalı, en fazla 1 MiB aralıklı ses oynatma.
 - Dosyayı diske çözmeden, doğrulanmış şifreli kasa bloklarından okuyan yerel Symphonia decoder hattı.
 - İsteğe bağlı yerel SEDA v0.1 Türkçe ASR modeli kurulumu; sabit model revision, ONNX SHA-256 ve token biçim denetimleri.

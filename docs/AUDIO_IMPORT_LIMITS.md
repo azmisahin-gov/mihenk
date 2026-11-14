@@ -17,11 +17,31 @@ Bu sınırlar, dosya boyutuna bağlı olmayan temel tamponlamayı (1 MiB ses gir
 
 SHA-256, MİHENK'in içe aktarma sırasında okuduğu byte dizisini tanımlar. GCM doğrulaması, şifreli kasa bloklarının oynatma sırasında değiştirilmediğini veya bozulduğunu tespit etmeye yarar. Bu ölçümler tek başına kaynağın kökenini, teslim öncesi muhafaza zincirini, kaydın gerçekliğini veya ses üzerinde manipülasyon bulunmadığını kanıtlamaz; dijital imza ya da bağımsız zaman damgası da değildir.
 
+## Teknik envanter — uygulanan ilk decoder dilimi
+
+Şifreli materyal, kasa içinden açılan doğrulanmış ve seek edilebilir okuyucu üzerinden Symphonia 0.6.1 ile incelenir. Kaynak ses plaintext olarak diske yazılmaz; decoder yalnızca şifreli blokların kimlik doğrulamasından geçmiş veriyi okur.
+
+Envanterde desteklenen biçimlerde şu alanlar saklanır:
+
+- Kapsayıcı biçiminin Symphonia tanımı ve codec'in kayıtlı kısa/uzun adı.
+- Kanal sayısı ve decoder'ın bildirdiği kanal yerleşimi (ör. `[FL,FR]`).
+- Örnekleme hızı, örnek başına bit ve codec'in ayrıca bildirdiği kodlanmış örnek bit sayısı.
+- Decoder'ın bildirdiği sample format ve kapsayıcı süre bilgisi.
+- Ortalama dosya bit hızı: `dosya byte sayısı × 8 / süre`. Bu değer kapsayıcı/etiket ek yükünü de içerir; elementary-stream/codec bit hızı olarak yorumlanmamalıdır.
+
+Bir alan decoder/kapsayıcı tarafından sağlanmıyorsa `null` kalır; tahminle doldurulmaz. Kapsayıcı çözümlenemiyorsa sesin şifreli içe alımı korunur, teknik okuma `unavailable` olarak saklanır ve hata kullanıcıya gösterilir. Parser başarısızlığı kaynak dosyanın desteklendiği veya içeriğinin doğrulandığı anlamına gelmez.
+
+### Derleme yapılandırmasındaki destek matrisi
+
+Cargo'da açık olan Symphonia 0.6.1 özellikleri: AIFF, AAC, ALAC, FLAC, ISO/MP4, MP3, OGG/Vorbis, PCM ve WAV. Gerçek codec/kanal/bits alanları her dosyanın stream header'ından okunur; uzantı tek başına codec kabulü sayılmaz. `.opus` ve `.wma` uygulamanın içe alma filtresinde hâlâ kabul edilmez.
+
+Bu liste yalnızca derlemeye bağlanan parser/decoder özelliklerini belirtir. Her dosyanın her profile, çok izli varyant veya bozuk/eksik örneği desteklendiği iddiası değildir. Kabul matrisinin tamamlanması için lisansı doğrulanmış sentetik/açık dosyalar üzerinde format ve codec başına fixture testleri gerekir.
+
 ## Bu aşamada tamamlanmayanlar
 
-- Konteyner/codec, kanal düzeni, örnekleme hızı, bit derinliği ve bit hızı için yerel teknik parser ve desteklenen biçim matrisi henüz eklenmedi.
-- Orijinal/kopya byte dizisinin bağımsız read-back hash karşılaştırması henüz uygulanmadı. Hash, şifreleme hattının plaintext girişinde hesaplanır; şifreli bloklar GCM ile doğrulanır.
+- Orijinal/kopya bağımsız read-back SHA-256 artık içe alma öncesinde uygulanır; ancak orijinalin sonradan değişmezliğini, kaynak kökenini veya teslim öncesi muhafaza zincirini tek başına kanıtlamaz.
 - Disk dolması, süreç sonlandırılması ve güç kesintisi gibi gerçek uygulama kesintileri masaüstü E2E senaryolarıyla ayrıca sınanmalıdır.
-- 240 MiB sınırına yakın gerçek dosyalarla Windows/macOS/Linux bellek ve disk yük testi yapılmalıdır.
+- 240 MiB sınırına yakın gerçek sentetik/açık lisanslı dosyalarla Windows/Linux bellek, CPU ve disk yük testi yapılmalıdır.
+- Desteklenen biçim/codec eşleşmelerinin tamamı için çoklu fixture matrisi ve gerçek uzman pilotu henüz tamamlanmamıştır.
 
-Bu nedenle 56.12 K-01/K-02 kabulü tamamlandı olarak işaretlenmemelidir; bu doküman yalnızca uygulanan sınırları ve kalan kanıt gereksinimlerini açıklar.
+Bu nedenle 56.12 K-01/K-02 kabulü tamamlandı olarak işaretlenmemelidir; teknik parser ilk dikey dilimi sağlar, fakat tüm kabul kanıtlarının yerine geçmez.
