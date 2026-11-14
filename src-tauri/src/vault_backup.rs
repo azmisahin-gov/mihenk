@@ -769,7 +769,7 @@ pub async fn restore_local_vault_backup(app: tauri::AppHandle) -> Result<bool, S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::{collections::HashMap, io::Cursor};
 
     fn fixture_directory() -> PathBuf {
         let nonce = SystemTime::now()
@@ -870,4 +870,90 @@ mod tests {
 
         fs::remove_dir_all(root).unwrap();
     }
+
+    fn restore_fixture_directory() -> (PathBuf, PathBuf) {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or_default();
+        let root = std::env::temp_dir().join(format!(
+            "mihenk-restore-test-{}-{nonce}",
+            std::process::id()
+        ));
+        let vault = root.join("mihenk-vault");
+        fs::create_dir_all(vault.join("materials")).unwrap();
+        fs::write(vault.join("stronghold.salt"), b"temporary startup salt").unwrap();
+        (root, vault)
+    }
+
+    fn restore_archive_fixture() -> Vec<u8> {
+        let material_path = format!("{MATERIALS_PATH}/{}.mhn", "c".repeat(32));
+        let entries: [(&str, &[u8]); 3] = [
+            (SNAPSHOT_PATH, b"restored encrypted snapshot"),
+            (SALT_PATH, b"restored Argon2 salt"),
+            (&material_path, b"restored encrypted audio"),
+        ];
+        let mut output = Vec::new();
+        output.write_all(MAGIC).unwrap();
+        output.write_all(&BACKUP_VERSION.to_le_bytes()).unwrap();
+        output.write_all(&(entries.len() as u32).to_le_bytes()).unwrap();
+        for (path, data) in entries {
+            let path_bytes = path.as_bytes();
+            let digest: [u8; HASH_BYTES] = Sha256::digest(data).into();
+            output.write_all(&(path_bytes.len() as u16).to_le_bytes()).unwrap();
+            output.write_all(&(data.len() as u64).to_le_bytes()).unwrap();
+            output.write_all(&digest).unwrap();
+            output.write_all(path_bytes).unwrap();
+            output.write_all(data).unwrap();
+        }
+        output
+    }
+
+    #[test]
+    fn restores_streamed_v1_entries_and_replaces_only_the_empty_install_salt() {
+        let (root, vault) = restore_fixture_directory();
+        let mut archive = Cursor::new(restore_archive_fixture());
+        let archive_length = archive.get_ref().len() as u64;
+
+        restore_vault_backup_from_reader(&mut archive, archive_length, &vault).unwrap();
+
+        assert_eq!(
+            fs::read(vault.join("secure.hold")).unwrap(),
+            b"restored encrypted snapshot"
+        );
+        assert_eq!(
+            fs::read(vault.join("stronghold.salt")).unwrap(),
+            b"restored Argon2 salt"
+        );
+        assert_eq!(
+            fs::read(
+                vault
+                    .join("materials")
+                    .join(format!("{}.mhn", "c".repeat(32)))
+            )
+            .unwrap(),
+            b"restored encrypted audio"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn rejects_a_corrupt_archive_without_publishing_any_restore_file() {
+        let (root, vault) = restore_fixture_directory();
+        let mut bytes = restore_archive_fixture();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0x40;
+        let mut archive = Cursor::new(bytes);
+        let archive_length = archive.get_ref().len() as u64;
+
+        assert!(restore_vault_backup_from_reader(&mut archive, archive_length, &vault).is_err());
+        assert!(!vault.join("secure.hold").exists());
+        assert_eq!(
+            fs::read(vault.join("stronghold.salt")).unwrap(),
+            b"temporary startup salt"
+        );
+        assert_eq!(fs::read_dir(vault.join("materials")).unwrap().count(), 0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
 }
