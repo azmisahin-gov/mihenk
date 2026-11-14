@@ -5,6 +5,29 @@ export type TranscriptAnnotationType =
   | "vocalization"
   | "environmental_event";
 
+export type TranscriptReviewFilter = "all" | "needs-review" | "uncertain" | "approved";
+
+export function filterTranscriptSegments<T extends Pick<VersionedTranscriptSegment, "status" | "annotationType">>(
+  segments: readonly T[],
+  filter: TranscriptReviewFilter,
+): T[] {
+  switch (filter) {
+    case "needs-review":
+      return segments.filter((segment) => segment.status !== "uzman-onayli");
+    case "uncertain":
+      return segments.filter((segment) => (
+        segment.status === "belirsiz" ||
+        segment.annotationType === "partially_unintelligible" ||
+        segment.annotationType === "unintelligible"
+      ));
+    case "approved":
+      return segments.filter((segment) => segment.status === "uzman-onayli");
+    case "all":
+    default:
+      return [...segments];
+  }
+}
+
 export interface TranscriptRevisionSnapshot {
   startSeconds: number;
   endSeconds: number | null;
