@@ -108,6 +108,12 @@ h1 { font: 700 24px Manrope, sans-serif; letter-spacing: -.035em; margin: 0 0 7p
 .stat-card strong { color: #26332f; font: 700 20px Manrope, sans-serif; margin: 4px 0 2px; }
 .stat-foot { color: #9aa49f; font-size: 9px; }
 .engine-card strong { font-size: 15px; color: #977448; margin: 7px 0 4px; }
+.engine-card .secondary-button { margin-top: 6px; padding: 6px 8px; font-size: 9px; }
+.transcript-toolbar-actions { display: inline-flex; align-items: center; gap: 10px; }
+.transcript-toolbar-actions .secondary-button { padding: 6px 8px; font-size: 9px; }
+.segment-source { border-radius: 4px; padding: 3px 5px; font-size: 7px; font-weight: 800; letter-spacing: .06em; }
+.segment-source.machine { color: #8a673b; background: #fbf4e9; }
+.segment-source.expert { color: #4d7862; background: #edf5ef; }
 .workbench-grid {
   display: grid; grid-template-columns: minmax(220px, .82fr) minmax(320px, 1.25fr) minmax(340px, 1.32fr);
   gap: 13px; align-items: stretch;

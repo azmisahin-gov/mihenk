@@ -7,6 +7,7 @@ export interface TranscriptSegment {
   text: string;
   speaker: string;
   status: SegmentStatus;
+  source?: "asr" | "uzman";
 }
 
 export type HashState = "bekliyor" | "hesaplaniyor" | "hesaplandi" | "buyuk-dosya" | "desteklenmiyor" | "hata";
@@ -93,6 +94,7 @@ export function createSegment(startSeconds: number): TranscriptSegment {
     text: "",
     speaker: "Konuşmacı 1",
     status: "taslak",
+    source: "uzman",
   };
 }
 

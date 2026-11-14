@@ -75,6 +75,7 @@ export interface VaultAudioMetadata {
     text: string;
     speaker: string;
     status: "taslak" | "belirsiz" | "uzman-onayli";
+    source?: "asr" | "uzman";
   }>;
   formatVersion: 1;
 }
@@ -559,6 +560,59 @@ export interface VaultAudioPlayback {
   sessionId: string;
 }
 
+export interface SedaModelStatus {
+  modelId: string;
+  revision: string;
+  license: string;
+  installed: boolean;
+  bytesOnDisk: number;
+  message: string;
+}
+
+export interface SedaTranscriptSegment {
+  id: string;
+  startSeconds: number;
+  endSeconds: number | null;
+  text: string;
+  speaker: string;
+  status: "taslak";
+  source: "asr";
+}
+
+export async function getSedaModelStatus(): Promise<SedaModelStatus> {
+  return invoke<SedaModelStatus>("get_seda_model_status_command");
+}
+
+export async function installSedaModel(): Promise<SedaModelStatus> {
+  return invoke<SedaModelStatus>("install_seda_model_command");
+}
+
+export async function transcribeStoredAudio(metadata: VaultAudioMetadata, jobId: string): Promise<SedaTranscriptSegment[]> {
+  const store = requireStore();
+  validateMetadata(metadata);
+  if (!/^[a-f0-9]{32}$/.test(jobId)) throw new Error("ASR görev kimliği geçersiz.");
+  const rawKey = await store.get(audioKeyKey(metadata.fileId));
+  if (!rawKey || rawKey.byteLength !== 32) {
+    rawKey?.fill(0);
+    throw new Error("Ses dosyasının kasa anahtarı bulunamadı.");
+  }
+
+  const rawKeyTransfer = Array.from(rawKey);
+  try {
+    return await invoke<SedaTranscriptSegment[]>("transcribe_stored_audio_command", {
+      fileId: metadata.fileId,
+      sizeBytes: metadata.sizeBytes,
+      noncePrefix: metadata.noncePrefix,
+      rawKey: rawKeyTransfer,
+      fileName: metadata.fileName,
+      jobId,
+    });
+  } finally {
+    rawKeyTransfer.fill(0);
+    rawKey.fill(0);
+  }
+}
+
 export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<VaultAudioPlayback> {
   const store = requireStore();
   validateMetadata(metadata);
@@ -569,13 +623,14 @@ export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<Vau
   }
 
   const sessionId = crypto.randomUUID().replaceAll("-", "").toLowerCase();
+  const rawKeyTransfer = Array.from(rawKey);
   try {
     await invoke("open_audio_playback_session", {
       sessionId,
       fileId: metadata.fileId,
       sizeBytes: metadata.sizeBytes,
       noncePrefix: metadata.noncePrefix,
-      rawKey: Array.from(rawKey),
+      rawKey: rawKeyTransfer,
       mediaType: metadata.mediaType,
     });
     return {
@@ -583,6 +638,7 @@ export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<Vau
       url: `mihenk-audio://localhost/${sessionId}`,
     };
   } finally {
+    rawKeyTransfer.fill(0);
     rawKey.fill(0);
   }
 }

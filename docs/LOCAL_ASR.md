@@ -1,0 +1,56 @@
+# Yerel SEDA v0.1 transkripsiyon hattı
+
+**Durum: İlk dikey dilim kodlandı; PR CI ve model/decoder yük testleri tamamlanmadan birleştirilmiş veya uzman pilotunda kabul edilmiş sayılmaz. Bu belge uzman pilot kabulü değildir.**
+
+## Model manifesti
+
+- Model kimliği: `atasoglu/seda-v0.1`
+- Sabit Hugging Face revision: `b5cf32ae4936968b284df3f1c4c79714af71e1fe`
+- Runtime: `sherpa-onnx = 2.0.1`, Rust API `OnlineRecognizer`
+- Decoder: `symphonia = 0.6.1`, yalnızca açıkça etkinleştirilmiş format/kodek özellikleri
+- ASR: greedy streaming transducer, CPU provider, 1–4 thread
+- Modelin gereksinimi: 16 kHz mono kanal akışı
+
+### Kurulan dosyalar
+
+| Dosya | Sabit doğrulama |
+|---|---|
+| `encoder.int8.onnx` | SHA-256 `2596861911cec5ca1de31adc12a7fc983d05395434f92239f4e007eeae3a5dcc` |
+| `decoder.onnx` | SHA-256 `dc28b7ae3f5e67c0daa2d51886dae2ac8287a25333f46a363f3684b3cd1220c9` |
+| `joiner.int8.onnx` | SHA-256 `b4d1cff7c410d14c85c143885954be09a6a4a076cd35d22aeba58655665582bb` |
+| `tokens.txt` | Sabit commit revizyonundan alınır; UTF-8, tam 500 BPE satırı ve sıralı 0–499 token kimliği yapısal olarak denetlenir |
+
+Üç ONNX ağırlığı, sabit Hugging Face commit'indeki LFS SHA-256 kimliği ve tam byte uzunluğuyla doğrulanır. Token dosyası için upstream commit sayfasında LFS SHA-256 yayımlanmadığından sahte/varsayımsal bir hash kullanılmaz; sabit commit adresi ve 500 satırlı token yapısı denetlenir. Bu, token dosyası için ONNX ağırlıklarındakiyle aynı SHA-256 güvencesi değildir. Manifest isteğe bağlı `lm/` dosyalarını indirmez.
+
+İlk model kurulumunda kullanıcı tek uygulamadaki Yerel ASR kartından indirmeyi başlatır. Her dosya 64 KiB tamponlarla geçici klasöre indirilir, boyut/hash/token yapısı kontrol edilir ve tamamı doğrulanmadan etkin model dizinine taşınmaz. Model dosyaları indirilince ASR çalıştırması yerel ONNX Runtime CPU yürütümüdür; transkripsiyon sırasında ses ağ üzerinden gönderilmez. İlk indirme için bağlantı gerekir.
+
+## Şifreli sesin decoder'a aktarılması
+
+Rust `VaultAudioReader`, mevcut kasa dosyasını doğrudan açar. Stronghold'dan alınan 32 byte audio key, komut sınırında `Zeroizing` ile tutulur; IPC için oluşturulan geçici JS dizisi ve Stronghold buffer'ı çağrı tamamlanınca sıfırlanır. Reader her `Read` isteğinde yalnızca ihtiyaç duyduğu AES-256-GCM bloğunu çözer; en fazla bir 1 MiB plaintext blok cache'lenir ve blok değişince/sahip nesne bırakılınca zeroize edilir. Symphonia `MediaSource` arayüzü üzerinden seek edebilir. Çözülmüş kaynak ses için geçici dosya oluşturulmaz.
+
+Kapsayıcı ve codec decoder ile doğrulanır. Mevcut ASR filtresi WAVE, MP3, MP4/M4A, AAC, OGG/Vorbis, FLAC ve AIFF/AIF biçim uzantılarını kabul eder; OPUS ve WMA listede yoktur. Desteklenmeyen decoder, değişken kanal/sample-rate paketi, bozuk veya GCM doğrulaması başarısız blok sessizce atlanmaz; görev hata ile durur.
+
+Giriş 16 kHz değilse sherpa-onnx `LinearResampler` kullanılır. Çok kanallı sesler otomatik kişi kimliğiyle birleştirilmez; her kanal kendi mono stream'i olarak yürütülür ve `Kanal 1`, `Kanal 2` etiketini alır. Bu kanal ayrımı speaker diarization veya insan kimliği değildir.
+
+## Transkript anlamı
+
+- Her ASR sonucu `source=asr`, `status=taslak` olarak yazılır.
+- Üretim segmentleri modelin endpoint/akış blok sınırlarından zaman aralığı alır. Kelime düzeyinde forced alignment yoktur; zaman kodu kelime başlangıcı olarak sunulmaz.
+- Ham model metnine otomatik noktalama, özel isim, tarih/sayı, kısaltma veya Türkçe ek düzeltmesi uygulanmaz.
+- Kullanıcının düzenlediği segment `source=uzman` olarak etiketlenir. Tekrar ASR, yalnızca eski/düzeltilmemiş `source=asr` taslaklarını yeniler; uzman düzenlemeleri korunur.
+- ASR otomatik olarak `uzman-onayli` durumuna geçmez. Anlaşılamayan ifade kullanıcı tarafından dinlenip belirsiz olarak işaretlenmelidir.
+
+## Bilinen eksikler / kabul kapıları
+
+1. Model card benchmark sayılarını MİHENK ölçümü olarak tekrar etmeyin. Kilitli açık/izinli korpus üzerinde WER/CER/KDHO, kritik isim/olumsuzluk/sayı hata analizi gerekir.
+2. Kayıt süresi boyunca CPU/RAM ve uzun kayıt performansı Windows/Linux üzerinde ölçülmelidir; CI şu anda gerçek 240 MiB ASR yük/RSS benchmark'ı değildir.
+3. CI'da Sherpa 2.0.1 Linux/Windows static native arşivleri GitHub Release API'de yayımlanan SHA-256 digest değerleriyle indirilip doğrulanır. Yerel geliştirici build'leri de aynı sürüm arşivini indirip manifestteki digest ile doğrulayarak `SHERPA_ONNX_ARCHIVE_DIR` üzerinden vermelidir; genel yayın zincirinde ek attestation ve SBOM kanıtı gerekir.
+4. Linux CI, `MIHENK_SEDA_MODEL_SMOKE=1` ile uygulamanın kendi model kurucusunu çalıştırır; sabit revision'ın dört dosyasını indirir, üç ONNX ağırlığını hash/uzunlukla ve token dosyasını yapısal olarak doğrular, CPU recognizer'ı yükler ve sentetik sessizlikle bir streaming decode sonucu alır. Bu, gerçek konuşma WER/CER doğruluğunu veya adli performansı ölçmez.
+4. Decoder'ın desteklediği gerçek kapsayıcı/codec listesi dosya içeriğinden teknik envantere yazılmalı; uzantı listesi tek başına format ispatı değildir.
+5. Transkript model adı/revision/decoder ayarları, her segmentin kaynak kaydı ve uzman revizyon geçmişi tam görev verisi/rapor hattına bağlanmalıdır.
+6. Çökme sonrası kaldığı yerden devam eden iş kuyruğu, idempotent ASR job ledger ve gerçek offline E2E henüz tamamlanmamıştır.
+7. K-01..K-12 ve bilirkişi kabul pilotu açık kalır.
+
+Model kartı: https://huggingface.co/atasoglu/seda-v0.1
+Runtime dokümanı: https://docs.rs/sherpa-onnx/2.0.1/sherpa_onnx/
+Decoder dokümanı: https://docs.rs/symphonia/0.6.1/symphonia/
