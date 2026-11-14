@@ -738,6 +738,22 @@ mod tests {
 
         assert!(source.seek(SeekFrom::Current(-((plaintext.len() as i64) + 1))).is_err());
         drop(source);
+
+        // Exercise the same read-back verifier against a real encrypted,
+        // multi-chunk vault fixture rather than only an in-memory plaintext.
+        let mut readback = open_vault_audio_reader(
+            &root,
+            &session.file_id,
+            session.size_bytes,
+            &session.nonce_prefix,
+            &session.key,
+        ).unwrap();
+        let expected_sha256 = format_sha256(&Sha256::digest(&plaintext));
+        assert_eq!(
+            verify_reader_sha256(&mut readback, session.size_bytes, &expected_sha256).unwrap(),
+            expected_sha256,
+        );
+        drop(readback);
         fs::remove_dir_all(root).unwrap();
     }
 
