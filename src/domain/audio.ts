@@ -12,7 +12,7 @@ export interface TranscriptSegment {
 export type HashState = "bekliyor" | "hesaplaniyor" | "hesaplandi" | "buyuk-dosya" | "desteklenmiyor" | "hata";
 
 import type { VaultAudioMetadata } from "./vault";
-import { Sha256 } from "./sha256";
+import { Sha256 } from "./sha256.ts";
 
 export interface AudioRecord {
   id: string;
