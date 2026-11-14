@@ -5,6 +5,7 @@ import {
   assertUniqueAssignmentName,
   createAssignmentRecord,
   filterByAssignment,
+  hasAssignmentProfileChanges,
   normalizeAssignmentName,
   normalizeAssignmentProfile,
   normalizeDateField,
@@ -107,4 +108,32 @@ test("atama profilindeki satır sonları korunur; kontrol karakterleri reddedili
     name: first.name, localReference: "", authority: "", appointedAt: "", dueAt: "",
     scope: "geçersiz\u0001veri", questions: [],
   }), /kontrol karakteri/);
+});
+
+
+test("aynı çok satırlı görev profili kirli sayılmaz; soru değişikliği kirli sayılır", () => {
+  const current = normalizeAssignmentProfile(first, {
+    name: "Dosya A",
+    localReference: "REF-01",
+    authority: "Örnek Mahkemesi",
+    appointedAt: "2026-11-01",
+    dueAt: "2026-12-01",
+    scope: "Ses kaydı",
+    questions: ["İlk soru?", "İkinci soru?"],
+  });
+  const draft = {
+    name: current.name,
+    localReference: current.localReference,
+    authority: current.authority,
+    appointedAt: current.appointedAt,
+    dueAt: current.dueAt,
+    scope: current.scope,
+    questionsText: current.questions.join("\n"),
+  };
+
+  assert.equal(hasAssignmentProfileChanges(current, draft), false);
+  assert.equal(hasAssignmentProfileChanges(current, {
+    ...draft,
+    questionsText: "İlk soru?\nDeğişen ikinci soru?",
+  }), true);
 });
