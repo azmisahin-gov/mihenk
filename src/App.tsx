@@ -1633,7 +1633,9 @@ export default function App() {
                           </button>
                           <span className={`segment-source ${segment.source === "asr" ? "machine" : "expert"}`}>
                             {segment.source === "asr"
-                              ? (segment.revisions?.length ? "MAKİNE TASLAĞI · UZMAN DÜZENLEDİ" : "MAKİNE TASLAĞI")
+                              ? (segment.status === "uzman-onayli"
+                                  ? "MAKİNE KAYNAKLI · UZMAN ONAYLI"
+                                  : (segment.revisions?.length ? "MAKİNE TASLAĞI · UZMAN DÜZENLEDİ" : "MAKİNE TASLAĞI"))
                               : "UZMAN"}
                           </span>
                           <span className="segment-number">
@@ -1665,7 +1667,7 @@ export default function App() {
                           rows={3}
                           aria-label={`${formatTime(segment.startSeconds)} zamanındaki transkript`}
                         />
-                        {segment.rawAsrText !== undefined && segment.rawAsrText !== segment.text && (
+                        {segment.rawAsrText !== undefined && (
                           <details className="segment-audit-details">
                             <summary>Ham ASR metni · değiştirilemez kaynak</summary>
                             <p>{segment.rawAsrText || "Boş ASR çıktısı"}</p>
