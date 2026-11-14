@@ -717,3 +717,66 @@ audio { width: 100%; height: 34px; }
   outline-offset: 4px;
   border-radius: 6px;
 }
+
+
+/* Transkript inceleme kuyruğu filtreleri */
+.transcript-review-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 8px;
+  border: 1px solid #e7ece8;
+  border-radius: 8px;
+  background: #fafcfb;
+}
+.transcript-review-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  border: 1px solid #e4eae5;
+  border-radius: 6px;
+  padding: 5px 9px;
+  color: #6e7e73;
+  background: #fff;
+  font: inherit;
+  font-size: 9px;
+  cursor: pointer;
+}
+.transcript-review-filters button:hover {
+  border-color: #cbd9ce;
+  background: #f6faf7;
+}
+.transcript-review-filters button.selected {
+  border-color: #a9c2b0;
+  color: #3f674c;
+  background: #edf5ef;
+  font-weight: 700;
+}
+.transcript-review-filters button small {
+  display: inline-grid;
+  min-width: 18px;
+  min-height: 18px;
+  place-items: center;
+  border-radius: 10px;
+  padding: 0 4px;
+  color: #748379;
+  background: #f0f3f0;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.transcript-review-filters button.selected small {
+  color: #426c50;
+  background: #dcebe0;
+}
+.transcript-filter-empty {
+  margin: 0 0 12px;
+  border: 1px dashed #dce5de;
+  border-radius: 7px;
+  padding: 12px;
+  color: #87958c;
+  background: #fbfcfb;
+  font-size: 10px;
+  text-align: center;
+}
