@@ -18,6 +18,7 @@ MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda
 - Kaynak kanalını anonim konuşmacı etiketinden ayrı tutan; konuşma, kısmen anlaşılmayan konuşma, anlaşılmayan konuşma, vokalizasyon ve çevresel ses anotasyonlarını destekleyen segment modeli.
 - Şifreli kasa yedeği ve geri yükleme; toplam 2 GiB ve tek dosya 256 MiB sınırı.
 - Atama profili ve transkript değişikliklerini kasada otomatik kaydetme.
+- Görevler, ses çalışma alanı, transkriptler ve raporlar arasında çalışan klavye erişilebilir bölüm gezinmesi.
 - Görev sorularına ayrı uzman yanıtı ve görev içindeki transkript segmentlerine dayanak bağlantısı; DOCX/ODT taslaklarında yanıtsız soru, eksik dayanak, kontrol edilmemiş segment ve insan onayı kalite kontrol listesi.
 
 ## ASR sınırları ve kabul durumu
