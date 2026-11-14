@@ -40,6 +40,8 @@ jobs:
             "fix/tauri-imza-bom-temizligi"
             "fix/yayin-surum-env"
             "fix/retain-published-preview"
+            "test/verify-assignment-workspaces"
+            "test/verify-workspace-final-head"
           )
 
           for branch in "${STALE_BRANCHES[@]}"; do
