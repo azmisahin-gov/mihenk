@@ -257,6 +257,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             audio_playback::open_audio_playback_session,
+            audio_playback::verify_stored_audio_copy_command,
             audio_playback::close_audio_playback_session,
             audio_playback::clear_audio_playback_sessions,
             vault_backup::export_local_vault_backup,

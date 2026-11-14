@@ -511,6 +511,24 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
     });
     renamed = true;
 
+    const readbackKey = Array.from(rawKey);
+    const readbackNonce = Array.from(noncePrefix);
+    try {
+      const verifiedSha256 = await invoke<string>("verify_stored_audio_copy_command", {
+        fileId,
+        sizeBytes: file.size,
+        noncePrefix: readbackNonce,
+        rawKey: readbackKey,
+        expectedSha256: sourceSha256,
+      });
+      if (verifiedSha256 !== sourceSha256) {
+        throw new Error("Şifreli ses kopyasının SHA-256 doğrulaması başarısız.");
+      }
+    } finally {
+      readbackKey.fill(0);
+      readbackNonce.fill(0);
+    }
+
     const metadata: VaultAudioMetadata = {
       fileId,
       assignmentId,
