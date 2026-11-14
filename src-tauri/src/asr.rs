@@ -630,6 +630,56 @@ mod tests {
     use std::io::Write;
 
     #[test]
+    fn downloads_pinned_seda_model_and_runs_local_cpu_smoke_when_enabled() {
+        if std::env::var("MIHENK_SEDA_MODEL_SMOKE").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let app_data_dir = std::env::temp_dir().join(format!(
+            "mihenk-seda-runtime-smoke-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&app_data_dir).unwrap();
+
+        let result = (|| -> Result<(), String> {
+            let status = install_seda_model(&app_data_dir)?;
+            if !status.installed {
+                return Err("SEDA model kurulum smoke testi başarısız.".into());
+            }
+
+            let recognizer = create_recognizer(&model_dir(&app_data_dir))?;
+            let stream = recognizer.create_stream();
+
+            // Public CI uses synthetic silence only; no evidentiary audio is involved.
+            let mut synthetic_audio = vec![0.0f32; 16_000];
+            stream.accept_waveform(16_000, &synthetic_audio);
+            synthetic_audio.zeroize();
+
+            let mut final_padding = vec![0.0f32; 16_000];
+            stream.accept_waveform(16_000, &final_padding);
+            final_padding.zeroize();
+            stream.input_finished();
+
+            while recognizer.is_ready(&stream) {
+                recognizer.decode(&stream);
+            }
+            let _ = recognizer.get_result(&stream);
+            Ok(())
+        })();
+
+        let cleanup = fs::remove_dir_all(&app_data_dir);
+        if let Err(error) = result {
+            let _ = cleanup;
+            panic!("SEDA yerel inference smoke testi başarısız: {error}");
+        }
+        cleanup.unwrap();
+    }
+
+    #[test]
     fn manifest_pins_apache_model_revision_and_excludes_optional_lm() {
         assert_eq!(SEDA_MODEL_ID, "atasoglu/seda-v0.1");
         assert_eq!(SEDA_MODEL_REVISION, "b5cf32ae4936968b284df3f1c4c79714af71e1fe");
