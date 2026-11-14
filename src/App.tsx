@@ -11,7 +11,7 @@ import {
 } from "./domain/audio";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
 import { buildDocxReport, buildOdtReport } from "./domain/report";
-import { resolveActiveAssignment, type AssignmentProfileInput } from "./domain/assignment";
+import { hasAssignmentProfileChanges, resolveActiveAssignment, type AssignmentProfileInput } from "./domain/assignment";
 import {
   createLocalVault,
   createVaultAssignment,
@@ -228,15 +228,9 @@ export default function App() {
     });
   }, [activeAssignmentId]);
 
-  const assignmentProfileDirty = Boolean(activeAssignment && (
-    assignmentProfileDraft.name !== activeAssignment.name ||
-    assignmentProfileDraft.localReference !== activeAssignment.localReference ||
-    assignmentProfileDraft.authority !== activeAssignment.authority ||
-    assignmentProfileDraft.appointedAt !== activeAssignment.appointedAt ||
-    assignmentProfileDraft.dueAt !== activeAssignment.dueAt ||
-    assignmentProfileDraft.scope !== activeAssignment.scope ||
-    assignmentProfileDraft.questionsText !== activeAssignment.questions.join("\\n")
-  ));
+  const assignmentProfileDirty = Boolean(
+    activeAssignment && hasAssignmentProfileChanges(activeAssignment, assignmentProfileDraft),
+  );
 
   const activeRecord = useMemo(
     () => assignmentRecords.find((record) => record.id === activeId) ?? null,
