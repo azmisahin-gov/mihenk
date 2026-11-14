@@ -84,6 +84,13 @@ fn is_interrupted_audio_part_name(name: &str) -> bool {
 }
 
 fn cleanup_interrupted_audio_imports(materials_dir: &Path) -> std::io::Result<usize> {
+    cleanup_interrupted_audio_imports_older_than(materials_dir, ORPHAN_IMPORT_MIN_AGE)
+}
+
+fn cleanup_interrupted_audio_imports_older_than(
+    materials_dir: &Path,
+    minimum_age: Duration,
+) -> std::io::Result<usize> {
     match fs::symlink_metadata(materials_dir) {
         Ok(metadata) if metadata.file_type().is_dir() => {}
         Ok(_) => {
@@ -119,7 +126,7 @@ fn cleanup_interrupted_audio_imports(materials_dir: &Path) -> std::io::Result<us
             Err(_) => continue,
         };
         let age = SystemTime::now().duration_since(modified).unwrap_or_default();
-        if age >= ORPHAN_IMPORT_MIN_AGE {
+        if age >= minimum_age {
             fs::remove_file(path)?;
             removed += 1;
         }
@@ -185,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn removes_only_regular_partial_import_files() {
+    fn removes_only_generated_partial_import_files() {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -197,21 +204,33 @@ mod tests {
         fs::create_dir_all(&directory).unwrap();
         let part = directory.join("0123456789abcdef0123456789abcdef.part");
         let encrypted = directory.join("0123456789abcdef0123456789abcdef.mhn");
-        let recent_part = directory.join("abcdef0123456789abcdef0123456789.part");
         fs::write(&part, b"partial").unwrap();
         fs::write(&encrypted, b"encrypted").unwrap();
-        fs::write(&recent_part, b"active-or-recent").unwrap();
-        let stale_time = SystemTime::now() - ORPHAN_IMPORT_MIN_AGE - Duration::from_secs(1);
-        fs::File::open(&part)
-            .unwrap()
-            .set_times(fs::FileTimes::new().set_modified(stale_time))
-            .unwrap();
 
-        let result = cleanup_interrupted_audio_imports(&directory);
+        let result = cleanup_interrupted_audio_imports_older_than(&directory, Duration::ZERO);
         assert_eq!(result.unwrap(), 1);
         assert!(!part.exists());
         assert!(encrypted.exists());
-        assert!(recent_part.exists());
+        fs::remove_dir_all(&directory).unwrap();
+    }
+
+    #[test]
+    fn preserves_recent_partial_import_files() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "mihenk-recent-part-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let part = directory.join("abcdef0123456789abcdef0123456789.part");
+        fs::write(&part, b"active-or-recent").unwrap();
+
+        let result = cleanup_interrupted_audio_imports(&directory);
+        assert_eq!(result.unwrap(), 0);
+        assert!(part.exists());
         fs::remove_dir_all(&directory).unwrap();
     }
 }
