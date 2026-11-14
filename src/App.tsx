@@ -463,6 +463,10 @@ export default function App() {
     }
   }
 
+  function updateAssignmentProfileField(field: keyof AssignmentProfileDraft, value: string): void {
+    setAssignmentProfileDraft((draft) => ({ ...draft, [field]: value }));
+  }
+
   async function saveAssignmentProfile(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!activeAssignment || assignmentProfileBusy) return;
@@ -1119,40 +1123,40 @@ export default function App() {
                 <label className="assignment-profile-wide">
                   <span>Görev alanı adı</span>
                   <input required maxLength={100} value={assignmentProfileDraft.name}
-                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, name: event.currentTarget.value }))} />
+                    onChange={(event) => updateAssignmentProfileField("name", event.currentTarget.value)} />
                 </label>
                 <label>
                   <span>Yerel dosya referansı</span>
                   <input maxLength={160} value={assignmentProfileDraft.localReference}
-                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, localReference: event.currentTarget.value }))}
+                    onChange={(event) => updateAssignmentProfileField("localReference", event.currentTarget.value)}
                     placeholder="Cihaz içinde kullanacağınız kısa referans" />
                 </label>
                 <label>
                   <span>Atama mercii</span>
                   <input maxLength={240} value={assignmentProfileDraft.authority}
-                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, authority: event.currentTarget.value }))}
+                    onChange={(event) => updateAssignmentProfileField("authority", event.currentTarget.value)}
                     placeholder="Mahkeme / savcılık / kurum" />
                 </label>
                 <label>
                   <span>Görevlendirme tarihi</span>
                   <input type="date" value={assignmentProfileDraft.appointedAt}
-                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, appointedAt: event.currentTarget.value }))} />
+                    onChange={(event) => updateAssignmentProfileField("appointedAt", event.currentTarget.value)} />
                 </label>
                 <label>
                   <span>Rapor için son tarih</span>
                   <input type="date" value={assignmentProfileDraft.dueAt}
-                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, dueAt: event.currentTarget.value }))} />
+                    onChange={(event) => updateAssignmentProfileField("dueAt", event.currentTarget.value)} />
                 </label>
                 <label className="assignment-profile-wide">
                   <span>İnceleme kapsamı / görevin konusu</span>
                   <textarea rows={2} maxLength={4000} value={assignmentProfileDraft.scope}
-                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, scope: event.currentTarget.value }))}
+                    onChange={(event) => updateAssignmentProfileField("scope", event.currentTarget.value)}
                     placeholder="Görevlendirme yazısında belirtilen inceleme kapsamını kendi notunuz olarak girin." />
                 </label>
                 <label className="assignment-profile-wide">
                   <span>Yanıtlanacak sorular (her satıra bir soru)</span>
                   <textarea rows={4} maxLength={40000} value={assignmentProfileDraft.questionsText}
-                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, questionsText: event.currentTarget.value }))}
+                    onChange={(event) => updateAssignmentProfileField("questionsText", event.currentTarget.value)}
                     placeholder="1. ...&#10;2. ..." />
                 </label>
               </div>
