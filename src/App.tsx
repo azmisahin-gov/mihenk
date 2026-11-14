@@ -36,6 +36,7 @@ import {
   saveStoredAudioMetadata,
   getSedaModelStatus,
   installSedaModel,
+  getStoredAudioWaveform,
   transcribeStoredAudio,
   type SedaModelStatus,
   unlockLocalVault,
@@ -170,6 +171,9 @@ export default function App() {
   const [sedaModelStatus, setSedaModelStatus] = useState<SedaModelStatus | null>(null);
   const [sedaInstalling, setSedaInstalling] = useState(false);
   const [asrBusyRecordId, setAsrBusyRecordId] = useState<string | null>(null);
+  const [waveformLoadingId, setWaveformLoadingId] = useState<string | null>(null);
+  const [waveformErrorId, setWaveformErrorId] = useState<string | null>(null);
+  const [waveformRetry, setWaveformRetry] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
@@ -1159,6 +1163,48 @@ export default function App() {
   }
 
   const activeDuration = activeRecord?.durationSeconds ?? 0;
+
+  useEffect(() => {
+    const metadata = activeRecord?.vaultMetadata;
+    if (
+      vaultState !== "unlocked" ||
+      !activeRecord ||
+      !metadata ||
+      metadata.waveformPeaks?.length === 512 ||
+      waveformErrorId === activeRecord.id
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const recordId = activeRecord.id;
+    setWaveformLoadingId(recordId);
+    setWaveformErrorId(null);
+    void getStoredAudioWaveform(metadata)
+      .then((peaks) => {
+        if (cancelled) return;
+        updateRecord(recordId, (record) => ({
+          ...record,
+          vaultMetadata: record.vaultMetadata
+            ? { ...record.vaultMetadata, waveformPeaks: peaks }
+            : record.vaultMetadata,
+        }));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setWaveformErrorId(recordId);
+        setNotice(error instanceof Error
+          ? `Dalga biçimi çözümlenemedi: ${error.message}`
+          : "Dalga biçimi çözümlenemedi; kaynak dosya ve codec desteğini kontrol edin.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWaveformLoadingId((current) => current === recordId ? null : current);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [vaultState, activeRecord?.id, activeRecord?.vaultMetadata?.waveformPeaks, waveformErrorId, waveformRetry]);
 
   async function installAvailableUpdate(): Promise<void> {
     if (assignmentProfileDirty) {
