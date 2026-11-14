@@ -31,7 +31,7 @@ struct ModelAsset {
     name: &'static str,
     sha256: Option<&'static str>,
     max_bytes: u64,
-    exact_bytes: u64,
+    exact_bytes: Option<u64>,
 }
 
 const SEDA_ASSETS: [ModelAsset; 4] = [
@@ -39,25 +39,25 @@ const SEDA_ASSETS: [ModelAsset; 4] = [
         name: "encoder.int8.onnx",
         sha256: Some("2596861911cec5ca1de31adc12a7fc983d05395434f92239f4e007eeae3a5dcc"),
         max_bytes: MAX_MODEL_ASSET_BYTES,
-        exact_bytes: 70_487_305,
+        exact_bytes: Some(70_487_305),
     },
     ModelAsset {
         name: "decoder.onnx",
         sha256: Some("dc28b7ae3f5e67c0daa2d51886dae2ac8287a25333f46a363f3684b3cd1220c9"),
         max_bytes: 8 * 1024 * 1024,
-        exact_bytes: 2_093_081,
+        exact_bytes: Some(2_093_081),
     },
     ModelAsset {
         name: "joiner.int8.onnx",
         sha256: Some("b4d1cff7c410d14c85c143885954be09a6a4a076cd35d22aeba58655665582bb"),
         max_bytes: 2 * 1024 * 1024,
-        exact_bytes: 259_417,
+        exact_bytes: Some(259_417),
     },
     ModelAsset {
         name: "tokens.txt",
         sha256: None,
         max_bytes: TOKEN_FILE_MAX_BYTES,
-        exact_bytes: u64::MAX,
+        exact_bytes: None,
     },
 ];
 
@@ -141,7 +141,7 @@ fn verify_asset(path: &Path, asset: ModelAsset) -> Result<u64, String> {
     }
 
     let (sha256, length) = sha256_file(path, asset.max_bytes)?;
-    if length == 0 || (asset.exact_bytes != u64::MAX && length != asset.exact_bytes) {
+    if length == 0 || asset.exact_bytes.is_some_and(|expected| length != expected) {
         return Err(format!("Model dosyasının boyutu sabit manifest ile eşleşmiyor: {}", asset.name));
     }
     if let Some(expected) = asset.sha256 {
