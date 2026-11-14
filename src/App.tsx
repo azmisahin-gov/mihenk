@@ -1418,7 +1418,7 @@ export default function App() {
             <div className="stat-card">
               <span className="stat-label">TRANSKRİPT DURUMU</span>
               <strong>{assignmentRecords.reduce((sum, record) => sum + record.segments.length, 0)}</strong>
-              <span className="stat-foot">Elle eklenen bölümler</span>
+              <span className="stat-foot">Makine taslağı + uzman bölümleri</span>
             </div>
             <div className="stat-card engine-card">
               <span className="stat-label">YEREL ASR · SEDA v0.1</span>
@@ -1622,7 +1622,7 @@ export default function App() {
                       <div className="empty-transcript">
                         <span>¶</span>
                         <strong>Henüz transkript bölümü yok</strong>
-                        <p>Sesin istediğiniz konumunda durdurup “Bölüm ekle” düğmesini kullanın.</p>
+                        <p>SEDA taslağı oluşturun veya sesi dinleyip “Bölüm ekle” ile elle çalışın. Makine metni uzman incelemesi olmadan onaylanmaz.</p>
                       </div>
                     ) : activeRecord.segments.map((segment) => (
                       <article className="segment-card" key={segment.id}>
