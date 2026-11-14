@@ -169,7 +169,7 @@ async function readAssignments(
     if (!stored || stored.id !== id || typeof stored.name !== "string") {
       throw new Error("Kasa görev alanı kaydı eksik veya bozuk.");
     }
-    const assignment: AssignmentRecord = {
+    const base: AssignmentRecord = {
       id,
       name: normalizeAssignmentName(stored.name),
       localReference: typeof stored.localReference === "string" ? stored.localReference : "",
@@ -184,25 +184,22 @@ async function readAssignments(
       updatedAt: typeof stored.updatedAt === "string" ? stored.updatedAt : new Date(0).toISOString(),
     };
     if (
-      assignment.name !== stored.name ||
-      assignment.localReference !== stored.localReference ||
-      assignment.authority !== stored.authority ||
-      assignment.appointedAt !== stored.appointedAt ||
-      assignment.dueAt !== stored.dueAt ||
-      assignment.scope !== stored.scope ||
-      !Array.isArray(stored.questions) ||
-      !stored.createdAt ||
-      !stored.updatedAt
-    ) {
-      await writeJson(store, assignmentMetaKey(id), assignment);
-      migrated = true;
-    }
-    if (
-      !Number.isFinite(Date.parse(assignment.createdAt)) ||
-      !Number.isFinite(Date.parse(assignment.updatedAt))
+      !Number.isFinite(Date.parse(base.createdAt)) ||
+      !Number.isFinite(Date.parse(base.updatedAt))
     ) {
       throw new Error("Kasa görev alanı tarih bilgileri geçersiz.");
     }
+
+    const normalizedProfile = normalizeAssignmentProfile(base, base);
+    const assignment: AssignmentRecord = {
+      ...normalizedProfile,
+      updatedAt: base.updatedAt,
+    };
+    if (JSON.stringify(assignment) !== JSON.stringify(stored)) {
+      await writeJson(store, assignmentMetaKey(id), assignment);
+      migrated = true;
+    }
+
     assertUniqueAssignmentName(assignment.name, assignments);
     assignments.push(assignment);
   }
@@ -224,7 +221,7 @@ async function ensureAssignmentRecords(
 
   let assignments: AssignmentRecord[] = [];
   if (ids.length > 0) {
-    assignments = await readAssignments(store);
+    assignments = await readAssignments(store, stronghold);
   }
   if (assignments.length === 0) {
     const defaultAssignment = createAssignmentRecord(DEFAULT_ASSIGNMENT_NAME);
@@ -439,8 +436,14 @@ export async function updateVaultAssignment(
   const updated = normalizeAssignmentProfile(current, input);
   assertUniqueAssignmentName(updated.name, assignments, assignmentId);
   await writeJson(store, assignmentMetaKey(assignmentId), updated);
-  await stronghold.save();
-  return updated;
+  try {
+    await stronghold.save();
+    return updated;
+  } catch (error) {
+    await writeJson(store, assignmentMetaKey(assignmentId), current).catch(() => undefined);
+    await stronghold.save().catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
