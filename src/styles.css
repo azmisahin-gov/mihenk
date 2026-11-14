@@ -262,7 +262,7 @@ audio { width: 100%; height: 34px; }
   width: 100%; min-width: 0; height: 28px; border: 1px solid #e8ede9; border-radius: 5px;
   color: #66736b; background: #fff; padding: 0 6px; font-size: 8px;
 }
-.export-actions { display: flex; gap: 7px; border-top: 1px solid #edf1ed; padding: 11px 10px; }
+.export-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; border-top: 1px solid #edf1ed; padding: 11px 10px; }
 .export-actions button { flex: 1; padding: 9px 6px; font-size: 9px; }
 .export-json { background: #397b67; }
 .app-footer {
@@ -333,3 +333,121 @@ audio { width: 100%; height: 34px; }
 .vault-backup-button:hover:not(:disabled) { border-color:#8ca998; background:#e4efe6; }
 .vault-backup-button:disabled { opacity:.5; cursor:not-allowed; }
 .vault-restore-panel { margin-top:12px; }
+
+
+/* Görev alanı seçimi ve görev bazında yalıtılmış ses kuyruğu */
+.assignment-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, .9fr) minmax(300px, 1.1fr);
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.assignment-picker, .assignment-create { display: grid; gap: 6px; min-width: 0; }
+.assignment-picker label, .assignment-create label {
+  color: #7b8981;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+.assignment-picker select, .assignment-create input {
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #dce5de;
+  border-radius: 6px;
+  background: #fff;
+  color: #34463c;
+  font-size: 11px;
+}
+.assignment-picker small, .assignment-create small {
+  color: #909d95;
+  font-size: 8px;
+  line-height: 1.4;
+}
+.assignment-create > div {
+  display: flex;
+  gap: 7px;
+}
+.assignment-create input { flex: 1; }
+.assignment-create button { flex: 0 0 auto; padding: 8px 11px; font-size: 9px; }
+@media (max-width: 900px) {
+  .assignment-toolbar { grid-template-columns: 1fr; }
+}
+
+
+/* Atama profili formu — bilgiler yalnız şifreli yerel kasaya kaydedilir */
+.assignment-profile {
+  margin: 0 0 16px;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.assignment-profile-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.assignment-profile-heading > div { display: grid; gap: 4px; }
+.assignment-profile-heading strong { color: #405348; font-size: 11px; }
+.assignment-profile-heading span { color: #8a9890; font-size: 9px; }
+.assignment-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+.assignment-profile-grid label { display: grid; gap: 5px; min-width: 0; }
+.assignment-profile-grid label > span {
+  color: #718078;
+  font-size: 9px;
+  font-weight: 600;
+}
+.assignment-profile-grid input, .assignment-profile-grid textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dce5de;
+  border-radius: 6px;
+  padding: 8px 9px;
+  color: #34463c;
+  background: #fff;
+  font-size: 10px;
+  resize: vertical;
+}
+.assignment-profile-wide { grid-column: 1 / -1; }
+@media (max-width: 760px) {
+  .assignment-profile-grid { grid-template-columns: 1fr; }
+  .assignment-profile-heading { align-items: flex-start; flex-direction: column; }
+}
+
+
+.vault-save-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 20px;
+  padding: 6px 9px;
+  color: #68796f;
+  background: #f3f6f3;
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.vault-save-state.pending, .vault-save-state.saving {
+  color: #8a6b30;
+  background: #fbf5e8;
+}
+.vault-save-state.saved {
+  color: #39745e;
+  background: #eff6f1;
+}
+.vault-save-state.error {
+  color: #a33e35;
+  background: #fbedeb;
+}

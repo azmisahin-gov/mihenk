@@ -10,16 +10,21 @@ MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürüt
 
 ## Bu prototipte
 
+- Şifreli kasa içinde birden fazla yerel görev alanı oluşturma ve aralarında geçiş yapma.
+- Her ses kaydını seçili görev alanına bağlama; ses kuyruğu, transkript bölümleri ve sayaçları görev bazında filtreleme.
+- Eski kasalardaki görev kimliği bulunmayan sesleri, içerik ve anahtarları değiştirmeden varsayılan "Genel çalışma" alanına taşıma.
 - Birden fazla ses dosyasını belleğe alma ve listeleme.
 - HTML5 destekli yerel ses oynatma.
 - Oynatma konumunda zaman kodlu transkript bölümü ekleme.
 - Metin, başlangıç/bitiş zamanı, nötr konuşmacı etiketi ve kontrol durumunu elle düzenleme.
 - İşaretlenmiş bir transkript aralığını tekrar tekrar dinleme.
 - Space oynat/duraklat, sol/sağ ok 5 saniye sarma, Ctrl/⌘ + Enter bölüm ekleme kısayolları.
-- Düzenlenmiş taslağı TXT veya JSON olarak kullanıcının cihazına dışa aktarma.
+- Görev profili (yerel referans, atama mercii, tarihler, inceleme kapsamı ve sorular) bilgisini şifreli kasada saklama.
+- Görev ve kaynak bilgileriyle birlikte zaman kodlu TXT/JSON, DOCX ve ODT çalışma taslağı dışa aktarma.
+- Türkçe ASR adaylarını değerlendirmek için WER/CER metrik hesaplayıcısı; bu kod bir ASR motoru içermez ([değerlendirme planı](docs/ASR_MODEL_EVALUATION.md)).
 - Küçük dosyalarda tarayıcı içi SHA-256 ön kontrolü.
 
-**Henüz bağlı olmayanlar:** ASR motoru, kasa parolası kurtarma/sıfırlama, görev bazında yalıtım ve gerçek görev/rapor modeli, uzun dosyalarda akışlı hash ve UYAP/UDF entegrasyonu.
+**Henüz bağlı olmayanlar:** yerel ASR motoru, kasa parolası kurtarma/sıfırlama, resmi belge/OCR akışı, otomatik kayıt ve çökme sonrası kurtarma kabul testleri, PDF son çıktısı, 128 MiB üzerindeki sesler için güvenli düşük bellekli dinleme, uzun dosyalarda akışlı hash, doğrulanmış UYAP/UDF entegrasyonu ve temiz cihaz pilot kabulü.
 
 ## Güvenli kullanım sınırı
 
@@ -27,7 +32,7 @@ Yerel kasa önizlemesi, içe alınan sesleri cihazdaki Stronghold snapshot ve AE
 
 SHA-256 göstergesi yalnızca küçük dosyalardaki seçilmiş dosyanın ön kontrolüdür. Delil zinciri, teslim öncesi köken doğrulaması veya dosyanın özgünlüğü hakkında kanıt sayılmaz. 128 MiB üzerindeki dosyalarda bu prototip hash üretmez.
 
-**Gerçek dava/soruşturma materyalini bu önizlemede kullanmayın.** Gerçek materyalle kullanım için kasa parolası kurtarma, görev yalıtımı, tam arayüz ve geri yükleme testleri, bağımsız güvenlik incelemesi ve hukuk/veri koruma değerlendirmesi tamamlanmalıdır.
+**Görev alanı yalıtımı ilk düzeyde uygulanmıştır; bu tam atama profili veya vaka yönetimi değildir. Gerçek dava/soruşturma materyalini bu önizlemede kullanmayın.** Gerçek materyalle kullanım için resmî atama profili ve belge akışı, yerel ASR, büyük dosya/düşük bellek desteği, rapor çıktıları, kasa/çökme kurtarma kabul testleri, bağımsız güvenlik incelemesi ve hukuk/veri koruma değerlendirmesi tamamlanmalıdır.
 
 ## Geliştirme
 
@@ -82,7 +87,7 @@ README, issue, pull request başlık/açıklamaları ve commit mesajları Türk�
 
 ## Kurulum ve otomatik güncelleme
 
-> **Yayın durumu (13 Kasım 2026):** Kararlı sürüm henüz yoktur. GitHub Releases bölümündeki `draft` durumundaki kayıtlar halka açık indirme değildir; indirme sayfası yalnızca iki platformun paket ve açılış kontrolleri tamamlanıp yayımlanan sürümleri gösterir. Geliştirme önizlemeleri yalnızca sentetik veya kullanım izni bulunan test verisi içindir.
+> **Yayın durumu (14 Kasım 2026):** Kararlı sürüm henüz yoktur. Güncel geliştirme önizlemesi `0.1.0-22` olarak yayımlanmıştır; önizlemeler yalnızca sentetik veya kullanım izni bulunan test verisi içindir. GitHub Releases bölümündeki `draft` durumundaki kayıtlar halka açık indirme değildir.
 
 ### Hedeflenen kullanıcı indirmeleri
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   calculatePreviewHash,
   createSegment,
@@ -10,8 +10,13 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
+import { buildDocxReport, buildOdtReport } from "./domain/report";
+import { hasAssignmentProfileChanges, resolveActiveAssignment, type AssignmentProfileInput } from "./domain/assignment";
 import {
   createLocalVault,
+  createVaultAssignment,
+  updateVaultAssignment,
+  listAssignments,
   deleteStoredAudio,
   getVaultState,
   importAudioToVault,
@@ -23,6 +28,7 @@ import {
   exportLocalVaultBackup,
   restoreLocalVaultBackup,
   type VaultAudioMetadata,
+  type VaultAssignment,
   type VaultState,
 } from "./domain/vault";
 import { MAX_VAULT_BACKUP_BYTES } from "./domain/vault-backup";
@@ -44,10 +50,10 @@ function saveTextFile(fileName: string, content: string, mimeType: string): void
   window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
 }
 
-function saveBinaryFile(fileName: string, bytes: Uint8Array): void {
+function saveBinaryFile(fileName: string, bytes: Uint8Array, mimeType = "application/octet-stream"): void {
   const owned = new Uint8Array(bytes.byteLength);
   owned.set(bytes);
-  const blob = new Blob([owned.buffer], { type: "application/octet-stream" });
+  const blob = new Blob([owned.buffer], { type: mimeType });
   const downloadUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = downloadUrl;
@@ -59,6 +65,26 @@ function saveBinaryFile(fileName: string, bytes: Uint8Array): void {
   window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
   owned.fill(0);
 }
+
+interface AssignmentProfileDraft {
+  name: string;
+  localReference: string;
+  authority: string;
+  appointedAt: string;
+  dueAt: string;
+  scope: string;
+  questionsText: string;
+}
+
+const EMPTY_ASSIGNMENT_PROFILE: AssignmentProfileDraft = {
+  name: "",
+  localReference: "",
+  authority: "",
+  appointedAt: "",
+  dueAt: "",
+  scope: "",
+  questionsText: "",
+};
 
 function hashLabel(record: AudioRecord): string {
   switch (record.hashState) {
@@ -78,6 +104,11 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
 
 export default function App() {
   const [records, setRecords] = useState<AudioRecord[]>([]);
+  const [assignments, setAssignments] = useState<VaultAssignment[]>([]);
+  const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(null);
+  const [assignmentNameDraft, setAssignmentNameDraft] = useState("");
+  const [assignmentProfileDraft, setAssignmentProfileDraft] = useState<AssignmentProfileDraft>(EMPTY_ASSIGNMENT_PROFILE);
+  const [assignmentProfileBusy, setAssignmentProfileBusy] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [repeatSegmentId, setRepeatSegmentId] = useState<string | null>(null);
@@ -91,6 +122,7 @@ export default function App() {
   const [vaultPassword, setVaultPassword] = useState("");
   const [vaultPasswordConfirm, setVaultPasswordConfirm] = useState("");
   const [vaultBusy, setVaultBusy] = useState(false);
+  const [vaultSaveStatus, setVaultSaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [vaultError, setVaultError] = useState("");
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -100,6 +132,7 @@ export default function App() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const saveRevisionRef = useRef(0);
 
   useEffect(() => {
     recordsRef.current = records;
@@ -169,14 +202,44 @@ export default function App() {
     }
   }, []);
 
+  const assignmentRecords = useMemo(
+    () => records.filter((record) => record.vaultMetadata?.assignmentId === activeAssignmentId),
+    [records, activeAssignmentId],
+  );
+
+  const activeAssignment = useMemo(
+    () => assignments.find((assignment) => assignment.id === activeAssignmentId) ?? null,
+    [assignments, activeAssignmentId],
+  );
+
+  useEffect(() => {
+    if (!activeAssignment) {
+      setAssignmentProfileDraft(EMPTY_ASSIGNMENT_PROFILE);
+      return;
+    }
+    setAssignmentProfileDraft({
+      name: activeAssignment.name,
+      localReference: activeAssignment.localReference,
+      authority: activeAssignment.authority,
+      appointedAt: activeAssignment.appointedAt,
+      dueAt: activeAssignment.dueAt,
+      scope: activeAssignment.scope,
+      questionsText: activeAssignment.questions.join("\n"),
+    });
+  }, [activeAssignmentId]);
+
+  const assignmentProfileDirty = Boolean(
+    activeAssignment && hasAssignmentProfileChanges(activeAssignment, assignmentProfileDraft),
+  );
+
   const activeRecord = useMemo(
-    () => records.find((record) => record.id === activeId) ?? null,
-    [records, activeId],
+    () => assignmentRecords.find((record) => record.id === activeId) ?? null,
+    [assignmentRecords, activeId],
   );
 
   const totalDuration = useMemo(
-    () => records.reduce((total, record) => total + (record.durationSeconds ?? 0), 0),
-    [records],
+    () => assignmentRecords.reduce((total, record) => total + (record.durationSeconds ?? 0), 0),
+    [assignmentRecords],
   );
 
   useEffect(() => {
@@ -229,6 +292,9 @@ export default function App() {
   }, [activeRecord, currentTime]);
 
   async function restoreVaultRecords(): Promise<void> {
+    const availableAssignments = await listAssignments();
+    setAssignments(availableAssignments);
+    setActiveAssignmentId((current) => resolveActiveAssignment(availableAssignments, current));
     const stored = await listStoredAudio();
     const restored: AudioRecord[] = stored.map((metadata) => ({
       id: metadata.fileId,
@@ -263,13 +329,22 @@ export default function App() {
       }
     };
 
+    const revision = ++saveRevisionRef.current;
+    setVaultSaveStatus("saving");
     const queued = saveQueueRef.current.then(write, write);
     saveQueueRef.current = queued.catch(() => undefined);
-    await queued;
+    try {
+      await queued;
+      if (revision === saveRevisionRef.current) setVaultSaveStatus("saved");
+    } catch (error) {
+      if (revision === saveRevisionRef.current) setVaultSaveStatus("error");
+      throw error;
+    }
   }
 
   useEffect(() => {
     if (vaultState !== "unlocked" || records.length === 0) return;
+    setVaultSaveStatus("pending");
     const timeout = window.setTimeout(() => {
       void persistVaultRecords(records).catch((error) => {
         setNotice(error instanceof Error ? `Kasa kaydı yapılamadı: ${error.message}` : "Kasa kaydı yapılamadı.");
@@ -300,6 +375,7 @@ export default function App() {
       setVaultPassword("");
       setVaultPasswordConfirm("");
       setVaultState("unlocked");
+      setVaultSaveStatus("saved");
       setNotice(creating ? "Şifreli yerel kasa oluşturuldu." : "Yerel kasa açıldı.");
     } catch (error) {
       await lockLocalVault().catch(() => undefined);
@@ -313,6 +389,10 @@ export default function App() {
 
   async function lockVault(): Promise<void> {
     if (vaultState !== "unlocked" || vaultBusy) return;
+    if (assignmentProfileDirty) {
+      setNotice("Kasayı kilitlemeden önce görev profilindeki değişiklikleri kaydedin.");
+      return;
+    }
     setVaultBusy(true);
     setVaultState("locking");
     try {
@@ -323,6 +403,9 @@ export default function App() {
         if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
       }
       setRecords([]);
+      setVaultSaveStatus("idle");
+      setAssignments([]);
+      setActiveAssignmentId(null);
       setActiveId(null);
       setCurrentTime(0);
       setRepeatSegmentId(null);
@@ -360,6 +443,88 @@ export default function App() {
     }
   }
 
+
+  async function addAssignment(): Promise<void> {
+    if (assignmentProfileDirty) {
+      setNotice("Önce mevcut görev profilindeki değişiklikleri kaydedin.");
+      return;
+    }
+    const name = assignmentNameDraft.trim();
+    if (!name) {
+      setNotice("Yeni görev alanına kısa bir etiket verin.");
+      return;
+    }
+
+    try {
+      const created = await createVaultAssignment(name);
+      setAssignments((current) => [...current, created]);
+      setVaultSaveStatus("saved");
+      setActiveAssignmentId(created.id);
+      setAssignmentNameDraft("");
+      audioRef.current?.pause();
+      setActiveId(null);
+      setCurrentTime(0);
+      setRepeatSegmentId(null);
+      setNotice(`“${created.name}” görev alanı oluşturuldu. Yeni sesler yalnızca bu alana kaydedilecek.`);
+    } catch (error) {
+      setVaultSaveStatus("error");
+      setNotice(error instanceof Error ? error.message : "Görev alanı oluşturulamadı.");
+    }
+  }
+
+  function updateAssignmentProfileField(field: keyof AssignmentProfileDraft, value: string): void {
+    setAssignmentProfileDraft((draft) => ({ ...draft, [field]: value }));
+  }
+
+  async function saveAssignmentProfile(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!activeAssignment || assignmentProfileBusy) return;
+    setAssignmentProfileBusy(true);
+    try {
+      const input: AssignmentProfileInput = {
+        name: assignmentProfileDraft.name,
+        localReference: assignmentProfileDraft.localReference,
+        authority: assignmentProfileDraft.authority,
+        appointedAt: assignmentProfileDraft.appointedAt,
+        dueAt: assignmentProfileDraft.dueAt,
+        scope: assignmentProfileDraft.scope,
+        questions: assignmentProfileDraft.questionsText.split(/\r?\n/u),
+      };
+      const updated = await updateVaultAssignment(activeAssignment.id, input);
+      setAssignments((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setVaultSaveStatus("saved");
+      setAssignmentProfileDraft({
+        name: updated.name,
+        localReference: updated.localReference,
+        authority: updated.authority,
+        appointedAt: updated.appointedAt,
+        dueAt: updated.dueAt,
+        scope: updated.scope,
+        questionsText: updated.questions.join("\n"),
+      });
+      setNotice("Görev profili şifreli kasaya kaydedildi.");
+    } catch (error) {
+      setVaultSaveStatus("error");
+      setNotice(error instanceof Error ? error.message : "Görev profili kaydedilemedi.");
+    } finally {
+      setAssignmentProfileBusy(false);
+    }
+  }
+
+  function switchAssignment(assignmentId: string): void {
+    if (!assignments.some((assignment) => assignment.id === assignmentId)) return;
+    if (assignmentProfileDirty) {
+      setNotice("Görev değiştirilemedi. Önce mevcut görev profilini kaydedin.");
+      return;
+    }
+    audioRef.current?.pause();
+    setActiveAssignmentId(assignmentId);
+    setActiveId(null);
+    setCurrentTime(0);
+    setRepeatSegmentId(null);
+    setNotice("Görev alanı değiştirildi. Yalnızca seçili görevin kayıtları gösteriliyor.");
+  }
+
   function updateRecord(recordId: string, update: (record: AudioRecord) => AudioRecord): void {
     setRecords((current) => current.map((record) => (
       record.id === recordId ? update(record) : record
@@ -369,6 +534,10 @@ export default function App() {
   async function addFiles(fileList: FileList | File[]): Promise<void> {
     if (vaultState !== "unlocked") {
       setNotice("Ses eklemeden önce yerel kasayı açın.");
+      return;
+    }
+    if (!activeAssignmentId) {
+      setNotice("Ses eklemek için önce bir görev alanı oluşturun veya seçin.");
       return;
     }
 
@@ -385,7 +554,7 @@ export default function App() {
     for (const file of accepted) {
       try {
         setNotice(`“${file.name}” şifreli yerel kasaya alınıyor…`);
-        const imported = await importAudioToVault(file);
+        const imported = await importAudioToVault(file, activeAssignmentId);
         const hash = await calculatePreviewHash(file);
         const metadata: VaultAudioMetadata = {
           ...imported,
@@ -404,7 +573,7 @@ export default function App() {
         };
 
         setRecords((current) => [...current, record]);
-        if (records.length === 0 && addedCount === 0) {
+        if (assignmentRecords.length === 0 && addedCount === 0) {
           setActiveId(metadata.fileId);
           setCurrentTime(0);
         }
@@ -561,6 +730,10 @@ export default function App() {
   }
 
   async function createEncryptedBackup(): Promise<void> {
+    if (assignmentProfileDirty) {
+      setNotice("Yedek oluşturmadan önce görev profilindeki değişiklikleri kaydedin.");
+      return;
+    }
     if (vaultState !== "unlocked" || backupInputBusy) return;
     setBackupInputBusy(true);
     try {
@@ -614,7 +787,7 @@ export default function App() {
     if (!activeRecord) return;
     saveTextFile(
       `${safeFileStem(activeRecord.file.name)}_transkript_taslagi.txt`,
-      buildTranscriptText(activeRecord),
+      buildTranscriptText(activeRecord, activeAssignment),
       "text/plain;charset=utf-8",
     );
     setNotice("Transkript taslağı TXT olarak dışa aktarıldı.");
@@ -622,7 +795,7 @@ export default function App() {
 
   function exportJson(): void {
     if (!activeRecord) return;
-    const payload = buildTranscriptExport(activeRecord);
+    const payload = buildTranscriptExport(activeRecord, activeAssignment);
     saveTextFile(
       `${safeFileStem(activeRecord.file.name)}_transkript_taslagi.json`,
       JSON.stringify(payload, null, 2),
@@ -631,9 +804,50 @@ export default function App() {
     setNotice("Transkript taslağı JSON olarak dışa aktarıldı.");
   }
 
+  function exportReportInput() {
+    if (!activeRecord || !activeAssignment) {
+      setNotice("Rapor taslağı için görev alanı ve ses kaydı seçin.");
+      return null;
+    }
+    return {
+      assignment: activeAssignment,
+      source: {
+        fileName: activeRecord.vaultMetadata?.fileName ?? activeRecord.file.name,
+        mediaType: activeRecord.vaultMetadata?.mediaType ?? activeRecord.file.type,
+        sizeBytes: activeRecord.vaultMetadata?.sizeBytes ?? activeRecord.file.size,
+        durationSeconds: activeRecord.durationSeconds,
+        sha256Preview: activeRecord.vaultMetadata?.sha256Preview ?? activeRecord.sha256 ?? null,
+      },
+      segments: activeRecord.segments,
+    };
+  }
+
+  function exportDocx(): void {
+    const input = exportReportInput();
+    if (!input) return;
+    const fileName = safeFileStem(activeAssignment?.name ?? "gorev") + "_" +
+      safeFileStem(activeRecord?.file.name ?? "ses") + "_taslak.docx";
+    saveBinaryFile(fileName, buildDocxReport(input),
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    setNotice("DOCX çalışma taslağı oluşturuldu; imzasızdır ve resmî teslim değildir.");
+  }
+
+  function exportOdt(): void {
+    const input = exportReportInput();
+    if (!input) return;
+    const fileName = safeFileStem(activeAssignment?.name ?? "gorev") + "_" +
+      safeFileStem(activeRecord?.file.name ?? "ses") + "_taslak.odt";
+    saveBinaryFile(fileName, buildOdtReport(input), "application/vnd.oasis.opendocument.text");
+    setNotice("ODT çalışma taslağı oluşturuldu; imzasızdır ve resmî teslim değildir.");
+  }
+
   const activeDuration = activeRecord?.durationSeconds ?? 0;
 
   async function installAvailableUpdate(): Promise<void> {
+    if (assignmentProfileDirty) {
+      setNotice("Güncellemeden önce görev profilindeki değişiklikleri kaydedin.");
+      return;
+    }
     if (!availableUpdate || isPlaying || loadingRecordId !== null || vaultState !== "unlocked" || updateState === "installing") return;
     setUpdateState("installing");
     setUpdateProgress(0);
@@ -810,6 +1024,13 @@ export default function App() {
           </div>
           <div className="topbar-status">
             <span className="status-pill"><span className="status-dot" /> Cihaz içinde</span>
+            <span className={`vault-save-state ${vaultSaveStatus}`} role="status" aria-live="polite">
+              {vaultSaveStatus === "pending" ? "Kaydetme bekliyor"
+                : vaultSaveStatus === "saving" ? "Kaydediliyor…"
+                  : vaultSaveStatus === "saved" ? "Şifreli kasaya kaydedildi"
+                    : vaultSaveStatus === "error" ? "Kayıt hatası"
+                      : "Kayıt durumu bekleniyor"}
+            </span>
             <span className="prototype-pill">GELİŞTİRME ÖNİZLEMESİ</span>
             <button className="vault-backup-button" type="button" onClick={() => void createEncryptedBackup()} disabled={backupInputBusy || vaultBusy}>
               {backupInputBusy ? "Yedek hazırlanıyor…" : "Kasa yedeği indir"}
@@ -872,6 +1093,94 @@ export default function App() {
             />
           </div>
 
+          <div className="assignment-toolbar">
+            <div className="assignment-picker">
+              <label htmlFor="active-assignment">GÖREV ALANI</label>
+              <select
+                id="active-assignment"
+                value={activeAssignmentId ?? ""}
+                onChange={(event) => switchAssignment(event.currentTarget.value)}
+                disabled={assignments.length === 0}
+              >
+                {assignments.map((assignment) => (
+                  <option key={assignment.id} value={assignment.id}>{assignment.name}</option>
+                ))}
+              </select>
+              <small>Sesler ve transkriptler seçili görev alanında tutulur.</small>
+            </div>
+            <form className="assignment-create" onSubmit={(event) => { event.preventDefault(); void addAssignment(); }}>
+              <label htmlFor="new-assignment-name">YENİ GÖREV ALANI</label>
+              <div>
+                <input
+                  id="new-assignment-name"
+                  type="text"
+                  maxLength={100}
+                  value={assignmentNameDraft}
+                  onChange={(event) => setAssignmentNameDraft(event.currentTarget.value)}
+                  placeholder="Örn. Görev A / İnceleme 01"
+                  aria-label="Yeni görev alanı etiketi"
+                />
+                <button className="secondary-button" type="submit" disabled={!assignmentNameDraft.trim()}>Görev oluştur</button>
+              </div>
+              <small>Etikette kişi adı veya resmî dosya numarası kullanmayın.</small>
+            </form>
+          </div>
+
+          {activeAssignment && (
+            <form className="assignment-profile" onSubmit={(event) => void saveAssignmentProfile(event)}>
+              <div className="assignment-profile-heading">
+                <div>
+                  <strong>Görev / atama profili</strong>
+                  <span>Bu bilgiler yalnızca bu cihazdaki şifreli kasada saklanır. {assignmentProfileDirty ? "Kaydedilmemiş değişiklik var." : "Güncel."}</span>
+                </div>
+                <button className="primary-button" type="submit" disabled={assignmentProfileBusy || !assignmentProfileDirty}>
+                  {assignmentProfileBusy ? "Kaydediliyor…" : assignmentProfileDirty ? "Görev profilini kaydet" : "Profil kayıtlı"}
+                </button>
+              </div>
+              <div className="assignment-profile-grid">
+                <label className="assignment-profile-wide">
+                  <span>Görev alanı adı</span>
+                  <input required maxLength={100} value={assignmentProfileDraft.name}
+                    onChange={(event) => updateAssignmentProfileField("name", event.currentTarget.value)} />
+                </label>
+                <label>
+                  <span>Yerel dosya referansı</span>
+                  <input maxLength={160} value={assignmentProfileDraft.localReference}
+                    onChange={(event) => updateAssignmentProfileField("localReference", event.currentTarget.value)}
+                    placeholder="Cihaz içinde kullanacağınız kısa referans" />
+                </label>
+                <label>
+                  <span>Atama mercii</span>
+                  <input maxLength={240} value={assignmentProfileDraft.authority}
+                    onChange={(event) => updateAssignmentProfileField("authority", event.currentTarget.value)}
+                    placeholder="Mahkeme / savcılık / kurum" />
+                </label>
+                <label>
+                  <span>Görevlendirme tarihi</span>
+                  <input type="date" value={assignmentProfileDraft.appointedAt}
+                    onChange={(event) => updateAssignmentProfileField("appointedAt", event.currentTarget.value)} />
+                </label>
+                <label>
+                  <span>Rapor için son tarih</span>
+                  <input type="date" value={assignmentProfileDraft.dueAt}
+                    onChange={(event) => updateAssignmentProfileField("dueAt", event.currentTarget.value)} />
+                </label>
+                <label className="assignment-profile-wide">
+                  <span>İnceleme kapsamı / görevin konusu</span>
+                  <textarea rows={2} maxLength={4000} value={assignmentProfileDraft.scope}
+                    onChange={(event) => updateAssignmentProfileField("scope", event.currentTarget.value)}
+                    placeholder="Görevlendirme yazısında belirtilen inceleme kapsamını kendi notunuz olarak girin." />
+                </label>
+                <label className="assignment-profile-wide">
+                  <span>Yanıtlanacak sorular (her satıra bir soru)</span>
+                  <textarea rows={4} maxLength={40000} value={assignmentProfileDraft.questionsText}
+                    onChange={(event) => updateAssignmentProfileField("questionsText", event.currentTarget.value)}
+                    placeholder="1. ...&#10;2. ..." />
+                </label>
+              </div>
+            </form>
+          )}
+
           <div className="prototype-warning" role="status">
             <span className="warning-icon">i</span>
             <div>
@@ -887,8 +1196,8 @@ export default function App() {
           <div className="stats-row">
             <div className="stat-card">
               <span className="stat-label">KAYIT SAYISI</span>
-              <strong>{records.length}</strong>
-              <span className="stat-foot">Bu oturumda eklenen</span>
+              <strong>{assignmentRecords.length}</strong>
+              <span className="stat-foot">Seçili görev alanında</span>
             </div>
             <div className="stat-card">
               <span className="stat-label">TOPLAM SES SÜRESİ</span>
@@ -897,7 +1206,7 @@ export default function App() {
             </div>
             <div className="stat-card">
               <span className="stat-label">TRANSKRİPT DURUMU</span>
-              <strong>{records.reduce((sum, record) => sum + record.segments.length, 0)}</strong>
+              <strong>{assignmentRecords.reduce((sum, record) => sum + record.segments.length, 0)}</strong>
               <span className="stat-foot">Elle eklenen bölümler</span>
             </div>
             <div className="stat-card engine-card">
@@ -912,7 +1221,7 @@ export default function App() {
               <div className="panel-header">
                 <div>
                   <h2>Kayıt kuyruğu</h2>
-                  <p>{records.length} ses dosyası</p>
+                  <p>{assignmentRecords.length} ses dosyası</p>
                 </div>
                 <button className="icon-button" type="button" aria-label="Ses dosyası ekle" onClick={() => fileInputRef.current?.click()}>+</button>
               </div>
@@ -934,13 +1243,13 @@ export default function App() {
               </div>
 
               <div className="record-list">
-                {records.length === 0 ? (
+                {assignmentRecords.length === 0 ? (
                   <div className="empty-list">
                     <span className="empty-symbol">◌</span>
                     <strong>Henüz kayıt yok</strong>
                     <p>İlk ses dosyanızı ekleyerek başlayın.</p>
                   </div>
-                ) : records.map((record, index) => (
+                ) : assignmentRecords.map((record, index) => (
                   <div key={record.id} className={`record-item ${record.id === activeId ? "selected" : ""}`}>
                     <button className="record-select" type="button" onClick={() => {
                       void selectRecord(record.id);
@@ -960,7 +1269,7 @@ export default function App() {
               </div>
               <div className="queue-footer">
                 <span>Orijinaller bu prototipte değiştirilmez.</span>
-                <span>{records.length} kayıt · şifreli kasa</span>
+                <span>{assignmentRecords.length} kayıt · seçili görev</span>
               </div>
             </section>
 
@@ -981,7 +1290,7 @@ export default function App() {
                       <strong title={activeRecord.file.name}>{activeRecord.file.name}</strong>
                       <span>{activeRecord.vaultMetadata?.mediaType || activeRecord.file.type || "Ses biçimi tarayıcı tarafından bildirilmedi"} · {formatBytes(activeRecord.vaultMetadata?.sizeBytes ?? activeRecord.file.size)}</span>
                     </div>
-                    <span className="file-index">#{String(records.findIndex((item) => item.id === activeRecord.id) + 1).padStart(2, "0")}</span>
+                    <span className="file-index">#{String(assignmentRecords.findIndex((item) => item.id === activeRecord.id) + 1).padStart(2, "0")}</span>
                   </div>
 
                   <div className="audio-stage">
@@ -1156,6 +1465,8 @@ export default function App() {
                   </div>
                   <div className="export-actions">
                     <button className="secondary-button export-text" type="button" onClick={exportText}>TXT dışa aktar</button>
+                    <button className="secondary-button export-docx" type="button" onClick={exportDocx}>DOCX taslak</button>
+                    <button className="secondary-button export-odt" type="button" onClick={exportOdt}>ODT taslak</button>
                     <button className="primary-button export-json" type="button" onClick={exportJson}>JSON dışa aktar</button>
                   </div>
                 </>

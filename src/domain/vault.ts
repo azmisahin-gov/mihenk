@@ -12,6 +12,17 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { Stronghold } from "@tauri-apps/plugin-stronghold";
 import {
+  assertUniqueAssignmentName,
+  createAssignmentRecord,
+  isValidAssignmentId,
+  normalizeAssignmentName,
+  normalizeAssignmentProfile,
+  resolveStoredAssignmentId,
+  DEFAULT_ASSIGNMENT_NAME,
+  type AssignmentRecord,
+  type AssignmentProfileInput,
+} from "./assignment";
+import {
   MAX_VAULT_AUDIO_BYTES,
   VAULT_AUTH_TAG_BYTES,
   VAULT_CHUNK_SIZE,
@@ -40,6 +51,7 @@ const SALT_NAME = "stronghold.salt";
 const CLIENT_NAME = "mihenk-main";
 const STORE_META_KEY = "mihenk:vault:meta";
 const STORE_AUDIO_INDEX_KEY = "mihenk:vault:audio-index";
+const STORE_ASSIGNMENT_INDEX_KEY = "mihenk:vault:assignment-index";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -54,8 +66,11 @@ type StrongholdInstance = Awaited<ReturnType<typeof Stronghold.load>>;
 
 export type VaultState = "not-created" | "locked" | "unlocked";
 
+export type VaultAssignment = AssignmentRecord;
+
 export interface VaultAudioMetadata {
   fileId: string;
+  assignmentId: string;
   fileName: string;
   mediaType: string;
   sizeBytes: number;
@@ -137,8 +152,124 @@ async function writeJson(store: StoreLike, key: string, value: unknown): Promise
   await store.insert(key, encodeJson(value));
 }
 
+async function readAssignments(
+  store: StoreLike,
+  stronghold?: StrongholdInstance,
+): Promise<AssignmentRecord[]> {
+  const ids = await readJson<string[]>(store, STORE_ASSIGNMENT_INDEX_KEY);
+  if (!Array.isArray(ids) || new Set(ids).size !== ids.length) {
+    throw new Error("Kasa görev alanı listesi bozuk.");
+  }
+
+  const assignments: AssignmentRecord[] = [];
+  let migrated = false;
+  for (const id of ids) {
+    assertVaultAssignmentId(id);
+    const stored = await readJson<Partial<AssignmentRecord>>(store, assignmentMetaKey(id));
+    if (!stored || stored.id !== id || typeof stored.name !== "string") {
+      throw new Error("Kasa görev alanı kaydı eksik veya bozuk.");
+    }
+    const base: AssignmentRecord = {
+      id,
+      name: normalizeAssignmentName(stored.name),
+      localReference: typeof stored.localReference === "string" ? stored.localReference : "",
+      authority: typeof stored.authority === "string" ? stored.authority : "",
+      appointedAt: typeof stored.appointedAt === "string" ? stored.appointedAt : "",
+      dueAt: typeof stored.dueAt === "string" ? stored.dueAt : "",
+      scope: typeof stored.scope === "string" ? stored.scope : "",
+      questions: Array.isArray(stored.questions) && stored.questions.every((item) => typeof item === "string")
+        ? stored.questions
+        : [],
+      createdAt: typeof stored.createdAt === "string" ? stored.createdAt : new Date(0).toISOString(),
+      updatedAt: typeof stored.updatedAt === "string" ? stored.updatedAt : new Date(0).toISOString(),
+    };
+    if (
+      !Number.isFinite(Date.parse(base.createdAt)) ||
+      !Number.isFinite(Date.parse(base.updatedAt))
+    ) {
+      throw new Error("Kasa görev alanı tarih bilgileri geçersiz.");
+    }
+
+    const normalizedProfile = normalizeAssignmentProfile(base, base);
+    const assignment: AssignmentRecord = {
+      ...normalizedProfile,
+      updatedAt: base.updatedAt,
+    };
+    if (JSON.stringify(assignment) !== JSON.stringify(stored)) {
+      await writeJson(store, assignmentMetaKey(id), assignment);
+      migrated = true;
+    }
+
+    assertUniqueAssignmentName(assignment.name, assignments);
+    assignments.push(assignment);
+  }
+  if (migrated && stronghold) await stronghold.save();
+  return assignments;
+}
+/**
+ * Eski düz kayıt kasalarını varsayılan bir görev alanına taşır.
+ * Görev kimliği bulunmayan eski ses kayıtları bu alana bağlanır; içerikleri
+ * veya şifreleme anahtarları değiştirilmez.
+ */
+async function ensureAssignmentRecords(
+  stronghold: StrongholdInstance,
+  store: StoreLike,
+): Promise<AssignmentRecord[]> {
+  let changed = false;
+  let ids = await readJson<string[]>(store, STORE_ASSIGNMENT_INDEX_KEY);
+  if (!Array.isArray(ids)) ids = [];
+
+  let assignments: AssignmentRecord[] = [];
+  if (ids.length > 0) {
+    assignments = await readAssignments(store, stronghold);
+  }
+  if (assignments.length === 0) {
+    const defaultAssignment = createAssignmentRecord(DEFAULT_ASSIGNMENT_NAME);
+    await writeJson(store, assignmentMetaKey(defaultAssignment.id), defaultAssignment);
+    ids = [defaultAssignment.id];
+    await writeJson(store, STORE_ASSIGNMENT_INDEX_KEY, ids);
+    assignments = [defaultAssignment];
+    changed = true;
+  }
+
+  const defaultAssignment = assignments[0];
+  const audioIds = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
+  if (!Array.isArray(audioIds)) throw new Error("Kasa materyal listesi bozuk.");
+  const assignmentIds = new Set(assignments.map((assignment) => assignment.id));
+
+  for (const fileId of audioIds) {
+    assertVaultFileId(fileId);
+    const metadata = await readJson<(Omit<VaultAudioMetadata, "assignmentId"> & { assignmentId?: string })>(
+      store,
+      audioMetaKey(fileId),
+    );
+    if (!metadata) throw new Error("Kasa materyal listesinde kaydı bulunmayan dosya var.");
+
+    const resolvedAssignmentId = resolveStoredAssignmentId(
+      metadata.assignmentId,
+      [...assignmentIds],
+      defaultAssignment.id,
+    );
+    if (metadata.assignmentId !== resolvedAssignmentId) {
+      const migrated = { ...metadata, assignmentId: resolvedAssignmentId } as VaultAudioMetadata;
+      validateMetadata(migrated);
+      await writeJson(store, audioMetaKey(fileId), migrated);
+      changed = true;
+    } else {
+      validateMetadata(metadata as VaultAudioMetadata);
+    }
+  }
+
+  if (changed) await stronghold.save();
+  return assignments;
+}
+
 function audioMetaKey(fileId: string): string {
   return `mihenk:audio:meta:${fileId}`;
+}
+
+function assignmentMetaKey(assignmentId: string): string {
+  return `mihenk:assignment:meta:${assignmentId}`;
 }
 
 function audioKeyKey(fileId: string): string {
@@ -155,8 +286,15 @@ export function assertVaultFileId(fileId: string): void {
   }
 }
 
+export function assertVaultAssignmentId(assignmentId: string): void {
+  if (!isValidAssignmentId(assignmentId)) {
+    throw new Error("Görev alanı kimliği geçersiz.");
+  }
+}
+
 function validateMetadata(meta: VaultAudioMetadata): void {
   assertVaultFileId(meta.fileId);
+  assertVaultAssignmentId(meta.assignmentId);
   if (
     meta.formatVersion !== VAULT_FORMAT_VERSION ||
     !Number.isSafeInteger(meta.sizeBytes) ||
@@ -204,6 +342,9 @@ export async function createLocalVault(password: string): Promise<void> {
       audioChunkBytes: VAULT_CHUNK_SIZE,
     });
     await writeJson(store, STORE_AUDIO_INDEX_KEY, [] as string[]);
+    const defaultAssignment = createAssignmentRecord(DEFAULT_ASSIGNMENT_NAME);
+    await writeJson(store, assignmentMetaKey(defaultAssignment.id), defaultAssignment);
+    await writeJson(store, STORE_ASSIGNMENT_INDEX_KEY, [defaultAssignment.id]);
     await stronghold.save();
     activeStronghold = stronghold;
     activeStore = store;
@@ -234,6 +375,7 @@ export async function unlockLocalVault(password: string): Promise<void> {
     if (!Array.isArray(ids)) throw new Error("Kasa materyal listesi bozuk.");
     for (const fileId of ids) assertVaultFileId(fileId);
 
+    await ensureAssignmentRecords(stronghold, store);
     activeStronghold = stronghold;
     activeStore = store;
   } catch {
@@ -248,6 +390,60 @@ export async function lockLocalVault(): Promise<void> {
   await stronghold.unload();
   activeStronghold = null;
   activeStore = null;
+}
+
+export async function listAssignments(): Promise<VaultAssignment[]> {
+  return readAssignments(requireStore(), requireStronghold());
+}
+
+export async function createVaultAssignment(name: string): Promise<VaultAssignment> {
+  const store = requireStore();
+  const stronghold = requireStronghold();
+  const assignments = await readAssignments(store, stronghold);
+  const normalizedName = normalizeAssignmentName(name);
+  assertUniqueAssignmentName(normalizedName, assignments);
+  const assignment = createAssignmentRecord(normalizedName);
+  await writeJson(store, assignmentMetaKey(assignment.id), assignment);
+  try {
+    await writeJson(store, STORE_ASSIGNMENT_INDEX_KEY, [...assignments.map((item) => item.id), assignment.id]);
+    await stronghold.save();
+    return assignment;
+  } catch (error) {
+    await writeJson(store, STORE_ASSIGNMENT_INDEX_KEY, assignments.map((item) => item.id)).catch(() => undefined);
+    await store.remove(assignmentMetaKey(assignment.id)).catch(() => undefined);
+    await stronghold.save().catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function renameVaultAssignment(assignmentId: string, name: string): Promise<VaultAssignment> {
+  const currentAssignments = await listAssignments();
+  const current = currentAssignments.find((item) => item.id === assignmentId);
+  if (!current) throw new Error("Görev alanı bulunamadı.");
+  return updateVaultAssignment(assignmentId, { ...current, name });
+}
+
+export async function updateVaultAssignment(
+  assignmentId: string,
+  input: AssignmentProfileInput,
+): Promise<VaultAssignment> {
+  const store = requireStore();
+  const stronghold = requireStronghold();
+  assertVaultAssignmentId(assignmentId);
+  const assignments = await readAssignments(store, stronghold);
+  const current = assignments.find((item) => item.id === assignmentId);
+  if (!current) throw new Error("Görev alanı bulunamadı.");
+  const updated = normalizeAssignmentProfile(current, input);
+  assertUniqueAssignmentName(updated.name, assignments, assignmentId);
+  await writeJson(store, assignmentMetaKey(assignmentId), updated);
+  try {
+    await stronghold.save();
+    return updated;
+  } catch (error) {
+    await writeJson(store, assignmentMetaKey(assignmentId), current).catch(() => undefined);
+    await stronghold.save().catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
@@ -269,6 +465,10 @@ export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
 export async function saveStoredAudioMetadata(metadata: VaultAudioMetadata): Promise<void> {
   const store = requireStore();
   validateMetadata(metadata);
+  const assignments = await readAssignments(store, requireStronghold());
+  if (!assignments.some((assignment) => assignment.id === metadata.assignmentId)) {
+    throw new Error("Ses kaydının bağlı olduğu görev alanı bulunamadı.");
+  }
   if (!(await store.get(audioKeyKey(metadata.fileId)))) {
     throw new Error("Ses dosyasının kasa anahtarı bulunamadı.");
   }
@@ -276,9 +476,14 @@ export async function saveStoredAudioMetadata(metadata: VaultAudioMetadata): Pro
   await requireStronghold().save();
 }
 
-export async function importAudioToVault(file: File): Promise<VaultAudioMetadata> {
+export async function importAudioToVault(file: File, assignmentId: string): Promise<VaultAudioMetadata> {
   const store = requireStore();
   const stronghold = requireStronghold();
+  assertVaultAssignmentId(assignmentId);
+  const assignments = await readAssignments(store, stronghold);
+  if (!assignments.some((assignment) => assignment.id === assignmentId)) {
+    throw new Error("Ses dosyasının ekleneceği görev alanı bulunamadı.");
+  }
   if (file.size <= 0) throw new Error("Boş ses dosyası kasaya alınamaz.");
   if (file.size > MAX_VAULT_AUDIO_BYTES) {
     throw new Error("Bu önizlemede tek ses dosyası 128 MiB sınırını aşamaz.");
@@ -327,6 +532,7 @@ export async function importAudioToVault(file: File): Promise<VaultAudioMetadata
 
     const metadata: VaultAudioMetadata = {
       fileId,
+      assignmentId,
       fileName: file.name,
       mediaType: file.type || "application/octet-stream",
       sizeBytes: file.size,
