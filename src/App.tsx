@@ -1716,13 +1716,45 @@ export default function App() {
 
                   <div className="audio-stage">
                     <div className="stage-caption">
-                      <span>OYNATMA KONTROLÜ · TEMSİLİ SES GÖRSELİ</span>
+                      <span>DALGA BİÇİMİ · ŞİFRELİ KAYNAKTAN ÇÖZÜMLENDİ</span>
                       <span>{formatTime(currentTime)} / {formatTime(activeRecord.durationSeconds)}</span>
                     </div>
-                    <div className="wave-placeholder" aria-hidden="true" title="Temsili görsel; gerçek dalga formu hesaplanmıyor">
-                      {Array.from({ length: 72 }, (_, index) => (
-                        <span key={index} style={{ height: `${12 + ((index * 17 + 13) % 40)}%` }} />
-                      ))}
+                    <div
+                      className={`wave-placeholder real-waveform ${activeRecord.vaultMetadata?.waveformPeaks?.length === 512 ? "waveform-ready" : "waveform-pending"}`}
+                      role="img"
+                      aria-label={activeRecord.vaultMetadata?.waveformPeaks?.length === 512
+                        ? "Şifreli kaynak sesinden çözümlenen 512 noktalı dalga biçimi"
+                        : "Kaynak ses dalga biçimi henüz hazır değil"}
+                    >
+                      {activeRecord.vaultMetadata?.waveformPeaks?.length === 512
+                        ? activeRecord.vaultMetadata.waveformPeaks.map((peak, index) => (
+                            <span
+                              key={index}
+                              className={`waveform-bar ${index < Math.floor(
+                                activeDuration > 0 ? (currentTime / activeDuration) * 512 : 0,
+                              ) ? "played" : ""}`}
+                              style={{ height: `${Math.max(3, peak * 100)}%` }}
+                            />
+                          ))
+                        : (
+                            <div className="waveform-message" role="status">
+                              {waveformLoadingId === activeRecord.id
+                                ? "Şifreli kaynak çözülüyor ve dalga biçimi hesaplanıyor…"
+                                : waveformErrorId === activeRecord.id
+                                  ? "Dalga biçimi hesaplanamadı."
+                                  : "Dalga biçimi hazırlanıyor…"}
+                              {waveformErrorId === activeRecord.id && (
+                                <button
+                                  className="waveform-retry"
+                                  type="button"
+                                  onClick={() => {
+                                    setWaveformErrorId(null);
+                                    setWaveformRetry((current) => current + 1);
+                                  }}
+                                >Yeniden dene</button>
+                              )}
+                            </div>
+                          )}
                     </div>
                     <input
                       className="seek-slider"
