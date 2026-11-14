@@ -378,3 +378,50 @@ audio { width: 100%; height: 34px; }
 @media (max-width: 900px) {
   .assignment-toolbar { grid-template-columns: 1fr; }
 }
+
+
+/* Atama profili formu — bilgiler yalnız şifreli yerel kasaya kaydedilir */
+.assignment-profile {
+  margin: 0 0 16px;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.assignment-profile-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.assignment-profile-heading > div { display: grid; gap: 4px; }
+.assignment-profile-heading strong { color: #405348; font-size: 11px; }
+.assignment-profile-heading span { color: #8a9890; font-size: 9px; }
+.assignment-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+.assignment-profile-grid label { display: grid; gap: 5px; min-width: 0; }
+.assignment-profile-grid label > span {
+  color: #718078;
+  font-size: 9px;
+  font-weight: 600;
+}
+.assignment-profile-grid input, .assignment-profile-grid textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #dce5de;
+  border-radius: 6px;
+  padding: 8px 9px;
+  color: #34463c;
+  background: #fff;
+  font-size: 10px;
+  resize: vertical;
+}
+.assignment-profile-wide { grid-column: 1 / -1; }
+@media (max-width: 760px) {
+  .assignment-profile-grid { grid-template-columns: 1fr; }
+  .assignment-profile-heading { align-items: flex-start; flex-direction: column; }
+}
