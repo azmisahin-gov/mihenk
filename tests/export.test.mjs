@@ -52,7 +52,7 @@ test("TXT çıktısı zaman kodlarını, nötr konuşmacı etiketlerini ve belir
   assert.match(text, /MİHENK 56\.12/);
   assert.match(text, /ornek-kayit\.wav/);
   assert.match(text, /\[00:01 – 00:04\] Konuşmacı 1 \[BELİRSİZ\]: Örnek ifade/);
-  assert.match(text, /\[00:07\] Konuşmacı 2: \[Metin girilmedi\]/);
+  assert.match(text, /\[00:07\] Konuşmacı 2 \[TASLAK\]: \[Metin girilmedi\]/);
   assert.match(text, /Nihai bilirkişi transkripti/);
 });
 
@@ -97,6 +97,6 @@ test("TXT ve JSON çıktıları şifreli görev profilini ve kayıtlı kaynak me
   assert.match(text, /Örnek Mahkemesi/);
   assert.match(text, /Tarih nedir/);
   assert.match(text, /asıl-kayit\.wav/);
-  assert.match(text, /900 KB/);
+  assert.match(text, /879 KB/);
   assert.match(text, /Hash notu/);
 });
