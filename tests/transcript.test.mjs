@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  findActiveTranscriptSegmentId,
   mergeAsrTranscriptSegments,
   recordTranscriptEdit,
 } from "../src/domain/transcript.ts";
@@ -114,4 +115,31 @@ test("değişmeyen segment için gereksiz revizyon oluşturulmaz", () => {
 
   assert.equal(unchanged.revisions.length, 0);
   assert.equal(unchanged.rawAsrText, "yarın saat üç");
+});
+
+test("playback position resolves the matching transcript range in both directions", () => {
+  const segments = [
+    segment({ id: "one", startSeconds: 0, endSeconds: 2 }),
+    segment({ id: "two", startSeconds: 2, endSeconds: null }),
+  ];
+
+  assert.equal(findActiveTranscriptSegmentId(segments, 0), "one");
+  assert.equal(findActiveTranscriptSegmentId(segments, 1.99), "one");
+  assert.equal(findActiveTranscriptSegmentId(segments, 2), "two");
+  assert.equal(findActiveTranscriptSegmentId(segments, 12), "two");
+  assert.equal(findActiveTranscriptSegmentId(segments, -1), null);
+  assert.equal(findActiveTranscriptSegmentId(segments, Number.NaN), null);
+  assert.equal(findActiveTranscriptSegmentId([], 1), null);
+});
+
+test("playback mapping respects explicit segment end times and leaves gaps unselected", () => {
+  const segments = [
+    segment({ id: "first", startSeconds: 1, endSeconds: 2 }),
+    segment({ id: "second", startSeconds: 4, endSeconds: 5 }),
+  ];
+
+  assert.equal(findActiveTranscriptSegmentId(segments, 1.5), "first");
+  assert.equal(findActiveTranscriptSegmentId(segments, 3), null);
+  assert.equal(findActiveTranscriptSegmentId(segments, 4.5), "second");
+  assert.equal(findActiveTranscriptSegmentId(segments, 5), null);
 });
