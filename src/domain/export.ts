@@ -1,10 +1,15 @@
 import type { AudioRecord } from "./audio.ts";
-import { formatTime } from "./audio.ts";
+import { formatBytes, formatTime } from "./audio.ts";
+import type { AssignmentRecord } from "./assignment.ts";
 
 export interface TranscriptExport {
-  schemaVersion: "0.1";
+  schemaVersion: "0.2";
   prototype: true;
   exportedAt: string;
+  assignment?: Pick<
+    AssignmentRecord,
+    "name" | "localReference" | "authority" | "appointedAt" | "dueAt" | "scope" | "questions"
+  >;
   source: {
     fileName: string;
     mediaType: string;
@@ -16,32 +21,73 @@ export interface TranscriptExport {
   segments: AudioRecord["segments"];
 }
 
-export function buildTranscriptExport(record: AudioRecord): TranscriptExport {
+function sourceForExport(record: AudioRecord): TranscriptExport["source"] {
   return {
-    schemaVersion: "0.1",
+    fileName: record.vaultMetadata?.fileName ?? record.file.name,
+    mediaType: record.vaultMetadata?.mediaType ?? record.file.type ?? "bilinmiyor",
+    sizeBytes: record.vaultMetadata?.sizeBytes ?? record.file.size,
+    durationSeconds: record.durationSeconds ?? record.vaultMetadata?.durationSeconds ?? null,
+    sha256Preview: record.sha256 ?? record.vaultMetadata?.sha256Preview ?? null,
+  };
+}
+
+export function buildTranscriptExport(
+  record: AudioRecord,
+  assignment?: AssignmentRecord | null,
+): TranscriptExport {
+  return {
+    schemaVersion: "0.2",
     prototype: true,
     exportedAt: new Date().toISOString(),
-    source: {
-      fileName: record.file.name,
-      mediaType: record.file.type || "bilinmiyor",
-      sizeBytes: record.file.size,
-      durationSeconds: record.durationSeconds,
-      sha256Preview: record.sha256,
-    },
-    notice: "Bu çıktı prototip taslağıdır; doğrulanmış bilirkişi transkripti veya delil zinciri kaydı değildir.",
+    ...(assignment ? {
+      assignment: {
+        name: assignment.name,
+        localReference: assignment.localReference,
+        authority: assignment.authority,
+        appointedAt: assignment.appointedAt,
+        dueAt: assignment.dueAt,
+        scope: assignment.scope,
+        questions: [...assignment.questions],
+      },
+    } : {}),
+    source: sourceForExport(record),
+    notice: "Bu çıktı prototip çalışma taslağıdır; doğrulanmış bilirkişi transkripti, delil zinciri kaydı veya resmî teslim değildir.",
     segments: record.segments,
   };
 }
 
-export function buildTranscriptText(record: AudioRecord): string {
+export function buildTranscriptText(
+  record: AudioRecord,
+  assignment?: AssignmentRecord | null,
+): string {
+  const source = sourceForExport(record);
   const lines = [
     "MİHENK 56.12 — TRANSKRİPSİYON TASLAĞI",
     "Durum: Prototip / uzman kontrolü bekliyor",
-    `Kaynak dosya: ${record.file.name}`,
-    `Süre: ${formatTime(record.durationSeconds)}`,
-    `SHA-256 ön kontrolü: ${record.sha256 ?? "hesaplanmadı"}`,
+    ...(assignment ? [
+      "",
+      "GÖREV / ATAMA",
+      "Görev alanı: " + assignment.name,
+      "Yerel dosya referansı: " + (assignment.localReference || "Belirtilmedi"),
+      "Atama mercii: " + (assignment.authority || "Belirtilmedi"),
+      "Görevlendirme tarihi: " + (assignment.appointedAt || "Belirtilmedi"),
+      "Son tarih: " + (assignment.dueAt || "Belirtilmedi"),
+      "İnceleme kapsamı: " + (assignment.scope || "Belirtilmedi"),
+      "İnceleme soruları:",
+      ...(assignment.questions.length > 0
+        ? assignment.questions.map((question, index) => (index + 1) + ". " + question)
+        : ["Henüz girilmedi."]),
+    ] : []),
     "",
-    "NOT: Bu çıktı prototip taslağıdır. Nihai bilirkişi transkripti veya delil zinciri kaydı değildir.",
+    "KAYNAK SES",
+    "Kaynak dosya: " + source.fileName,
+    "Medya türü: " + source.mediaType,
+    "Dosya boyutu: " + formatBytes(source.sizeBytes),
+    "Süre: " + formatTime(source.durationSeconds),
+    "SHA-256 ön kontrolü: " + (source.sha256Preview ?? "hesaplanmadı"),
+    "Hash notu: Bu değer tek başına delil zinciri veya özgünlük kanıtı değildir.",
+    "",
+    "NOT: Bu çıktı prototip taslağıdır. Nihai bilirkişi transkripti, onaylı rapor veya resmî teslim kaydı değildir.",
     "",
   ];
 
@@ -50,9 +96,13 @@ export function buildTranscriptText(record: AudioRecord): string {
       ? " [BELİRSİZ]"
       : segment.status === "uzman-onayli"
         ? " [UZMAN KONTROLÜ]"
-        : "";
+        : " [TASLAK]";
     const content = segment.text.trim() || "[Metin girilmedi]";
-    lines.push(`[${formatTime(segment.startSeconds)}${segment.endSeconds === null ? "" : ` – ${formatTime(segment.endSeconds)}`}] ${segment.speaker}${status}: ${content}`);
+    lines.push(
+      "[" + formatTime(segment.startSeconds) +
+      (segment.endSeconds === null ? "" : " – " + formatTime(segment.endSeconds)) +
+      "] " + segment.speaker + status + ": " + content,
+    );
   }
 
   return lines.join("\n") + "\n";
