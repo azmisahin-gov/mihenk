@@ -9,7 +9,7 @@ Bu belge, 56.12 ses materyali kabulünün mevcut ilk aşamasındaki doğrulanabi
 - Her şifreli blok 1 MiB plaintext ve 16 byte GCM doğrulama etiketi taşır. Oynatma uç noktası Range yanıtlarını en fazla 1 MiB ile sınırlar ve her bloğu kimlik doğrulayarak çözer.
 - Tam kaynak dosya üst sınırı 240 MiB'dir. 128 MiB önceki sınır değildir artık; 240 MiB üstü dosyalar hâlâ açıkça reddedilir.
 - Şifreli kasa yedeği 64 KiB sabit IO tamponuyla akışlı okunur/yazılır. Tek arşiv girdisi 256 MiB, toplam yedek 2 GiB ile sınırlıdır. 240 MiB kaynak sesin şifreli dosyası, blok etiketleriyle birlikte 256 MiB tek-girdi sınırının altında kalır.
-- Uygulama başlangıcında yalnızca rastgele materyal kimliği biçimine uyan normal `*.part` dosyaları temizlenir. `.mhn` materyal dosyaları ve diğer dosyalar bu kurtarma adımında silinmez.
+- Uygulama başlangıcında yalnızca 24 saatten eski, rastgele materyal kimliği biçimine uyan normal `*.part` dosyaları temizlenir. Daha yeni `.part` dosyaları olası başka bir uygulama örneğinin etkin import işlemini bozmamak için korunur; yedekleme bunları materyal olarak içeri almaz. `.mhn` materyal dosyaları ve diğer dosyalar bu kurtarma adımında silinmez.
 
 Bu sınırlar, dosya boyutuna bağlı olmayan temel tamponlamayı (1 MiB ses girdisi, yaklaşık 1 MiB+16 byte şifreli blok, 1 MiB üst sınırında oynatma Range yanıtı ve 64 KiB yedek IO) korur. Gerçek RAM üst sınırı işletim sistemi/WebView, kripto çalışma alanları ve dosya sistemi tamponları tarafından da etkilenir; CI testi bu süreçlerin toplam RSS değerini ölçmez.
 
