@@ -587,9 +587,10 @@ export async function installSedaModel(): Promise<SedaModelStatus> {
   return invoke<SedaModelStatus>("install_seda_model_command");
 }
 
-export async function transcribeStoredAudio(metadata: VaultAudioMetadata): Promise<SedaTranscriptSegment[]> {
+export async function transcribeStoredAudio(metadata: VaultAudioMetadata, jobId: string): Promise<SedaTranscriptSegment[]> {
   const store = requireStore();
   validateMetadata(metadata);
+  if (!/^[a-f0-9]{32}$/.test(jobId)) throw new Error("ASR görev kimliği geçersiz.");
   const rawKey = await store.get(audioKeyKey(metadata.fileId));
   if (!rawKey || rawKey.byteLength !== 32) {
     rawKey?.fill(0);
@@ -603,6 +604,7 @@ export async function transcribeStoredAudio(metadata: VaultAudioMetadata): Promi
       noncePrefix: metadata.noncePrefix,
       rawKey: Array.from(rawKey),
       fileName: metadata.fileName,
+      jobId,
     });
   } finally {
     rawKey.fill(0);
