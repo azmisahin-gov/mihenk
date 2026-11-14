@@ -88,7 +88,7 @@ README, issue, pull request başlık/açıklamaları ve commit mesajları Türk�
 
 ## Kurulum ve otomatik güncelleme
 
-> **Yayın durumu (14 Kasım 2026):** Kararlı sürüm henüz yoktur. Güncel geliştirme önizlemesi `0.1.0-42` olarak yayımlanmıştır; önizlemeler yalnızca sentetik veya kullanım izni bulunan test verisi içindir. GitHub Releases bölümündeki `draft` durumundaki kayıtlar halka açık indirme değildir.
+> **Yayın durumu (14 Kasım 2026):** Kararlı sürüm henüz yoktur. Güncel geliştirme önizlemesi `0.1.0-44` olarak yayımlanmıştır; önizlemeler yalnızca sentetik veya kullanım izni bulunan test verisi içindir. GitHub Releases bölümündeki `draft` durumundaki kayıtlar halka açık indirme değildir.
 
 ### Hedeflenen kullanıcı indirmeleri
 
