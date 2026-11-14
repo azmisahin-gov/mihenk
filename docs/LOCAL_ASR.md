@@ -1,6 +1,6 @@
 # Yerel SEDA v0.1 transkripsiyon hattı
 
-**Durum: İlk dikey dilim kodlandı; platform CI ve sentetik okuyucu testleriyle doğrulama bekliyor. Bu belge uzman pilot kabulü değildir.**
+**Durum: İlk dikey dilim kodlandı; PR CI ve model/decoder yük testleri tamamlanmadan birleştirilmiş veya uzman pilotunda kabul edilmiş sayılmaz. Bu belge uzman pilot kabulü değildir.**
 
 ## Model manifesti
 
@@ -18,9 +18,9 @@
 | `encoder.int8.onnx` | SHA-256 `2596861911cec5ca1de31adc12a7fc983d05395434f92239f4e007eeae3a5dcc` |
 | `decoder.onnx` | SHA-256 `dc28b7ae3f5e67c0daa2d51886dae2ac8287a25333f46a363f3684b3cd1220c9` |
 | `joiner.int8.onnx` | SHA-256 `b4d1cff7c410d14c85c143885954be09a6a4a076cd35d22aeba58655665582bb` |
-| `tokens.txt` | Git blob SHA-1 `6ba58dd6a298eae17f7f1ac9a8e3ec714550926a` + 500 sıralı BPE token denetimi |
+| `tokens.txt` | Sabit commit revizyonundan alınır; UTF-8, tam 500 BPE satırı ve sıralı 0–499 token kimliği yapısal olarak denetlenir |
 
-ONNX dosyaları SHA-256 ile doğrulanır. Token dosyasının SHA-1 değeri, sabit Git blob nesne kimliğini denetlemek içindir; SHA-1 yeni bir kriptografik imza veya delil doğrulama mekanizması olarak kullanılmaz. Manifest isteğe bağlı `lm/` dosyalarını indirmez; bu dosyaların lisansı Apache-2.0 değildir.
+Üç ONNX ağırlığı, sabit Hugging Face commit'indeki LFS SHA-256 kimliği ve tam byte uzunluğuyla doğrulanır. Token dosyası için upstream commit sayfasında LFS SHA-256 yayımlanmadığından sahte/varsayımsal bir hash kullanılmaz; sabit commit adresi ve 500 satırlı token yapısı denetlenir. Bu, token dosyası için ONNX ağırlıklarındakiyle aynı SHA-256 güvencesi değildir. Manifest isteğe bağlı `lm/` dosyalarını indirmez.
 
 İlk model kurulumunda kullanıcı tek uygulamadaki Yerel ASR kartından indirmeyi başlatır. Her dosya 64 KiB tamponlarla geçici klasöre indirilir, boyut/hash/token yapısı kontrol edilir ve tamamı doğrulanmadan etkin model dizinine taşınmaz. Model dosyaları indirilince ASR çalıştırması yerel ONNX Runtime CPU yürütümüdür; transkripsiyon sırasında ses ağ üzerinden gönderilmez. İlk indirme için bağlantı gerekir.
 
@@ -44,7 +44,7 @@ Giriş 16 kHz değilse sherpa-onnx `LinearResampler` kullanılır. Çok kanallı
 
 1. Model card benchmark sayılarını MİHENK ölçümü olarak tekrar etmeyin. Kilitli açık/izinli korpus üzerinde WER/CER/KDHO, kritik isim/olumsuzluk/sayı hata analizi gerekir.
 2. Kayıt süresi boyunca CPU/RAM ve uzun kayıt performansı Windows/Linux üzerinde ölçülmelidir; CI şu anda gerçek 240 MiB ASR yük/RSS benchmark'ı değildir.
-3. Sherpa crate sürümü sabit olsa da build aşamasında edinilen native runtime arşivi için bağımsız checksum/attestation ve tekrarlanabilir release kanıtı tamamlanmalıdır.
+3. CI'da Sherpa 2.0.1 Linux/Windows static native arşivleri GitHub Release API'de yayımlanan SHA-256 digest değerleriyle indirilip doğrulanır. Yerel geliştirici build'leri de aynı sürüm arşivini indirip manifestteki digest ile doğrulayarak `SHERPA_ONNX_ARCHIVE_DIR` üzerinden vermelidir; genel yayın zincirinde ek attestation ve SBOM kanıtı gerekir.
 4. Decoder'ın desteklediği gerçek kapsayıcı/codec listesi dosya içeriğinden teknik envantere yazılmalı; uzantı listesi tek başına format ispatı değildir.
 5. Transkript model adı/revision/decoder ayarları, her segmentin kaynak kaydı ve uzman revizyon geçmişi tam görev verisi/rapor hattına bağlanmalıdır.
 6. Çökme sonrası kaldığı yerden devam eden iş kuyruğu, idempotent ASR job ledger ve gerçek offline E2E henüz tamamlanmamıştır.
