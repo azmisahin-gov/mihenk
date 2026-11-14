@@ -10,9 +10,11 @@ MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda
 - AES-256-GCM şifreli yerel kasa ve kimlik doğrulamalı, en fazla 1 MiB aralıklı ses oynatma.
 - Dosyayı diske çözmeden, doğrulanmış şifreli kasa bloklarından okuyan yerel Symphonia decoder hattı.
 - İsteğe bağlı yerel SEDA v0.1 Türkçe ASR modeli kurulumu; sabit model revision, ONNX SHA-256 ve token biçim denetimleri.
-- Yerel SEDA akışlı transkripsiyon; model kurulduktan sonra ses işleme ağ bağlantısı kullanmaz. Çok kanallı kayıtlarda her kanal ayrı anonim kanal etiketiyle taslak üretir.
+- Yerel SEDA akışlı transkripsiyon; model kurulduktan sonra ses işleme ağ bağlantısı kullanmaz. Çok kanallı kayıtlarda kaynak kanal etiketi konuşmacı kimliğinden ayrı tutulur; otomatik diarization yapılmaz.
 - Makine çıktıları yalnızca `taslak` durumundadır. Uzman düzeltmeleri kaynak türüyle ayrılır; ASR tekrar çalıştığında yalnızca düzeltilmemiş makine taslakları yenilenir.
 - Zaman aralığına bağlı transkript bölümleri, manuel bölüm ekleme ve ses konumuna atlama.
+- Ham ASR çıktısını uzman düzeltmesinden ayrı koruyan, önce/sonra revizyon geçmişi ve oynatma konumuna göre aktif transkript bölümünü vurgulayan inceleme akışı.
+- Kaynak kanalını anonim konuşmacı etiketinden ayrı tutan; konuşma, kısmen anlaşılmayan konuşma, anlaşılmayan konuşma, vokalizasyon ve çevresel ses anotasyonlarını destekleyen segment modeli.
 - Şifreli kasa yedeği ve geri yükleme; toplam 2 GiB ve tek dosya 256 MiB sınırı.
 - Atama profili ve transkript değişikliklerini kasada otomatik kaydetme.
 
