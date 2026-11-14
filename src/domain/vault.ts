@@ -34,7 +34,6 @@ import {
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
 const SNAPSHOT_NAME = "secure.hold";
-const SALT_NAME = "stronghold.salt";
 const CLIENT_NAME = "mihenk-main";
 const STORE_META_KEY = "mihenk:vault:meta";
 const STORE_AUDIO_INDEX_KEY = "mihenk:vault:audio-index";
