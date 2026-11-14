@@ -26,7 +26,7 @@ const ZIP_CENTRAL_HEADER = 0x02014b50;
 const ZIP_END = 0x06054b50;
 
 function xmlEscape(value: string): string {
-  if (/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f]/u.test(value)) {
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value)) {
     throw new Error("Belgeye aktarılamayan XML kontrol karakteri bulundu; kaynak metni düzeltin.");
   }
   return value.replace(/[&<>"']/gu, (character) => {
@@ -219,12 +219,19 @@ function createStoredZip(entries: ZipEntry[]): Uint8Array {
 
 function xmlParagraph(line: ReportLine): string {
   const style = line.style ? "<w:pPr><w:pStyle w:val=\"" + line.style + "\"/></w:pPr>" : "";
-  return "<w:p>" + style + "<w:r><w:t xml:space=\"preserve\">" + xmlEscape(line.text) + "</w:t></w:r></w:p>";
+  const paragraphs = line.text.split(/\r\n?|\n/u);
+  const runs = paragraphs.map((part, index) =>
+    (index > 0 ? "<w:r><w:br/></w:r>" : "") +
+    "<w:r><w:t xml:space=\"preserve\">" + xmlEscape(part) + "</w:t></w:r>"
+  ).join("");
+  return "<w:p>" + style + runs + "</w:p>";
 }
 
 function odtParagraph(line: ReportLine): string {
   const style = line.style || "TextBody";
-  return "<text:p text:style-name=\"" + style + "\">" + xmlEscape(line.text) + "</text:p>";
+  const parts = line.text.split(/\r\n?|\n/u).map(xmlEscape);
+  return "<text:p text:style-name=\"" + style + "\">" +
+    parts.join("<text:line-break/>") + "</text:p>";
 }
 
 export function buildDocxReport(input: TranscriptReportInput): Uint8Array {
