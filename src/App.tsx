@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
-  calculatePreviewHash,
   createSegment,
   formatBytes,
   formatTime,
@@ -100,7 +99,7 @@ function hashLabel(record: AudioRecord): string {
     case "bekliyor": return "Sırada";
     case "hesaplaniyor": return "Hesaplanıyor";
     case "hesaplandi": return "SHA-256 hazır";
-    case "buyuk-dosya": return "Büyük dosya — atlandı";
+    case "buyuk-dosya": return "240 MiB üst sınır — atlandı";
     case "desteklenmiyor": return "Tarayıcı desteği yok";
     case "hata": return "Hesaplanamadı";
   }
@@ -698,20 +697,29 @@ export default function App() {
 
     let addedCount = 0;
     let failedCount = 0;
+    let duplicateContentCount = 0;
+    let reusedNameCount = 0;
+    const knownHashes = new Set<string>();
+    const knownNames = new Map<string, string | null>();
+    for (const existing of records) {
+      if (existing.sha256) knownHashes.add(existing.sha256);
+      knownNames.set(existing.vaultMetadata?.fileName ?? existing.file.name, existing.sha256);
+    }
     for (const file of accepted) {
       try {
         setNotice(`“${file.name}” şifreli yerel kasaya alınıyor…`);
-        const { metadata, hash } = await saveQueueRef.current.enqueue(async () => {
-          const imported = await importAudioToVault(file, activeAssignmentId);
-          const preview = await calculatePreviewHash(file);
-          const storedMetadata: VaultAudioMetadata = {
-            ...imported,
-            sha256Preview: preview.hash,
-          };
-          await saveStoredAudioMetadata(storedMetadata);
-          return { metadata: storedMetadata, hash: preview };
-        });
-        const record = createVaultAudioRecord(metadata, hash.state);
+        const metadata = await saveQueueRef.current.enqueue(
+          () => importAudioToVault(file, activeAssignmentId)
+        );
+        const record = createVaultAudioRecord(metadata, metadata.sha256Preview ? "hesaplandi" : "hata");
+        if (metadata.sha256Preview && knownHashes.has(metadata.sha256Preview)) {
+          duplicateContentCount += 1;
+        }
+        if (knownNames.has(metadata.fileName) && knownNames.get(metadata.fileName) !== metadata.sha256Preview) {
+          reusedNameCount += 1;
+        }
+        if (metadata.sha256Preview) knownHashes.add(metadata.sha256Preview);
+        knownNames.set(metadata.fileName, metadata.sha256Preview);
 
         setRecords((current) => [...current, record]);
         if (assignmentRecords.length === 0 && addedCount === 0) {
@@ -729,6 +737,8 @@ export default function App() {
       addedCount > 0 ? `${addedCount} ses şifreli kasaya kaydedildi` : "",
       failedCount > 0 ? `${failedCount} dosya eklenemedi` : "",
       rejectedCount > 0 ? `${rejectedCount} desteklenmeyen dosya atlandı` : "",
+      duplicateContentCount > 0 ? `${duplicateContentCount} dosyanın SHA-256 içeriği mevcut materyalle aynı; ayrı kayıt korundu` : "",
+      reusedNameCount > 0 ? `${reusedNameCount} dosya adı farklı içerikle yeniden kullanılıyor; ayrı kayıt korundu` : "",
     ].filter(Boolean);
     setNotice(messages.join("; ") || "Ses dosyası eklenemedi.");
   }
