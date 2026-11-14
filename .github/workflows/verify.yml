@@ -103,8 +103,10 @@ jobs:
         run: npm run build
       - name: Kilitli Tauri Rust bağımlılıklarını denetle
         run: cargo check --manifest-path src-tauri/Cargo.toml
+      - name: Rust birim testleri
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Masaüstü ikilisini derle
-        run: cargo build --manifest-path src-tauri/Cargo.toml
+        run: cargo build --locked --manifest-path src-tauri/Cargo.toml
       - name: Cargo kilit dosyası farkını göster
         if: always()
         run: git diff -- src-tauri/Cargo.lock
