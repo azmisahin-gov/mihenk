@@ -26,7 +26,7 @@
 
 ## Şifreli sesin decoder'a aktarılması
 
-Rust `VaultAudioReader`, mevcut kasa dosyasını doğrudan açar. Stronghold'dan alınan 32 byte audio key, komut sınırında geçici bellekte tutulur ve JS tarafında çağrı tamamlanınca sıfırlanır. Reader her `Read` isteğinde yalnızca ihtiyaç duyduğu AES-256-GCM bloğunu çözer; en fazla bir 1 MiB plaintext blok cache'lenir ve blok değişince/sahip nesne bırakılınca zeroize edilir. Symphonia `MediaSource` arayüzü üzerinden seek edebilir. Çözülmüş kaynak ses için geçici dosya oluşturulmaz.
+Rust `VaultAudioReader`, mevcut kasa dosyasını doğrudan açar. Stronghold'dan alınan 32 byte audio key, komut sınırında `Zeroizing` ile tutulur; IPC için oluşturulan geçici JS dizisi ve Stronghold buffer'ı çağrı tamamlanınca sıfırlanır. Reader her `Read` isteğinde yalnızca ihtiyaç duyduğu AES-256-GCM bloğunu çözer; en fazla bir 1 MiB plaintext blok cache'lenir ve blok değişince/sahip nesne bırakılınca zeroize edilir. Symphonia `MediaSource` arayüzü üzerinden seek edebilir. Çözülmüş kaynak ses için geçici dosya oluşturulmaz.
 
 Kapsayıcı ve codec decoder ile doğrulanır. Mevcut ASR filtresi WAVE, MP3, MP4/M4A, AAC, OGG/Vorbis, FLAC ve AIFF/AIF biçim uzantılarını kabul eder; OPUS ve WMA listede yoktur. Desteklenmeyen decoder, değişken kanal/sample-rate paketi, bozuk veya GCM doğrulaması başarısız blok sessizce atlanmaz; görev hata ile durur.
 
@@ -45,6 +45,7 @@ Giriş 16 kHz değilse sherpa-onnx `LinearResampler` kullanılır. Çok kanallı
 1. Model card benchmark sayılarını MİHENK ölçümü olarak tekrar etmeyin. Kilitli açık/izinli korpus üzerinde WER/CER/KDHO, kritik isim/olumsuzluk/sayı hata analizi gerekir.
 2. Kayıt süresi boyunca CPU/RAM ve uzun kayıt performansı Windows/Linux üzerinde ölçülmelidir; CI şu anda gerçek 240 MiB ASR yük/RSS benchmark'ı değildir.
 3. CI'da Sherpa 2.0.1 Linux/Windows static native arşivleri GitHub Release API'de yayımlanan SHA-256 digest değerleriyle indirilip doğrulanır. Yerel geliştirici build'leri de aynı sürüm arşivini indirip manifestteki digest ile doğrulayarak `SHERPA_ONNX_ARCHIVE_DIR` üzerinden vermelidir; genel yayın zincirinde ek attestation ve SBOM kanıtı gerekir.
+4. Linux CI, `MIHENK_SEDA_MODEL_SMOKE=1` ile uygulamanın kendi model kurucusunu çalıştırır; sabit revision'ın dört dosyasını indirir, üç ONNX ağırlığını hash/uzunlukla ve token dosyasını yapısal olarak doğrular, CPU recognizer'ı yükler ve sentetik sessizlikle bir streaming decode sonucu alır. Bu, gerçek konuşma WER/CER doğruluğunu veya adli performansı ölçmez.
 4. Decoder'ın desteklediği gerçek kapsayıcı/codec listesi dosya içeriğinden teknik envantere yazılmalı; uzantı listesi tek başına format ispatı değildir.
 5. Transkript model adı/revision/decoder ayarları, her segmentin kaynak kaydı ve uzman revizyon geçmişi tam görev verisi/rapor hattına bağlanmalıdır.
 6. Çökme sonrası kaldığı yerden devam eden iş kuyruğu, idempotent ASR job ledger ve gerçek offline E2E henüz tamamlanmamıştır.
