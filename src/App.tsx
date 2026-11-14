@@ -1104,6 +1104,10 @@ export default function App() {
       setNotice("Rapor taslağı için görev alanı ve ses kaydı seçin.");
       return null;
     }
+    if (assignmentProfileDirty) {
+      setNotice("Rapor oluşturmadan önce görev sorularını ve uzman yanıtlarını kaydedin.");
+      return null;
+    }
     return {
       assignment: activeAssignment,
       source: {
