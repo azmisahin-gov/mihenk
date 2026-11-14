@@ -12,6 +12,7 @@ MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda
 - Yerel SEDA akışlı transkripsiyon; model kurulduktan sonra ses işleme ağ bağlantısı kullanmaz. Çok kanallı kayıtlarda her kanal ayrı anonim kanal etiketiyle taslak üretir.
 - Makine çıktıları yalnızca `taslak` durumundadır. Uzman düzeltmeleri kaynak türüyle ayrılır; ASR tekrar çalıştığında yalnızca düzeltilmemiş makine taslakları yenilenir.
 - Zaman aralığına bağlı transkript bölümleri, manuel bölüm ekleme ve ses konumuna atlama.
+- Ham ASR çıktısını uzman düzeltmesinden ayrı koruyan, önce/sonra revizyon geçmişi ve oynatma konumuna göre aktif transkript bölümünü vurgulayan inceleme akışı.
 - Şifreli kasa yedeği ve geri yükleme; toplam 2 GiB ve tek dosya 256 MiB sınırı.
 - Atama profili ve transkript değişikliklerini kasada otomatik kaydetme.
 
