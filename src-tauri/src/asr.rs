@@ -1,0 +1,432 @@
+use reqwest::blocking::Client;
+use serde::Serialize;
+use sha1::Sha1;
+use sha2::{Digest, Sha256};
+use std::{
+    fs::{self, File},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    time::Duration,
+};
+
+pub const SEDA_MODEL_ID: &str = "atasoglu/seda-v0.1";
+pub const SEDA_MODEL_REVISION: &str = "b5cf32ae4936968b284df3f1c4c79714af71e1fe";
+const SEDA_MODEL_DIR: &str = "seda-v0.1";
+const MAX_MODEL_ASSET_BYTES: u64 = 96 * 1024 * 1024;
+const TOKEN_FILE_MAX_BYTES: u64 = 32 * 1024;
+const TOKEN_FILE_GIT_BLOB_SHA1: &str = "6ba58dd6a298eae17f7f1ac9a8e3ec714550926a";
+
+#[derive(Clone, Copy)]
+struct ModelAsset {
+    name: &'static str,
+    sha256: Option<&'static str>,
+    git_blob_sha1: Option<&'static str>,
+    max_bytes: u64,
+}
+
+const SEDA_ASSETS: [ModelAsset; 4] = [
+    ModelAsset {
+        name: "encoder.int8.onnx",
+        sha256: Some("2596861911cec5ca1de31adc12a7fc983d05395434f92239f4e007eeae3a5dcc"),
+        git_blob_sha1: None,
+        max_bytes: MAX_MODEL_ASSET_BYTES,
+    },
+    ModelAsset {
+        name: "decoder.onnx",
+        sha256: Some("dc28b7ae3f5e67c0daa2d51886dae2ac8287a25333f46a363f3684b3cd1220c9"),
+        git_blob_sha1: None,
+        max_bytes: 8 * 1024 * 1024,
+    },
+    ModelAsset {
+        name: "joiner.int8.onnx",
+        sha256: Some("b4d1cff7c410d14c85c143885954be09a6a4a076cd35d22aeba58655665582bb"),
+        git_blob_sha1: None,
+        max_bytes: 2 * 1024 * 1024,
+    },
+    ModelAsset {
+        name: "tokens.txt",
+        sha256: None,
+        git_blob_sha1: Some(TOKEN_FILE_GIT_BLOB_SHA1),
+        max_bytes: TOKEN_FILE_MAX_BYTES,
+    },
+];
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SedaModelStatus {
+    pub model_id: String,
+    pub revision: String,
+    pub license: String,
+    pub installed: bool,
+    pub bytes_on_disk: u64,
+    pub message: String,
+}
+
+fn model_root(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join("mihenk-asr")
+}
+
+fn model_dir(app_data_dir: &Path) -> PathBuf {
+    model_root(app_data_dir).join(SEDA_MODEL_DIR)
+}
+
+fn format_hex(bytes: &[u8]) -> String {
+    let mut result = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(result, "{byte:02x}");
+    }
+    result
+}
+
+fn sha256_file(path: &Path, maximum: u64) -> Result<(String, u64), String> {
+    let mut file = File::open(path).map_err(|_| "Model dosyası açılamadı.".to_string())?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    let mut total = 0u64;
+
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|_| "Model dosyası okunamadı.".to_string())?;
+        if read == 0 {
+            break;
+        }
+        total = total
+            .checked_add(read as u64)
+            .ok_or_else(|| "Model dosyası boyutu geçersiz.".to_string())?;
+        if total > maximum {
+            return Err("Model dosyası beklenen boyut sınırını aşıyor.".into());
+        }
+        hasher.update(&buffer[..read]);
+    }
+
+    Ok((format_hex(&hasher.finalize()), total))
+}
+
+/// SHA-1 is used only to compare a small text file with its immutable Git blob
+/// object identifier, not as the cryptographic integrity primitive for ONNX
+/// weights. The ONNX files are checked with SHA-256.
+fn git_blob_sha1_file(path: &Path, length: u64) -> Result<String, String> {
+    let mut file = File::open(path).map_err(|_| "Model token dosyası açılamadı.".to_string())?;
+    let mut hasher = Sha1::new();
+    hasher.update(format!("blob {length}\0").as_bytes());
+    let mut buffer = [0u8; 16 * 1024];
+    loop {
+        let read = file
+            .read(&mut buffer)
+            .map_err(|_| "Model token dosyası okunamadı.".to_string())?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format_hex(&hasher.finalize()))
+}
+
+fn validate_token_file(path: &Path) -> Result<(), String> {
+    let bytes = fs::read(path).map_err(|_| "Model token dosyası okunamadı.".to_string())?;
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|_| "Model token dosyası UTF-8 biçiminde değil.".to_string())?;
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.len() != 500 {
+        return Err("SEDA token dosyasında 500 BPE girdisi bulunmalı.".into());
+    }
+    for (expected_id, line) in lines.iter().enumerate() {
+        let (_, id) = line
+            .rsplit_once(' ')
+            .ok_or_else(|| "SEDA token satırının biçimi geçersiz.".to_string())?;
+        if id.parse::<usize>().ok() != Some(expected_id) {
+            return Err("SEDA token kimlikleri sıralı değil.".into());
+        }
+    }
+    Ok(())
+}
+
+fn verify_asset(path: &Path, asset: ModelAsset) -> Result<u64, String> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|_| format!("Model dosyası eksik: {}", asset.name))?;
+    if !metadata.file_type().is_file() {
+        return Err(format!("Model dosyası normal bir dosya değil: {}", asset.name));
+    }
+
+    let (sha256, length) = sha256_file(path, asset.max_bytes)?;
+    if length == 0 {
+        return Err(format!("Model dosyası boş: {}", asset.name));
+    }
+    if let Some(expected) = asset.sha256 {
+        if sha256 != expected {
+            return Err(format!("Model SHA-256 doğrulaması başarısız: {}", asset.name));
+        }
+    }
+    if let Some(expected) = asset.git_blob_sha1 {
+        if git_blob_sha1_file(path, length)? != expected {
+            return Err(format!("Model Git blob doğrulaması başarısız: {}", asset.name));
+        }
+        validate_token_file(path)?;
+    }
+    Ok(length)
+}
+
+fn verify_model_dir(directory: &Path) -> Result<u64, String> {
+    let mut total = 0u64;
+    for asset in SEDA_ASSETS {
+        total = total
+            .checked_add(verify_asset(&directory.join(asset.name), asset)?)
+            .ok_or_else(|| "Model toplam boyutu geçersiz.".to_string())?;
+    }
+    Ok(total)
+}
+
+pub fn get_seda_model_status(app_data_dir: &Path) -> SedaModelStatus {
+    match verify_model_dir(&model_dir(app_data_dir)) {
+        Ok(bytes_on_disk) => SedaModelStatus {
+            model_id: SEDA_MODEL_ID.into(),
+            revision: SEDA_MODEL_REVISION.into(),
+            license: "Apache-2.0 (akustik model ve token dosyası)".into(),
+            installed: true,
+            bytes_on_disk,
+            message: "Model yerel olarak kurulu; transkripsiyon çevrimdışı çalışabilir.".into(),
+        },
+        Err(reason) => SedaModelStatus {
+            model_id: SEDA_MODEL_ID.into(),
+            revision: SEDA_MODEL_REVISION.into(),
+            license: "Apache-2.0 (akustik model ve token dosyası)".into(),
+            installed: false,
+            bytes_on_disk: 0,
+            message: reason,
+        },
+    }
+}
+
+fn remove_path_if_exists(path: &Path) -> Result<(), String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_dir() => {
+            fs::remove_dir_all(path).map_err(|_| "Eski model dizini temizlenemedi.".to_string())
+        }
+        Ok(_) => fs::remove_file(path).map_err(|_| "Geçici model dosyası temizlenemedi.".to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err("Model dizini denetlenemedi.".into()),
+    }
+}
+
+fn download_asset(
+    client: &Client,
+    directory: &Path,
+    asset: ModelAsset,
+) -> Result<(), String> {
+    let url = format!(
+        "https://huggingface.co/{}/resolve/{}/{}",
+        SEDA_MODEL_ID, SEDA_MODEL_REVISION, asset.name
+    );
+    let mut response = client
+        .get(&url)
+        .send()
+        .map_err(|_| format!("SEDA dosyası indirilemedi: {}", asset.name))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "SEDA indirme sunucusu {} yanıtını verdi: {}",
+            response.status().as_u16(),
+            asset.name
+        ));
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length == 0 || length > asset.max_bytes)
+    {
+        return Err(format!("SEDA dosyasının bildirdiği boyut geçersiz: {}", asset.name));
+    }
+
+    let part_path = directory.join(format!("{}.part", asset.name));
+    let final_path = directory.join(asset.name);
+    let mut output = File::create(&part_path)
+        .map_err(|_| format!("SEDA geçici dosyası oluşturulamadı: {}", asset.name))?;
+    let mut buffer = [0u8; 64 * 1024];
+    let mut total = 0u64;
+
+    loop {
+        let read = response
+            .read(&mut buffer)
+            .map_err(|_| format!("SEDA indirmesi yarıda kesildi: {}", asset.name))?;
+        if read == 0 {
+            break;
+        }
+        total = total
+            .checked_add(read as u64)
+            .ok_or_else(|| "SEDA dosya boyutu geçersiz.".to_string())?;
+        if total > asset.max_bytes {
+            return Err(format!("SEDA dosyası boyut sınırını aşıyor: {}", asset.name));
+        }
+        output
+            .write_all(&buffer[..read])
+            .map_err(|_| format!("SEDA dosyası diske yazılamadı: {}", asset.name))?;
+    }
+
+    output
+        .sync_all()
+        .map_err(|_| format!("SEDA dosyası diske sabitlenemedi: {}", asset.name))?;
+    drop(output);
+
+    if let Some(expected_length) = response.content_length() {
+        if total != expected_length {
+            return Err(format!("SEDA dosyası eksik indirildi: {}", asset.name));
+        }
+    }
+    verify_asset(&part_path, asset)?;
+    fs::rename(part_path, final_path)
+        .map_err(|_| format!("SEDA dosyası kurulamadı: {}", asset.name))?;
+    Ok(())
+}
+
+pub fn install_seda_model(app_data_dir: &Path) -> Result<SedaModelStatus, String> {
+    let root = model_root(app_data_dir);
+    fs::create_dir_all(&root).map_err(|_| "Yerel model klasörü oluşturulamadı.".to_string())?;
+    if get_seda_model_status(app_data_dir).installed {
+        return Ok(get_seda_model_status(app_data_dir));
+    }
+
+    let staging = root.join(".seda-v0.1.installing");
+    let active = model_dir(app_data_dir);
+    let previous = root.join(".seda-v0.1.previous");
+    remove_path_if_exists(&staging)?;
+    remove_path_if_exists(&previous)?;
+    fs::create_dir(&staging).map_err(|_| "Geçici SEDA klasörü oluşturulamadı.".to_string())?;
+
+    let result = (|| {
+        let client = Client::builder()
+            .connect_timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(20 * 60))
+            .redirect(reqwest::redirect::Policy::limited(5))
+            .user_agent("MIHENK-56.12-local-model-installer")
+            .build()
+            .map_err(|_| "Model indirme istemcisi başlatılamadı.".to_string())?;
+
+        for asset in SEDA_ASSETS {
+            download_asset(&client, &staging, asset)?;
+        }
+        let bytes_on_disk = verify_model_dir(&staging)?;
+
+        let had_active = fs::symlink_metadata(&active).is_ok();
+        if had_active {
+            fs::rename(&active, &previous)
+                .map_err(|_| "Önceki SEDA model dizini yedeklenemedi.".to_string())?;
+        }
+
+        if let Err(error) = fs::rename(&staging, &active) {
+            if had_active {
+                let _ = fs::rename(&previous, &active);
+            }
+            return Err(format!("SEDA modeli etkinleştirilemedi: {error}"));
+        }
+
+        if had_active {
+            remove_path_if_exists(&previous)?;
+        }
+
+        Ok(SedaModelStatus {
+            model_id: SEDA_MODEL_ID.into(),
+            revision: SEDA_MODEL_REVISION.into(),
+            license: "Apache-2.0 (akustik model ve token dosyası)".into(),
+            installed: true,
+            bytes_on_disk,
+            message: "SEDA yerel olarak indirildi ve bütünlük denetimleri geçti.".into(),
+        })
+    })();
+
+    if result.is_err() {
+        let _ = remove_path_if_exists(&staging);
+    }
+    result
+}
+
+pub fn seda_model_directory(app_data_dir: &Path) -> PathBuf {
+    model_dir(app_data_dir)
+}
+
+#[tauri::command]
+pub async fn get_seda_model_status_command(
+    app: tauri::AppHandle,
+) -> Result<SedaModelStatus, String> {
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "Yerel model klasörüne erişilemedi.".to_string())?;
+    Ok(get_seda_model_status(&root))
+}
+
+#[tauri::command]
+pub async fn install_seda_model_command(
+    app: tauri::AppHandle,
+) -> Result<SedaModelStatus, String> {
+    let root = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "Yerel model klasörüne erişilemedi.".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || install_seda_model(&root))
+        .await
+        .map_err(|_| "SEDA model kurulum görevi beklenmedik biçimde sonlandı.".to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn manifest_pins_apache_model_revision_and_excludes_optional_lm() {
+        assert_eq!(SEDA_MODEL_ID, "atasoglu/seda-v0.1");
+        assert_eq!(SEDA_MODEL_REVISION, "b5cf32ae4936968b284df3f1c4c79714af71e1fe");
+        assert_eq!(SEDA_ASSETS.len(), 4);
+        assert!(SEDA_ASSETS.iter().any(|item| item.name == "tokens.txt"));
+        assert!(!SEDA_ASSETS.iter().any(|item| item.name.starts_with("lm/")));
+        assert!(SEDA_ASSETS.iter().filter_map(|item| item.sha256).all(|hash| hash.len() == 64));
+    }
+
+    #[test]
+    fn rejects_incomplete_or_reordered_bpe_token_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "mihenk-seda-token-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("tokens.txt");
+        let mut file = File::create(&path).unwrap();
+        writeln!(file, "<blk> 0").unwrap();
+        writeln!(file, "<sos/eos> 2").unwrap();
+        drop(file);
+
+        assert!(validate_token_file(&path).is_err());
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn checks_git_blob_sha1_with_git_header_not_plain_sha1() {
+        let directory = std::env::temp_dir().join(format!(
+            "mihenk-seda-git-blob-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("tokens.txt");
+        fs::write(&path, b"hello\n").unwrap();
+
+        let digest = git_blob_sha1_file(&path, 6).unwrap();
+        assert_eq!(digest, "ce013625030ba8dba906f756967f9e9ca394464a");
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn model_status_is_not_installed_when_directory_is_missing() {
+        let directory = std::env::temp_dir().join(format!(
+            "mihenk-seda-status-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        let status = get_seda_model_status(&directory);
+        assert!(!status.installed);
+        assert_eq!(status.model_id, "atasoglu/seda-v0.1");
+        assert_eq!(status.bytes_on_disk, 0);
+        let _ = fs::remove_dir_all(directory);
+    }
+}
