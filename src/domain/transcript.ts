@@ -169,7 +169,7 @@ export function recordTranscriptEdit<T extends VersionedTranscriptSegment>(
 export function normalizeStoredTranscriptSegment<T extends VersionedTranscriptSegment>(segment: T): T {
   const legacyChannel = segment.source === "asr"
     && !segment.channel
-    && /^Kanal \\d+$/.test(segment.speaker);
+    && /^Kanal \d+$/.test(segment.speaker);
   const rawAsrText = segment.source === "asr"
     ? (segment.rawAsrText ?? segment.text)
     : segment.rawAsrText;
