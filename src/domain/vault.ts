@@ -16,9 +16,11 @@ import {
   createAssignmentRecord,
   isValidAssignmentId,
   normalizeAssignmentName,
+  normalizeAssignmentProfile,
   resolveStoredAssignmentId,
   DEFAULT_ASSIGNMENT_NAME,
   type AssignmentRecord,
+  type AssignmentProfileInput,
 } from "./assignment";
 import {
   MAX_VAULT_AUDIO_BYTES,
@@ -150,30 +152,63 @@ async function writeJson(store: StoreLike, key: string, value: unknown): Promise
   await store.insert(key, encodeJson(value));
 }
 
-async function readAssignments(store: StoreLike): Promise<AssignmentRecord[]> {
+async function readAssignments(
+  store: StoreLike,
+  stronghold?: StrongholdInstance,
+): Promise<AssignmentRecord[]> {
   const ids = await readJson<string[]>(store, STORE_ASSIGNMENT_INDEX_KEY);
-  if (!Array.isArray(ids)) throw new Error("Kasa görev alanı listesi bozuk.");
+  if (!Array.isArray(ids) || new Set(ids).size !== ids.length) {
+    throw new Error("Kasa görev alanı listesi bozuk.");
+  }
 
   const assignments: AssignmentRecord[] = [];
+  let migrated = false;
   for (const id of ids) {
     assertVaultAssignmentId(id);
-    const assignment = await readJson<AssignmentRecord>(store, assignmentMetaKey(id));
-    if (!assignment || assignment.id !== id || !isValidAssignmentId(assignment.id)) {
+    const stored = await readJson<Partial<AssignmentRecord>>(store, assignmentMetaKey(id));
+    if (!stored || stored.id !== id || typeof stored.name !== "string") {
       throw new Error("Kasa görev alanı kaydı eksik veya bozuk.");
     }
-    const normalizedName = normalizeAssignmentName(assignment.name);
+    const assignment: AssignmentRecord = {
+      id,
+      name: normalizeAssignmentName(stored.name),
+      localReference: typeof stored.localReference === "string" ? stored.localReference : "",
+      authority: typeof stored.authority === "string" ? stored.authority : "",
+      appointedAt: typeof stored.appointedAt === "string" ? stored.appointedAt : "",
+      dueAt: typeof stored.dueAt === "string" ? stored.dueAt : "",
+      scope: typeof stored.scope === "string" ? stored.scope : "",
+      questions: Array.isArray(stored.questions) && stored.questions.every((item) => typeof item === "string")
+        ? stored.questions
+        : [],
+      createdAt: typeof stored.createdAt === "string" ? stored.createdAt : new Date(0).toISOString(),
+      updatedAt: typeof stored.updatedAt === "string" ? stored.updatedAt : new Date(0).toISOString(),
+    };
     if (
-      normalizedName !== assignment.name ||
+      assignment.name !== stored.name ||
+      assignment.localReference !== stored.localReference ||
+      assignment.authority !== stored.authority ||
+      assignment.appointedAt !== stored.appointedAt ||
+      assignment.dueAt !== stored.dueAt ||
+      assignment.scope !== stored.scope ||
+      !Array.isArray(stored.questions) ||
+      !stored.createdAt ||
+      !stored.updatedAt
+    ) {
+      await writeJson(store, assignmentMetaKey(id), assignment);
+      migrated = true;
+    }
+    if (
       !Number.isFinite(Date.parse(assignment.createdAt)) ||
       !Number.isFinite(Date.parse(assignment.updatedAt))
     ) {
-      throw new Error("Kasa görev alanı bilgileri geçersiz.");
+      throw new Error("Kasa görev alanı tarih bilgileri geçersiz.");
     }
+    assertUniqueAssignmentName(assignment.name, assignments);
     assignments.push(assignment);
   }
+  if (migrated && stronghold) await stronghold.save();
   return assignments;
 }
-
 /**
  * Eski düz kayıt kasalarını varsayılan bir görev alanına taşır.
  * Görev kimliği bulunmayan eski ses kayıtları bu alana bağlanır; içerikleri
@@ -361,13 +396,13 @@ export async function lockLocalVault(): Promise<void> {
 }
 
 export async function listAssignments(): Promise<VaultAssignment[]> {
-  return readAssignments(requireStore());
+  return readAssignments(requireStore(), requireStronghold());
 }
 
 export async function createVaultAssignment(name: string): Promise<VaultAssignment> {
   const store = requireStore();
   const stronghold = requireStronghold();
-  const assignments = await readAssignments(store);
+  const assignments = await readAssignments(store, stronghold);
   const normalizedName = normalizeAssignmentName(name);
   assertUniqueAssignmentName(normalizedName, assignments);
   const assignment = createAssignmentRecord(normalizedName);
@@ -385,15 +420,24 @@ export async function createVaultAssignment(name: string): Promise<VaultAssignme
 }
 
 export async function renameVaultAssignment(assignmentId: string, name: string): Promise<VaultAssignment> {
+  const currentAssignments = await listAssignments();
+  const current = currentAssignments.find((item) => item.id === assignmentId);
+  if (!current) throw new Error("Görev alanı bulunamadı.");
+  return updateVaultAssignment(assignmentId, { ...current, name });
+}
+
+export async function updateVaultAssignment(
+  assignmentId: string,
+  input: AssignmentProfileInput,
+): Promise<VaultAssignment> {
   const store = requireStore();
   const stronghold = requireStronghold();
   assertVaultAssignmentId(assignmentId);
-  const assignments = await readAssignments(store);
+  const assignments = await readAssignments(store, stronghold);
   const current = assignments.find((item) => item.id === assignmentId);
   if (!current) throw new Error("Görev alanı bulunamadı.");
-  const normalizedName = normalizeAssignmentName(name);
-  assertUniqueAssignmentName(normalizedName, assignments, assignmentId);
-  const updated = { ...current, name: normalizedName, updatedAt: new Date().toISOString() };
+  const updated = normalizeAssignmentProfile(current, input);
+  assertUniqueAssignmentName(updated.name, assignments, assignmentId);
   await writeJson(store, assignmentMetaKey(assignmentId), updated);
   await stronghold.save();
   return updated;
