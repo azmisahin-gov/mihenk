@@ -465,7 +465,7 @@ export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
 export async function saveStoredAudioMetadata(metadata: VaultAudioMetadata): Promise<void> {
   const store = requireStore();
   validateMetadata(metadata);
-  const assignments = await readAssignments(store);
+  const assignments = await readAssignments(store, requireStronghold());
   if (!assignments.some((assignment) => assignment.id === metadata.assignmentId)) {
     throw new Error("Ses kaydının bağlı olduğu görev alanı bulunamadı.");
   }
@@ -480,7 +480,7 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
   const store = requireStore();
   const stronghold = requireStronghold();
   assertVaultAssignmentId(assignmentId);
-  const assignments = await readAssignments(store);
+  const assignments = await readAssignments(store, stronghold);
   if (!assignments.some((assignment) => assignment.id === assignmentId)) {
     throw new Error("Ses dosyasının ekleneceği görev alanı bulunamadı.");
   }
