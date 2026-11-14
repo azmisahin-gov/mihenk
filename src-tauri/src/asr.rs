@@ -603,6 +603,180 @@ pub async fn inspect_stored_audio_command(
     .map_err(|_| "Ses teknik envanter görevi beklenmedik biçimde sonlandı.".to_string())?
 }
 
+const AUDIO_WAVEFORM_BUCKETS: usize = 512;
+
+fn accumulate_waveform_peaks(
+    interleaved: &[f32],
+    channel_count: usize,
+    frame_offset: u64,
+    total_frames: u64,
+    peaks: &mut [f32],
+) -> Result<u64, String> {
+    if channel_count == 0
+        || interleaved.len() % channel_count != 0
+        || total_frames == 0
+        || peaks.is_empty()
+    {
+        return Err("Dalga biçimi örnek veya kanal bilgisi geçersiz.".into());
+    }
+
+    let frame_count = interleaved.len() / channel_count;
+    for (frame_index, frame) in interleaved.chunks_exact(channel_count).enumerate() {
+        let absolute_frame = frame_offset.saturating_add(frame_index as u64);
+        let bucket = ((u128::from(absolute_frame) * peaks.len() as u128)
+            / u128::from(total_frames))
+            .min((peaks.len() - 1) as u128) as usize;
+        let amplitude = frame
+            .iter()
+            .map(|sample| sample.abs())
+            .fold(0.0_f32, f32::max)
+            .clamp(0.0, 1.0);
+        peaks[bucket] = peaks[bucket].max(amplitude);
+    }
+
+    Ok(frame_count as u64)
+}
+
+fn build_waveform_peaks(
+    app_data_dir: &Path,
+    file_id: String,
+    size_bytes: u64,
+    nonce_prefix: Vec<u8>,
+    raw_key: Zeroizing<Vec<u8>>,
+    file_name: String,
+) -> Result<Vec<f32>, String> {
+    let reader = open_vault_audio_reader(
+        app_data_dir,
+        &file_id,
+        size_bytes,
+        &nonce_prefix,
+        raw_key.as_slice(),
+    )?;
+    let mut hint = Hint::new();
+    if let Some(extension) = Path::new(&file_name).extension().and_then(|value| value.to_str()) {
+        hint.with_extension(extension);
+    }
+    let source = MediaSourceStream::new(Box::new(reader), Default::default());
+    let mut format = symphonia::default::get_probe()
+        .probe(&hint, source, FormatOptions::default(), MetadataOptions::default())
+        .map_err(|error| format!("Dalga biçimi için ses kapsayıcısı çözümlenemedi: {error}"))?;
+
+    let media_info = format.media_info();
+    let duration_seconds = media_info
+        .time_base
+        .zip(media_info.duration)
+        .and_then(|(time_base, duration)| time_base.calc_duration(duration))
+        .map(|duration| duration.as_secs_f64())
+        .filter(|duration| duration.is_finite() && *duration > 0.0)
+        .ok_or_else(|| "Dalga biçimi için güvenilir ses süresi okunamadı.".to_string())?;
+
+    let track = format
+        .default_track(TrackType::Audio)
+        .ok_or_else(|| "Dalga biçimi için ses izi bulunamadı.".to_string())?;
+    let track_id = track.id;
+    let codec_parameters = track
+        .codec_params
+        .as_ref()
+        .ok_or_else(|| "Dalga biçimi için codec bilgisi bulunamadı.".to_string())?
+        .audio()
+        .ok_or_else(|| "Seçilen iz ses izi değil.".to_string())?;
+    let source_rate = codec_parameters
+        .sample_rate
+        .filter(|rate| *rate > 0 && *rate <= 192_000)
+        .ok_or_else(|| "Dalga biçimi için örnekleme hızı okunamadı veya desteklenmiyor.".to_string())?;
+    let total_frames_float = duration_seconds * f64::from(source_rate);
+    if !total_frames_float.is_finite() || total_frames_float < 1.0 || total_frames_float > u64::MAX as f64 {
+        return Err("Dalga biçimi için hesaplanan ses uzunluğu geçersiz.".into());
+    }
+    let total_frames = total_frames_float.round() as u64;
+
+    let mut decoder = symphonia::default::get_codecs()
+        .make_audio_decoder(codec_parameters, &AudioDecoderOptions::default())
+        .map_err(|error| format!("Dalga biçimi decoder başlatılamadı: {error}"))?;
+    let mut peaks = vec![0.0_f32; AUDIO_WAVEFORM_BUCKETS];
+    let mut channel_count: Option<usize> = codec_parameters
+        .channels
+        .as_ref()
+        .map(|channels| channels.count());
+    let mut frame_offset = 0_u64;
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(Some(packet)) => packet,
+            Ok(None) => break,
+            Err(SymphoniaError::ResetRequired) => {
+                return Err("Ses izi değişti; dalga biçimi güvenli biçimde durduruldu.".into());
+            }
+            Err(error) => return Err(format!("Dalga biçimi ses paketi okunamadı: {error}")),
+        };
+        if packet.track_id != track_id {
+            continue;
+        }
+
+        let decoded = decoder
+            .decode(&packet)
+            .map_err(|error| format!("Dalga biçimi ses paketi çözülemedi: {error}"))?;
+        let spec = decoded.spec();
+        let current_rate = spec.rate();
+        let current_channels = spec.channels().count();
+        if current_rate != source_rate
+            || current_channels == 0
+            || current_channels > 8
+            || channel_count.is_some_and(|expected| expected != current_channels)
+        {
+            return Err("Dalga biçimi sırasında ses örnekleme veya kanal düzeni değişti.".into());
+        }
+        channel_count = Some(current_channels);
+
+        let count = decoded.samples_interleaved();
+        if count > 8 * 1024 * 1024 || count % current_channels != 0 {
+            return Err("Dalga biçimi decoder paket boyutu güvenli sınırı aştı.".into());
+        }
+        let mut interleaved = Zeroizing::new(vec![0.0_f32; count]);
+        decoded.copy_to_slice_interleaved(interleaved.as_mut_slice());
+        let frames = accumulate_waveform_peaks(
+            interleaved.as_slice(),
+            current_channels,
+            frame_offset,
+            total_frames,
+            &mut peaks,
+        )?;
+        interleaved.zeroize();
+        frame_offset = frame_offset.saturating_add(frames);
+    }
+
+    if frame_offset == 0 {
+        return Err("Ses dosyasında dalga biçimi oluşturacak örnek bulunamadı.".into());
+    }
+    Ok(peaks)
+}
+
+#[tauri::command]
+pub async fn build_stored_audio_waveform_command(
+    app: tauri::AppHandle,
+    file_id: String,
+    size_bytes: u64,
+    nonce_prefix: Vec<u8>,
+    raw_key: Vec<u8>,
+    file_name: String,
+) -> Result<Vec<f32>, String> {
+    let raw_key = Zeroizing::new(raw_key);
+    let app_data_dir = app.path().app_data_dir()
+        .map_err(|_| "Yerel ses kasasına erişilemedi.".to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        build_waveform_peaks(
+            &app_data_dir,
+            file_id,
+            size_bytes,
+            nonce_prefix,
+            raw_key,
+            file_name,
+        )
+    })
+    .await
+    .map_err(|_| "Dalga biçimi çözümleme görevi beklenmedik biçimde sonlandı.".to_string())?
+}
+
 fn transcribe_seda(
     app_data_dir: &Path,
     file_id: String,
@@ -787,6 +961,89 @@ mod tests {
         assert_eq!(metadata.bits_per_sample, Some(16));
         assert!(metadata.duration_seconds.is_some());
         assert!(metadata.average_file_bitrate_bps.is_some());
+    }
+
+    #[test]
+    fn waveform_peaks_are_built_from_decoded_synthetic_wav_samples() {
+        use std::io::Cursor;
+
+        let wav = synthetic_stereo_pcm_wav();
+        let source = MediaSourceStream::new(Box::new(Cursor::new(wav)), Default::default());
+        let mut hint = Hint::new();
+        hint.with_extension("wav");
+        let mut format = symphonia::default::get_probe()
+            .probe(&hint, source, FormatOptions::default(), MetadataOptions::default())
+            .unwrap();
+        let track = format.default_track(TrackType::Audio).unwrap();
+        let track_id = track.id;
+        let codec_parameters = track.codec_params.as_ref().unwrap().audio().unwrap();
+        let mut decoder = symphonia::default::get_codecs()
+            .make_audio_decoder(codec_parameters, &AudioDecoderOptions::default())
+            .unwrap();
+        let mut peaks = vec![0.0_f32; AUDIO_WAVEFORM_BUCKETS];
+        let mut frame_offset = 0_u64;
+
+        while let Ok(Some(packet)) = format.next_packet() {
+            if packet.track_id != track_id {
+                continue;
+            }
+            let decoded = decoder.decode(&packet).unwrap();
+            let channels = decoded.spec().channels().count();
+            let count = decoded.samples_interleaved();
+            let mut samples = vec![0.0_f32; count];
+            decoded.copy_to_slice_interleaved(&mut samples);
+            frame_offset += accumulate_waveform_peaks(
+                &samples,
+                channels,
+                frame_offset,
+                2,
+                &mut peaks,
+            ).unwrap();
+        }
+
+        assert_eq!(frame_offset, 2);
+        assert_eq!(peaks.len(), AUDIO_WAVEFORM_BUCKETS);
+        assert_eq!(peaks[0], 0.0);
+        assert!(peaks[256] > 0.0);
+        assert!(peaks.iter().all(|peak| (0.0..=1.0).contains(peak)));
+    }
+
+    #[test]
+    fn waveform_peaks_use_absolute_peak_across_channels_and_time_buckets() {
+        let interleaved = [
+            0.2_f32, -0.8,
+            0.3, 0.1,
+            0.7, -0.1,
+            0.05, 0.1,
+        ];
+        let mut peaks = [0.0_f32; 4];
+        let frames = accumulate_waveform_peaks(&interleaved, 2, 0, 4, &mut peaks).unwrap();
+
+        assert_eq!(frames, 4);
+        assert_eq!(peaks, [0.8, 0.3, 0.7, 0.1]);
+    }
+
+    #[test]
+    fn waveform_peaks_clamp_amplitude_and_support_offset_across_decoder_packets() {
+        let mut peaks = [0.0_f32; 4];
+        assert_eq!(
+            accumulate_waveform_peaks(&[1.4, -0.2], 1, 0, 4, &mut peaks).unwrap(),
+            2,
+        );
+        assert_eq!(
+            accumulate_waveform_peaks(&[-0.6, 0.3], 1, 1, 4, &mut peaks).unwrap(),
+            2,
+        );
+        assert_eq!(peaks, [1.0, 0.6, 0.3, 0.0]);
+    }
+
+    #[test]
+    fn waveform_peak_helper_rejects_invalid_channel_and_duration_inputs() {
+        let mut peaks = [0.0_f32; 2];
+        assert!(accumulate_waveform_peaks(&[0.1, 0.2], 0, 0, 2, &mut peaks).is_err());
+        assert!(accumulate_waveform_peaks(&[0.1, 0.2, 0.3], 2, 0, 2, &mut peaks).is_err());
+        assert!(accumulate_waveform_peaks(&[0.1], 1, 0, 0, &mut peaks).is_err());
+        assert!(accumulate_waveform_peaks(&[0.1], 1, 0, 2, &mut []).is_err());
     }
 
     #[test]

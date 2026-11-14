@@ -265,6 +265,7 @@ fn main() {
             asr::get_seda_model_status_command,
             asr::install_seda_model_command,
             asr::inspect_stored_audio_command,
+            asr::build_stored_audio_waveform_command,
             asr::transcribe_stored_audio_command,
         ])
         .plugin(tauri_plugin_dialog::init())

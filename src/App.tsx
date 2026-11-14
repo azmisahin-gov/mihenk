@@ -36,6 +36,7 @@ import {
   saveStoredAudioMetadata,
   getSedaModelStatus,
   installSedaModel,
+  getStoredAudioWaveform,
   transcribeStoredAudio,
   type SedaModelStatus,
   unlockLocalVault,
@@ -170,6 +171,9 @@ export default function App() {
   const [sedaModelStatus, setSedaModelStatus] = useState<SedaModelStatus | null>(null);
   const [sedaInstalling, setSedaInstalling] = useState(false);
   const [asrBusyRecordId, setAsrBusyRecordId] = useState<string | null>(null);
+  const [waveformLoadingId, setWaveformLoadingId] = useState<string | null>(null);
+  const [waveformErrorId, setWaveformErrorId] = useState<string | null>(null);
+  const [waveformRetry, setWaveformRetry] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
@@ -1160,6 +1164,48 @@ export default function App() {
 
   const activeDuration = activeRecord?.durationSeconds ?? 0;
 
+  useEffect(() => {
+    const metadata = activeRecord?.vaultMetadata;
+    if (
+      vaultState !== "unlocked" ||
+      !activeRecord ||
+      !metadata ||
+      metadata.waveformPeaks?.length === 512 ||
+      waveformErrorId === activeRecord.id
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const recordId = activeRecord.id;
+    setWaveformLoadingId(recordId);
+    setWaveformErrorId(null);
+    void getStoredAudioWaveform(metadata)
+      .then((peaks) => {
+        if (cancelled) return;
+        updateRecord(recordId, (record) => ({
+          ...record,
+          vaultMetadata: record.vaultMetadata
+            ? { ...record.vaultMetadata, waveformPeaks: peaks }
+            : record.vaultMetadata,
+        }));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setWaveformErrorId(recordId);
+        setNotice(error instanceof Error
+          ? `Dalga biçimi çözümlenemedi: ${error.message}`
+          : "Dalga biçimi çözümlenemedi; kaynak dosya ve codec desteğini kontrol edin.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setWaveformLoadingId((current) => current === recordId ? null : current);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [vaultState, activeRecord?.id, activeRecord?.vaultMetadata?.waveformPeaks, waveformErrorId, waveformRetry]);
+
   async function installAvailableUpdate(): Promise<void> {
     if (assignmentProfileDirty) {
       setNotice("Güncellemeden önce görev profilindeki değişiklikleri kaydedin.");
@@ -1670,13 +1716,45 @@ export default function App() {
 
                   <div className="audio-stage">
                     <div className="stage-caption">
-                      <span>OYNATMA KONTROLÜ · TEMSİLİ SES GÖRSELİ</span>
+                      <span>DALGA BİÇİMİ · ŞİFRELİ KAYNAKTAN ÇÖZÜMLENDİ</span>
                       <span>{formatTime(currentTime)} / {formatTime(activeRecord.durationSeconds)}</span>
                     </div>
-                    <div className="wave-placeholder" aria-hidden="true" title="Temsili görsel; gerçek dalga formu hesaplanmıyor">
-                      {Array.from({ length: 72 }, (_, index) => (
-                        <span key={index} style={{ height: `${12 + ((index * 17 + 13) % 40)}%` }} />
-                      ))}
+                    <div
+                      className={`wave-placeholder real-waveform ${activeRecord.vaultMetadata?.waveformPeaks?.length === 512 ? "waveform-ready" : "waveform-pending"}`}
+                      role="img"
+                      aria-label={activeRecord.vaultMetadata?.waveformPeaks?.length === 512
+                        ? "Şifreli kaynak sesinden çözümlenen 512 noktalı dalga biçimi"
+                        : "Kaynak ses dalga biçimi henüz hazır değil"}
+                    >
+                      {activeRecord.vaultMetadata?.waveformPeaks?.length === 512
+                        ? activeRecord.vaultMetadata.waveformPeaks.map((peak, index) => (
+                            <span
+                              key={index}
+                              className={`waveform-bar ${index < Math.floor(
+                                activeDuration > 0 ? (currentTime / activeDuration) * 512 : 0,
+                              ) ? "played" : ""}`}
+                              style={{ height: `${Math.max(3, peak * 100)}%` }}
+                            />
+                          ))
+                        : (
+                            <div className="waveform-message" role="status">
+                              {waveformLoadingId === activeRecord.id
+                                ? "Şifreli kaynak çözülüyor ve dalga biçimi hesaplanıyor…"
+                                : waveformErrorId === activeRecord.id
+                                  ? "Dalga biçimi hesaplanamadı."
+                                  : "Dalga biçimi hazırlanıyor…"}
+                              {waveformErrorId === activeRecord.id && (
+                                <button
+                                  className="waveform-retry"
+                                  type="button"
+                                  onClick={() => {
+                                    setWaveformErrorId(null);
+                                    setWaveformRetry((current) => current + 1);
+                                  }}
+                                >Yeniden dene</button>
+                              )}
+                            </div>
+                          )}
                     </div>
                     <input
                       className="seek-slider"
