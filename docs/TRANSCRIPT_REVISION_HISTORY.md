@@ -19,11 +19,11 @@ Revizyon geçmişi yerel Stronghold şifreli kasa metadata'sıyla birlikte sakla
 
 ## Durum ve sınırlar
 
-- Makine çıktısı her zaman `source: "asr"` ve taslak olarak kalır; düzenlenince kaynağı “uzman” olarak yeniden etiketlenmez.
+- Makine çıktısının kaynağı her zaman `source: "asr"` olarak korunur. Yeni ASR sonucu başlangıçta taslaktır; uzman kontrol durumu ayrı bir alan olarak değiştirilir ve kaynak türü uzman kaynağına dönüştürülmez.
 - Ham ASR metni ile uzman metni ayrı gösterilebilir; önceki/sonraki metin, zaman, konuşmacı etiketi ve kontrol durumu değişiklikleri ayrıntılarda görüntülenir.
 - Yerel uzman kimliği henüz mevcut değildir.
 - Segment silme işlemi bu ilk dilimde silme olayı olarak kayda alınmıyor.
 - Kelime düzeyinde forced alignment, otomatik konuşmacı diarization, bağımsız audit imzası, tam review queue ve uzman kabul oturumu bu değişiklikle tamamlanmış sayılmaz.
 - Mevcut segment timecode'ları saniye tabanlı aralıktır; kaynak ofseti veya kelime seviyesinde hassasiyet iddiası taşımaz.
 
-Bu nedenle bu dikey dilim K-06 için teknik altyapıyı ve birim testlerini sağlar; Issue #31'in bütün kabul maddelerini geçtiği anlamına gelmez.
+Bu nedenle bu dikey dilim K-06 için teknik altyapıyı ve birim testlerini, K-03 için oynatma konumundan segment vurgulama ve segment başlangıcından sese atlama dilimini sağlar; Issue #31'in bütün kabul maddelerini geçtiği anlamına gelmez.
