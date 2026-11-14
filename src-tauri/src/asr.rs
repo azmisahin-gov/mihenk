@@ -964,6 +964,51 @@ mod tests {
     }
 
     #[test]
+    fn waveform_peaks_are_built_from_decoded_synthetic_wav_samples() {
+        use std::io::Cursor;
+
+        let wav = synthetic_stereo_pcm_wav();
+        let source = MediaSourceStream::new(Box::new(Cursor::new(wav)), Default::default());
+        let mut hint = Hint::new();
+        hint.with_extension("wav");
+        let mut format = symphonia::default::get_probe()
+            .probe(&hint, source, FormatOptions::default(), MetadataOptions::default())
+            .unwrap();
+        let track = format.default_track(TrackType::Audio).unwrap();
+        let track_id = track.id;
+        let codec_parameters = track.codec_params.as_ref().unwrap().audio().unwrap();
+        let mut decoder = symphonia::default::get_codecs()
+            .make_audio_decoder(codec_parameters, &AudioDecoderOptions::default())
+            .unwrap();
+        let mut peaks = vec![0.0_f32; AUDIO_WAVEFORM_BUCKETS];
+        let mut frame_offset = 0_u64;
+
+        while let Ok(Some(packet)) = format.next_packet() {
+            if packet.track_id != track_id {
+                continue;
+            }
+            let decoded = decoder.decode(&packet).unwrap();
+            let channels = decoded.spec().channels().count();
+            let count = decoded.samples_interleaved();
+            let mut samples = vec![0.0_f32; count];
+            decoded.copy_to_slice_interleaved(&mut samples);
+            frame_offset += accumulate_waveform_peaks(
+                &samples,
+                channels,
+                frame_offset,
+                2,
+                &mut peaks,
+            ).unwrap();
+        }
+
+        assert_eq!(frame_offset, 2);
+        assert_eq!(peaks.len(), AUDIO_WAVEFORM_BUCKETS);
+        assert_eq!(peaks[0], 0.0);
+        assert!(peaks[256] > 0.0);
+        assert!(peaks.iter().all(|peak| (0.0..=1.0).contains(peak)));
+    }
+
+    #[test]
     fn waveform_peaks_use_absolute_peak_across_channels_and_time_buckets() {
         let interleaved = [
             0.2_f32, -0.8,
