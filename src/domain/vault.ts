@@ -137,6 +137,87 @@ async function writeJson(store: StoreLike, key: string, value: unknown): Promise
   await store.insert(key, encodeJson(value));
 }
 
+async function readAssignments(store: StoreLike): Promise<AssignmentRecord[]> {
+  const ids = await readJson<string[]>(store, STORE_ASSIGNMENT_INDEX_KEY);
+  if (!Array.isArray(ids)) throw new Error("Kasa görev alanı listesi bozuk.");
+
+  const assignments: AssignmentRecord[] = [];
+  for (const id of ids) {
+    assertVaultAssignmentId(id);
+    const assignment = await readJson<AssignmentRecord>(store, assignmentMetaKey(id));
+    if (!assignment || assignment.id !== id || !isValidAssignmentId(assignment.id)) {
+      throw new Error("Kasa görev alanı kaydı eksik veya bozuk.");
+    }
+    const normalizedName = normalizeAssignmentName(assignment.name);
+    if (
+      normalizedName !== assignment.name ||
+      !Number.isFinite(Date.parse(assignment.createdAt)) ||
+      !Number.isFinite(Date.parse(assignment.updatedAt))
+    ) {
+      throw new Error("Kasa görev alanı bilgileri geçersiz.");
+    }
+    assignments.push(assignment);
+  }
+  return assignments;
+}
+
+/**
+ * Eski düz kayıt kasalarını varsayılan bir görev alanına taşır.
+ * Görev kimliği bulunmayan eski ses kayıtları bu alana bağlanır; içerikleri
+ * veya şifreleme anahtarları değiştirilmez.
+ */
+async function ensureAssignmentRecords(
+  stronghold: StrongholdInstance,
+  store: StoreLike,
+): Promise<AssignmentRecord[]> {
+  let changed = false;
+  let ids = await readJson<string[]>(store, STORE_ASSIGNMENT_INDEX_KEY);
+  if (!Array.isArray(ids)) ids = [];
+
+  let assignments: AssignmentRecord[] = [];
+  if (ids.length > 0) {
+    assignments = await readAssignments(store);
+  }
+  if (assignments.length === 0) {
+    const defaultAssignment = createAssignmentRecord(DEFAULT_ASSIGNMENT_NAME);
+    await writeJson(store, assignmentMetaKey(defaultAssignment.id), defaultAssignment);
+    ids = [defaultAssignment.id];
+    await writeJson(store, STORE_ASSIGNMENT_INDEX_KEY, ids);
+    assignments = [defaultAssignment];
+    changed = true;
+  }
+
+  const defaultAssignment = assignments[0];
+  const audioIds = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
+  if (!Array.isArray(audioIds)) throw new Error("Kasa materyal listesi bozuk.");
+  const assignmentIds = new Set(assignments.map((assignment) => assignment.id));
+
+  for (const fileId of audioIds) {
+    assertVaultFileId(fileId);
+    const metadata = await readJson<(Omit<VaultAudioMetadata, "assignmentId"> & { assignmentId?: string })>(
+      store,
+      audioMetaKey(fileId),
+    );
+    if (!metadata) throw new Error("Kasa materyal listesinde kaydı bulunmayan dosya var.");
+
+    if (!metadata.assignmentId) {
+      const migrated = { ...metadata, assignmentId: defaultAssignment.id } as VaultAudioMetadata;
+      validateMetadata(migrated);
+      await writeJson(store, audioMetaKey(fileId), migrated);
+      changed = true;
+    } else {
+      assertVaultAssignmentId(metadata.assignmentId);
+      if (!assignmentIds.has(metadata.assignmentId)) {
+        throw new Error("Ses kaydı var olmayan bir görev alanına bağlı; veri otomatik taşınmadı.");
+      }
+      validateMetadata(metadata as VaultAudioMetadata);
+    }
+  }
+
+  if (changed) await stronghold.save();
+  return assignments;
+}
+
 function audioMetaKey(fileId: string): string {
   return `mihenk:audio:meta:${fileId}`;
 }
