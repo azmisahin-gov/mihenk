@@ -8,6 +8,8 @@ import {
   formatAssignmentQuestions,
   hasAssignmentProfileChanges,
   normalizeAssignmentName,
+  normalizeAssignmentQuestionAnswers,
+  reconcileAssignmentQuestionAnswers,
   parseAssignmentQuestions,
   normalizeAssignmentProfile,
   normalizeDateField,
@@ -89,6 +91,27 @@ test("atama profili alanlarını doğrular ve satır satır soruları korur", ()
   assert.equal(updated.scope, "Ses kaydının incelenmesi");
 });
 
+test("atama profilini kaydederken soru yanıtları ve destek segmentleri görev içinde korunur", () => {
+  const current = {
+    ...first,
+    questionAnswers: [{
+      question: "İlk soru?",
+      answer: "Uzman yanıtı",
+      supportingSegmentRefs: ["audio-a:segment-a"],
+      updatedAt: "2026-11-14T19:00:00.000Z",
+    }],
+  };
+  const updated = normalizeAssignmentProfile(current, {
+    ...current,
+    questions: ["İlk soru?", "İkinci soru?"],
+  });
+
+  assert.equal(updated.questionAnswers[0].answer, "Uzman yanıtı");
+  assert.deepEqual(updated.questionAnswers[0].supportingSegmentRefs, ["audio-a:segment-a"]);
+  assert.equal(updated.questionAnswers[1].question, "İkinci soru?");
+  assert.equal(updated.questionAnswers[1].answer, "");
+});
+
 test("atama profili geçersiz tarih, kontrol karakteri ve aşırı uzun alanları reddeder", () => {
   assert.throws(() => normalizeDateField("2026-02-30", "Son tarih"), /geçerli bir tarih/);
   assert.throws(() => normalizeDateField("01.12.2026", "Son tarih"), /YYYY-AA-GG/);
@@ -155,4 +178,51 @@ test("görev soruları LF ve CRLF satır sonlarıyla kayıpsız ayrıştırılı
 test("bozuk görev soru metni kontrollü doğrulama hatası üretir", () => {
   assert.throws(() => parseAssignmentQuestions(null), /metin olmalıdır/);
   assert.throws(() => formatAssignmentQuestions(null), /listesi geçersiz/);
+});
+
+
+test("soru yanıtları görev sorularına bağlanır ve kaldırılan sorunun yanıtı kurtarılabilir kalır", () => {
+  const existing = [
+    {
+      question: "İlk soru?",
+      answer: "Birinci yanıt",
+      supportingSegmentRefs: ["audio-1:segment-1"],
+      updatedAt: "2026-11-14T19:00:00.000Z",
+    },
+  ];
+  const reconciled = reconcileAssignmentQuestionAnswers(
+    ["İkinci soru?"],
+    existing,
+  );
+
+  assert.equal(reconciled.length, 2);
+  assert.deepEqual(reconciled[0], {
+    question: "İkinci soru?",
+    answer: "",
+    supportingSegmentRefs: [],
+    updatedAt: "",
+  });
+  assert.equal(reconciled[1].question, "İlk soru?");
+  assert.equal(reconciled[1].answer, "Birinci yanıt");
+  assert.deepEqual(reconciled[1].supportingSegmentRefs, ["audio-1:segment-1"]);
+});
+
+test("soru yanıtı ve dayanak referansları normalize edilir ve hatalı giriş reddedilir", () => {
+  const normalized = normalizeAssignmentQuestionAnswers(
+    ["Soru?"],
+    [{
+      question: "Soru?",
+      answer: "  Yanıt  ",
+      supportingSegmentRefs: ["audio-1:segment-1", "audio-1:segment-1"],
+      updatedAt: "2026-11-14T19:00:00.000Z",
+    }],
+  );
+  assert.equal(normalized[0].answer, "Yanıt");
+  assert.deepEqual(normalized[0].supportingSegmentRefs, ["audio-1:segment-1"]);
+  assert.throws(() => normalizeAssignmentQuestionAnswers(["Soru?"], [{
+    question: "Soru?", answer: "Yanıt", supportingSegmentRefs: ["x"], updatedAt: "",
+  }]), /referansı geçersiz/);
+  assert.throws(() => normalizeAssignmentQuestionAnswers(["Soru?"], [{
+    question: "Soru?", answer: "x".repeat(10001), supportingSegmentRefs: [], updatedAt: "",
+  }]), /en fazla 10000/);
 });

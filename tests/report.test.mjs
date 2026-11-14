@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createAssignmentRecord } from "../src/domain/assignment.ts";
-import { buildDocxReport, buildOdtReport, crc32 } from "../src/domain/report.ts";
+import { buildDocxReport, buildOdtReport, buildReportQualityChecklist, crc32 } from "../src/domain/report.ts";
 
 function readLocalZipEntries(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -110,4 +110,93 @@ test("DOCX ve ODT XML için geçersiz kontrol karakteri sessizce bozulmak yerine
   };
   assert.throws(() => buildDocxReport(invalid), /XML kontrol karakteri/);
   assert.throws(() => buildOdtReport(invalid), /XML kontrol karakteri/);
+});
+
+
+test("DOCX raporu her sorunun uzman yanıtını ve bağlı kaynak segmentini içerir", () => {
+  const answered = {
+    ...input,
+    questionAnswers: [
+      {
+        question: "Konuşmada geçen tarih nedir?",
+        answer: "Transkript taslağındaki ifade 14 Mayıs olarak duyulmaktadır; uzman dinlemesiyle kontrol edilmelidir.",
+        supportingSegmentRefs: ["record-1:1"],
+        updatedAt: "2026-11-14T19:00:00.000Z",
+      },
+      {
+        question: "İfade anlaşılır mı?",
+        answer: "İlgili bölüm kısmen anlaşılmaktadır.",
+        supportingSegmentRefs: ["record-1:2"],
+        updatedAt: "2026-11-14T19:00:00.000Z",
+      },
+    ],
+    supportingSegments: [
+      {
+        ref: "record-1:1",
+        fileName: "kayit-01.wav",
+        startSeconds: 4,
+        endSeconds: 8,
+        text: "14 Mayıs günü",
+        speaker: "Konuşmacı 1",
+        status: "uzman-onayli",
+      },
+      {
+        ref: "record-1:2",
+        fileName: "kayit-01.wav",
+        startSeconds: 14,
+        endSeconds: 18,
+        text: "anlaşılmaz bölüm",
+        speaker: "Konuşmacı 2",
+        status: "belirsiz",
+      },
+    ],
+  };
+  const entries = readLocalZipEntries(buildDocxReport(answered));
+  const document = new TextDecoder().decode(entries.find((entry) => entry.name === "word/document.xml").data);
+  assert.match(document, /Uzman yanıtı: Transkript taslağındaki ifade 14 Mayıs/);
+  assert.match(document, /Dayanak: kayit-01\.wav \[00:04 – 00:08\]/);
+  assert.match(document, /14 Mayıs günü/);
+  assert.match(document, /Yanıt-dayanak bağlantıları/);
+  assert.match(document, /Teslim öncesi insan onayı/);
+});
+
+test("rapor kalite kontrolü yanıtsız soru, eksik dayanak ve taslak segmenti görünür kılar", () => {
+  const checks = buildReportQualityChecklist({
+    ...input,
+    questionAnswers: [{
+      question: "Konuşmada geçen tarih nedir?",
+      answer: "",
+      supportingSegmentRefs: ["missing-record:missing-segment"],
+      updatedAt: "",
+    }],
+    supportingSegments: [],
+  });
+  const byId = new Map(checks.map((item) => [item.id, item]));
+  assert.equal(byId.get("question-answers").passed, false);
+  assert.match(byId.get("question-answers").detail, /Konuşmada geçen tarih/);
+  assert.equal(byId.get("evidence-links").passed, false);
+  assert.equal(byId.get("expert-review").passed, false);
+  assert.equal(byId.get("final-review").passed, false);
+});
+
+test("rapor kalite kontrolünde dayanak bağlantıları yalnızca verilen görev malzemelerinde çözülür", () => {
+  const checklist = buildReportQualityChecklist({
+    ...input,
+    questionAnswers: [{
+      question: "Konuşmada geçen tarih nedir?",
+      answer: "Yanıt",
+      supportingSegmentRefs: ["other-assignment:segment-1"],
+      updatedAt: "",
+    }],
+    supportingSegments: [{
+      ref: "current-assignment:segment-1",
+      fileName: "kayit-01.wav",
+      startSeconds: 0,
+      endSeconds: 1,
+      text: "başka görev segmenti",
+      speaker: "",
+      status: "uzman-onayli",
+    }],
+  });
+  assert.equal(checklist.find((item) => item.id === "evidence-links").passed, false);
 });

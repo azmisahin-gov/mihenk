@@ -1,5 +1,5 @@
 import { formatBytes, formatTime, type TranscriptSegment } from "./audio.ts";
-import type { AssignmentRecord } from "./assignment.ts";
+import type { AssignmentQuestionAnswer, AssignmentRecord } from "./assignment.ts";
 
 export interface TranscriptReportSource {
   fileName: string;
@@ -9,10 +9,110 @@ export interface TranscriptReportSource {
   sha256Preview: string | null;
 }
 
+export interface ReportSupportingSegment {
+  ref: string;
+  fileName: string;
+  startSeconds: number;
+  endSeconds: number | null;
+  text: string;
+  speaker: string;
+  status: TranscriptSegment["status"];
+}
+
 export interface TranscriptReportInput {
   assignment: AssignmentRecord;
   source: TranscriptReportSource;
   segments: TranscriptSegment[];
+  questionAnswers?: AssignmentQuestionAnswer[];
+  supportingSegments?: ReportSupportingSegment[];
+}
+
+export interface ReportQualityCheck {
+  id: string;
+  label: string;
+  passed: boolean;
+  detail: string;
+}
+
+export function buildReportQualityChecklist(input: TranscriptReportInput): ReportQualityCheck[] {
+  const activeQuestions = input.assignment.questions;
+  const answers = input.questionAnswers ?? input.assignment.questionAnswers ?? [];
+  const answerByQuestion = new Map(answers.map((item) => [item.question, item]));
+  const unanswered = activeQuestions.filter((question) => !(answerByQuestion.get(question)?.answer.trim()));
+  const evidenceRefs = activeQuestions.flatMap((question) => (
+    answerByQuestion.get(question)?.supportingSegmentRefs ?? []
+  ));
+  const evidenceMap = new Map((input.supportingSegments ?? []).map((item) => [item.ref, item]));
+  const missingEvidence = evidenceRefs.filter((ref) => !evidenceMap.has(ref));
+  const answeredWithoutEvidence = activeQuestions.filter((question) => {
+    const answer = answerByQuestion.get(question);
+    return Boolean(answer?.answer.trim()) && (answer?.supportingSegmentRefs.length ?? 0) === 0;
+  });
+  const resolvedSegments = input.supportingSegments && input.supportingSegments.length > 0
+    ? input.supportingSegments.map((item) => ({
+        id: item.ref,
+        startSeconds: item.startSeconds,
+        endSeconds: item.endSeconds,
+        text: item.text,
+        speaker: item.speaker,
+        status: item.status,
+      }))
+    : input.segments;
+  const uniqueSegments = [...new Map(resolvedSegments.map((item) => [item.id, item])).values()];
+  const unreviewed = uniqueSegments.filter((segment) => segment.status !== "uzman-onayli").length;
+  const unknownDuration = input.source.durationSeconds === null || !Number.isFinite(input.source.durationSeconds);
+  const checks: ReportQualityCheck[] = [
+    {
+      id: "question-answers",
+      label: "Görev sorularına yanıt",
+      passed: unanswered.length === 0,
+      detail: unanswered.length === 0
+        ? `${activeQuestions.length} sorunun tümünde yanıt var.`
+        : `${unanswered.length} soru yanıtsız: ${unanswered.join(" · ")}`,
+    },
+    {
+      id: "evidence-links",
+      label: "Yanıt-dayanak bağlantıları",
+      passed: missingEvidence.length === 0 && answeredWithoutEvidence.length === 0,
+      detail: missingEvidence.length === 0 && answeredWithoutEvidence.length === 0
+        ? `${evidenceRefs.length} destek bağlantısı mevcut segmentlerle eşleşiyor.`
+        : [
+            missingEvidence.length > 0 ? `${missingEvidence.length} dayanak bağlantısı bulunamadı.` : "",
+            answeredWithoutEvidence.length > 0
+              ? `${answeredWithoutEvidence.length} yanıtın ses dayanağı seçilmedi: ${answeredWithoutEvidence.join(" · ")}`
+              : "",
+          ].filter(Boolean).join(" "),
+    },
+    {
+      id: "expert-review",
+      label: "Transkript uzman kontrolü",
+      passed: unreviewed === 0,
+      detail: unreviewed === 0
+        ? "Rapor kapsamındaki tüm segmentler kullanıcı tarafından uzman kontrolü olarak işaretlenmiş."
+        : `${unreviewed} segment taslak veya belirsiz durumda; ses üzerinden kontrol edilmeli.`,
+    },
+    {
+      id: "source-inventory",
+      label: "Kaynak envanteri",
+      passed: Boolean(input.source.fileName && input.source.sizeBytes > 0 && input.source.sha256Preview),
+      detail: input.source.sha256Preview
+        ? "Kaynak adı, boyutu ve SHA-256 ön kontrolü mevcut; hash köken veya özgünlük kanıtı değildir."
+        : "Kaynak dosya bilgileri veya SHA-256 ön kontrolü eksik.",
+    },
+    {
+      id: "duration",
+      label: "Ses süresi",
+      passed: !unknownDuration,
+      detail: unknownDuration ? "Ses süresi okunamadı; kaynak dosyada doğrulayın." : "Ses süresi envanterde mevcut.",
+    },
+    {
+      id: "final-review",
+      label: "Teslim öncesi insan onayı",
+      passed: false,
+      detail: "Bu çıktı her zaman imzasız çalışma taslağıdır; yetkili uzman son kez gözden geçirmeden nihai veya teslim edilmiş sayılamaz.",
+    },
+  ];
+  return checks;
 }
 
 interface ReportLine {
@@ -58,11 +158,34 @@ function linesForReport(input: TranscriptReportInput): ReportLine[] {
     { text: "Yanıtlanacak sorular", style: "Heading2" },
   ];
 
+  const questionAnswers = input.questionAnswers ?? assignment.questionAnswers ?? [];
+  const answerByQuestion = new Map(questionAnswers.map((item) => [item.question, item]));
+  const evidenceByRef = new Map((input.supportingSegments ?? []).map((item) => [item.ref, item]));
+
   if (assignment.questions.length === 0) {
     lines.push({ text: "Henüz soru girilmedi." });
   } else {
     assignment.questions.forEach((question, index) => {
-      lines.push({ text: (index + 1) + ". " + question });
+      const item = answerByQuestion.get(question);
+      lines.push({ text: (index + 1) + ". " + question, style: "Heading2" });
+      lines.push({ text: "Uzman yanıtı: " + (item?.answer.trim() || "[YANIT BEKLİYOR]") });
+      const refs = item?.supportingSegmentRefs ?? [];
+      if (refs.length === 0) {
+        lines.push({ text: "Dayanak segment: [BAĞLANMADI]" });
+      } else {
+        refs.forEach((ref) => {
+          const evidence = evidenceByRef.get(ref);
+          lines.push({
+            text: evidence
+              ? "Dayanak: " + evidence.fileName + " [" + formatTime(evidence.startSeconds) + " – " +
+                (evidence.endSeconds === null ? "bitiş belirtilmedi" : formatTime(evidence.endSeconds)) +
+                "] · " + evidence.speaker + " · " + evidence.status
+              : "[BAĞLANTI BULUNAMADI: " + ref + "]",
+            style: "Heading2",
+          });
+          lines.push({ text: evidence?.text.trim() || (evidence ? "[Metin girilmedi]" : "[BAĞLANTI BULUNAMADI: " + ref + "]") });
+        });
+      }
     });
   }
 
@@ -99,8 +222,16 @@ function linesForReport(input: TranscriptReportInput): ReportLine[] {
   }
 
   lines.push(
+    { text: "Teslim öncesi kalite kontrolü", style: "Heading1" },
+  );
+  for (const check of buildReportQualityChecklist(input)) {
+    lines.push({ text: (check.passed ? "GEÇTİ · " : "BEKLİYOR · ") + check.label, style: "Heading2" });
+    lines.push({ text: check.detail });
+  }
+
+  lines.push(
     { text: "Uzman kontrolü ve teslim", style: "Heading1" },
-    { text: "Makine tarafından üretilmiş bir metin varsa taslak niteliğindedir. Bu prototipte ses tanıma motoru bağlı değildir; bölümler kullanıcı tarafından elle girilir." },
+    { text: "Yerel SEDA v0.1 ile üretilmiş metinler makine taslağıdır; model, sürüm ve çalışma koşulları ayrıca kaydedilmeli, her bölüm kaynak sesle karşılaştırılarak uzman tarafından kontrol edilmelidir." },
     { text: "Her bölüm, kaynak ses dinlenerek ve görev soruları gözetilerek uzman tarafından değerlendirilmelidir. Belirsizlikler gizlenmemeli veya otomatik olarak tamamlanmamalıdır." },
     { text: "Bu ara çıktı elektronik olarak imzalanmamıştır. Resmî rapor, UDF/UYAP dosyası veya teslim kaydı olarak kullanılamaz." },
     { text: "Oluşturulma zamanı (UTC): " + new Date().toISOString() },
