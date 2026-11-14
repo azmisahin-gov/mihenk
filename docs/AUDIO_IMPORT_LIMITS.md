@@ -13,6 +13,18 @@ Bu belge, 56.12 ses materyali kabulünün mevcut ilk aşamasındaki doğrulanabi
 
 Bu sınırlar, dosya boyutuna bağlı olmayan temel tamponlamayı (1 MiB ses girdisi, yaklaşık 1 MiB+16 byte şifreli blok, 1 MiB üst sınırında oynatma Range yanıtı ve 64 KiB yedek IO) korur. Gerçek RAM üst sınırı işletim sistemi/WebView, kripto çalışma alanları ve dosya sistemi tamponları tarafından da etkilenir; CI testi bu süreçlerin toplam RSS değerini ölçmez.
 
+## Gerçek kaynak dalga biçimi — uygulanan ilk dilim
+
+Dinleme alanındaki temsilî çubuklar kaldırılır. MİHENK, kaynak sesi AES-GCM blok doğrulaması yapan şifreli kasa okuyucusundan Symphonia decoder'a akıtarak 512 zaman kovası için tepe genliği hesaplar. Her kovada tüm kanallar arasındaki en yüksek mutlak örnek değeri kullanılır; bu RMS/loudness ölçümü veya konuşma analizi değildir.
+
+- Çözülmüş kaynak ses diske geçici plaintext dosya olarak yazılmaz; okuyucu mevcut bloklu ve doğrulamalı bellek yolunu kullanır.
+- Decoder paketleri sınırlı tamponlarla işlenir; kanal sayısı 1–8, örnekleme hızı en fazla 192 kHz ve paket boyutu uygulama güvenlik sınırlarıyla kontrol edilir.
+- 512 değer 0–1 aralığında Stronghold şifreli materyal metadata'sında önbelleğe alınır. Kasa tekrar açıldığında yeniden çözümleme gerekmez.
+- Ses süresi veya codec güvenilir biçimde okunamazsa dalga biçimi üretilmez; kullanıcıya açık hata ve yeniden deneme seçeneği gösterilir. Rastgele/temsili grafik fallback'i yoktur.
+- Oynatma imleci, gerçek zaman kovaları üzerinde ilerleme vurgusu olarak gösterilir. Zaman çözünürlüğü 512 kovayla sınırlıdır; kelime hizalaması veya olay tespiti değildir.
+
+Bu görselleştirme, seçilen decoder'ın ürettiği örneklerin genlik özetidir. Kaynak kökeni, sesin özgünlüğü veya manipülasyon bulunmadığı konusunda kanıt oluşturmaz.
+
 ## Bütünlük yorumlama sınırı
 
 SHA-256, MİHENK'in içe aktarma sırasında okuduğu byte dizisini tanımlar. GCM doğrulaması, şifreli kasa bloklarının oynatma sırasında değiştirilmediğini veya bozulduğunu tespit etmeye yarar. Bu ölçümler tek başına kaynağın kökenini, teslim öncesi muhafaza zincirini, kaydın gerçekliğini veya ses üzerinde manipülasyon bulunmadığını kanıtlamaz; dijital imza ya da bağımsız zaman damgası da değildir.
