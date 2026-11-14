@@ -86,6 +86,8 @@ export interface VaultAudioMetadata {
   noncePrefix: number[];
   durationSeconds: number | null;
   technicalMetadata?: AudioTechnicalMetadata;
+  /** 512 absolute peak buckets decoded from the authenticated encrypted source. */
+  waveformPeaks?: number[];
   sha256Preview: string | null;
   segments: Array<{
     id: string;
@@ -296,6 +298,16 @@ function validateMetadata(meta: VaultAudioMetadata): void {
   }
   assertVaultFileId(meta.fileId);
   assertVaultAssignmentId(meta.assignmentId);
+  if (
+    meta.waveformPeaks !== undefined &&
+    (!Array.isArray(meta.waveformPeaks) ||
+      meta.waveformPeaks.length !== 512 ||
+      meta.waveformPeaks.some((peak) =>
+        typeof peak !== "number" || !Number.isFinite(peak) || peak < 0 || peak > 1
+      ))
+  ) {
+    throw new Error("Şifreli ses kaydının dalga biçimi önbelleği geçersiz.");
+  }
   if (
     meta.formatVersion !== VAULT_FORMAT_VERSION ||
     !Number.isSafeInteger(meta.sizeBytes) ||
@@ -684,6 +696,38 @@ export async function transcribeStoredAudio(metadata: VaultAudioMetadata, jobId:
       fileName: metadata.fileName,
       jobId,
     });
+  } finally {
+    rawKeyTransfer.fill(0);
+    rawKey.fill(0);
+  }
+}
+
+export async function getStoredAudioWaveform(metadata: VaultAudioMetadata): Promise<number[]> {
+  const store = requireStore();
+  validateMetadata(metadata);
+  const rawKey = await store.get(audioKeyKey(metadata.fileId));
+  if (!rawKey || rawKey.byteLength !== 32) {
+    rawKey?.fill(0);
+    throw new Error("Ses dosyasının kasa anahtarı bulunamadı.");
+  }
+
+  const rawKeyTransfer = Array.from(rawKey);
+  try {
+    const peaks = await invoke<number[]>("build_stored_audio_waveform_command", {
+      fileId: metadata.fileId,
+      sizeBytes: metadata.sizeBytes,
+      noncePrefix: metadata.noncePrefix,
+      rawKey: rawKeyTransfer,
+      fileName: metadata.fileName,
+    });
+    if (
+      !Array.isArray(peaks) ||
+      peaks.length !== 512 ||
+      peaks.some((peak) => typeof peak !== "number" || !Number.isFinite(peak) || peak < 0 || peak > 1)
+    ) {
+      throw new Error("Decoder geçersiz dalga biçimi verisi döndürdü.");
+    }
+    return peaks;
   } finally {
     rawKeyTransfer.fill(0);
     rawKey.fill(0);
