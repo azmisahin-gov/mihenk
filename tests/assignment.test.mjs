@@ -91,6 +91,27 @@ test("atama profili alanlarını doğrular ve satır satır soruları korur", ()
   assert.equal(updated.scope, "Ses kaydının incelenmesi");
 });
 
+test("atama profilini kaydederken soru yanıtları ve destek segmentleri görev içinde korunur", () => {
+  const current = {
+    ...first,
+    questionAnswers: [{
+      question: "İlk soru?",
+      answer: "Uzman yanıtı",
+      supportingSegmentRefs: ["audio-a:segment-a"],
+      updatedAt: "2026-11-14T19:00:00.000Z",
+    }],
+  };
+  const updated = normalizeAssignmentProfile(current, {
+    ...current,
+    questions: ["İlk soru?", "İkinci soru?"],
+  });
+
+  assert.equal(updated.questionAnswers[0].answer, "Uzman yanıtı");
+  assert.deepEqual(updated.questionAnswers[0].supportingSegmentRefs, ["audio-a:segment-a"]);
+  assert.equal(updated.questionAnswers[1].question, "İkinci soru?");
+  assert.equal(updated.questionAnswers[1].answer, "");
+});
+
 test("atama profili geçersiz tarih, kontrol karakteri ve aşırı uzun alanları reddeder", () => {
   assert.throws(() => normalizeDateField("2026-02-30", "Son tarih"), /geçerli bir tarih/);
   assert.throws(() => normalizeDateField("01.12.2026", "Son tarih"), /YYYY-AA-GG/);
