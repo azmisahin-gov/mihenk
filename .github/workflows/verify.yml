@@ -135,6 +135,8 @@ jobs:
       - name: Kilitli Tauri Rust bağımlılıklarını denetle
         run: cargo check --locked --manifest-path src-tauri/Cargo.toml
       - name: Rust birim testleri
+        env:
+          MIHENK_SEDA_MODEL_SMOKE: ${{ runner.os == 'Linux' && '1' || '0' }}
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Masaüstü ikilisini derle
         run: cargo build --locked --manifest-path src-tauri/Cargo.toml
