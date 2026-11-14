@@ -10,6 +10,8 @@ use std::{
 
 use tauri::Manager;
 
+mod audio_playback;
+
 static STARTUP_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 fn fallback_startup_log_path() -> Option<PathBuf> {
@@ -130,6 +132,15 @@ fn main() {
     }));
 
     let builder = tauri::Builder::default()
+        .manage(audio_playback::PlaybackSessions::default())
+        .register_uri_scheme_protocol("mihenk-audio", |context, request| {
+            audio_playback::handle_protocol_request(context, request)
+        })
+        .invoke_handler(tauri::generate_handler![
+            audio_playback::open_audio_playback_session,
+            audio_playback::close_audio_playback_session,
+            audio_playback::clear_audio_playback_sessions,
+        ])
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {

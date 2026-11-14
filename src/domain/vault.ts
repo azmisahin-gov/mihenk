@@ -1,4 +1,5 @@
 import { appDataDir, join } from "@tauri-apps/api/path";
+import { invoke } from "@tauri-apps/api/core";
 import {
   BaseDirectory,
   exists,
@@ -24,17 +25,13 @@ import {
 } from "./assignment";
 import {
   MAX_VAULT_AUDIO_BYTES,
-  VAULT_AUTH_TAG_BYTES,
   VAULT_CHUNK_SIZE,
   VAULT_FORMAT_VERSION,
   buildVaultHeader,
   createVaultFileKeyBytes,
   createVaultNoncePrefix,
-  decryptVaultChunk,
   encryptVaultChunk,
-  expectedVaultCiphertextSize,
   importVaultFileKey,
-  verifyVaultHeader,
  } from "./vault-crypto";
 import {
   buildVaultBackup,
@@ -385,6 +382,7 @@ export async function unlockLocalVault(password: string): Promise<void> {
 }
 
 export async function lockLocalVault(): Promise<void> {
+  await clearStoredAudioPlaybackSessions();
   if (!activeStronghold) return;
   const stronghold = activeStronghold;
   await stronghold.unload();
@@ -574,7 +572,12 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
   }
 }
 
-export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<File> {
+export interface VaultAudioPlayback {
+  url: string;
+  sessionId: string;
+}
+
+export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<VaultAudioPlayback> {
   const store = requireStore();
   validateMetadata(metadata);
   const rawKey = await store.get(audioKeyKey(metadata.fileId));
@@ -583,56 +586,39 @@ export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<Fil
     throw new Error("Ses dosyasının şifreleme anahtarı bulunamadı.");
   }
 
-  let fileBytes: Uint8Array | null = null;
-  const plaintextChunks: Uint8Array<ArrayBuffer>[] = [];
+  const sessionId = crypto.randomUUID().replaceAll("-", "").toLowerCase();
   try {
-    fileBytes = await readFile(audioRelativePath(metadata.fileId, "mhn"), {
-      baseDir: BaseDirectory.AppData,
+    await invoke("open_audio_playback_session", {
+      sessionId,
+      fileId: metadata.fileId,
+      sizeBytes: metadata.sizeBytes,
+      noncePrefix: metadata.noncePrefix,
+      rawKey: Array.from(rawKey),
+      mediaType: metadata.mediaType,
     });
-    verifyVaultHeader(fileBytes);
-    const expectedBytes = expectedVaultCiphertextSize(metadata.sizeBytes);
-    if (fileBytes.byteLength !== expectedBytes) {
-      throw new Error("Şifreli ses dosyasının uzunluğu doğrulanamadı.");
-    }
-
-    const key = await importVaultFileKey(rawKey);
-    const prefix = new Uint8Array(metadata.noncePrefix);
-    let offset = 13;
-    for (let index = 0; index < metadata.chunkCount; index += 1) {
-      const plainLength = Math.min(
-        VAULT_CHUNK_SIZE,
-        metadata.sizeBytes - index * VAULT_CHUNK_SIZE,
-      );
-      const cipherLength = plainLength + VAULT_AUTH_TAG_BYTES;
-      const ciphertext = fileBytes.slice(offset, offset + cipherLength);
-      const plaintext = await decryptVaultChunk(
-        key,
-        metadata.fileId,
-        prefix,
-        index,
-        plainLength,
-        ciphertext,
-      );
-      plaintextChunks.push(plaintext);
-      ciphertext.fill(0);
-      offset += cipherLength;
-    }
-
-    return new File(plaintextChunks, metadata.fileName, {
-      type: metadata.mediaType,
-      lastModified: metadata.lastModified,
-    });
-  } catch {
-    throw new Error("Ses dosyasının şifreli blokları doğrulanamadı veya dosya bozuk.");
+    return {
+      sessionId,
+      url: `mihenk-audio://localhost/${sessionId}`,
+    };
   } finally {
     rawKey.fill(0);
-    fileBytes?.fill(0);
-    for (const chunk of plaintextChunks) chunk.fill(0);
   }
+}
+
+export async function closeStoredAudioPlaybackSession(sessionId: string): Promise<void> {
+  if (!/^[a-f0-9]{32}$/.test(sessionId)) {
+    throw new Error("Ses oynatma oturumu kimliği geçersiz.");
+  }
+  await invoke("close_audio_playback_session", { sessionId });
+}
+
+export async function clearStoredAudioPlaybackSessions(): Promise<void> {
+  await invoke("clear_audio_playback_sessions");
 }
 
 export async function deleteStoredAudio(fileId: string): Promise<void> {
   const store = requireStore();
+  await clearStoredAudioPlaybackSessions();
   const stronghold = requireStronghold();
   assertVaultFileId(fileId);
   const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);

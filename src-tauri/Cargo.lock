@@ -2428,6 +2428,7 @@ dependencies = [
 name = "mihenk"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -2435,6 +2436,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-stronghold",
  "tauri-plugin-updater",
+ "zeroize",
 ]
 
 [[package]]

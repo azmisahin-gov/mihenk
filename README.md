@@ -14,7 +14,7 @@ MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürüt
 - Her ses kaydını seçili görev alanına bağlama; ses kuyruğu, transkript bölümleri ve sayaçları görev bazında filtreleme.
 - Eski kasalardaki görev kimliği bulunmayan sesleri, içerik ve anahtarları değiştirmeden varsayılan "Genel çalışma" alanına taşıma.
 - Birden fazla ses dosyasını belleğe alma ve listeleme.
-- HTML5 destekli yerel ses oynatma.
+- HTML5 ses oynatımı; Tauri yerel protokolü üzerinden HTTP Range aralıklarıyla, AES-GCM doğrulaması yapılarak en fazla 1 MiB çözülmüş veri sunma.
 - Oynatma konumunda zaman kodlu transkript bölümü ekleme.
 - Metin, başlangıç/bitiş zamanı, nötr konuşmacı etiketi ve kontrol durumunu elle düzenleme.
 - İşaretlenmiş bir transkript aralığını tekrar tekrar dinleme.
@@ -24,11 +24,11 @@ MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürüt
 - Türkçe ASR adaylarını değerlendirmek için WER/CER metrik hesaplayıcısı; bu kod bir ASR motoru içermez ([değerlendirme planı](docs/ASR_MODEL_EVALUATION.md)).
 - 128 MiB sınırı içindeki ses dosyaları için 1 MiB parçalar halinde düşük bellekli SHA-256 ön kontrolü.
 
-**Henüz bağlı olmayanlar:** yerel ASR motoru, kasa parolası kurtarma/sıfırlama, resmi belge/OCR akışı, otomatik kayıt ve çökme sonrası kurtarma kabul testleri, PDF son çıktısı, 128 MiB üzerindeki sesler için güvenli düşük bellekli dinleme, uzun dosyalarda akışlı hash, doğrulanmış UYAP/UDF entegrasyonu ve temiz cihaz pilot kabulü.
+**Henüz bağlı olmayanlar:** yerel ASR motoru, kasa parolası kurtarma/sıfırlama, resmi belge/OCR akışı, otomatik kayıt ve çökme sonrası kurtarma kabul testleri, PDF son çıktısı, 128 MiB üzerindeki ses dosyaları için destek, yedeklemede akışlı dışa aktarma, uzun dosyalarda 128 MiB üzeri akışlı hash, doğrulanmış UYAP/UDF entegrasyonu ve temiz cihaz pilot kabulü.
 
 ## Güvenli kullanım sınırı
 
-Yerel kasa önizlemesi, içe alınan sesleri 1 MiB AES-256-GCM şifreli bloklar halinde cihazdaki Stronghold snapshot ve materyal dosyalarında saklar. SHA-256 ön kontrolü de 1 MiB parçalar halinde çalışır ve dosyanın tamamını RAM'e almaz. Kasa parolası olmadan yerel kayıtlar açılamaz. Bu ilk dilimde dosya başına 128 MiB sınırı korunur: dinleme sırasında şifreli kayıt ve çözülmüş ses hâlâ belleğe birlikte alınabildiğinden, yalnızca içe aktarma/hash akışlı diye daha büyük dosya desteği hazır sayılmaz. Büyük dosya desteği için oynatma ve yedekleme yolları da akışlı hale getirilmelidir. `.mihenkbackup` dosyası Stronghold snapshot’ını, Argon2 salt’ını ve AES-GCM ile şifrelenmiş materyal dosyalarını tek pakette taşır. Paket kendi başına ek bir parola katmanıyla şifrelenmez; içindeki hassas veriler zaten şifreli kalır. Paket içi SHA-256 özetleri kazara bozulmayı saptar; imza veya kötü niyetli değişikliğe karşı doğrulama değildir. Geri yükleme yalnız boş kasaya yapılır ve aynı kasa parolası gerekir. Parola kurtarma/sıfırlama yoktur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
+Yerel kasa önizlemesi, içe alınan sesleri 1 MiB AES-256-GCM şifreli bloklar halinde cihazdaki Stronghold snapshot ve materyal dosyalarında saklar. SHA-256 ön kontrolü de 1 MiB parçalar halinde çalışır ve dosyanın tamamını RAM'e almaz. Kasa parolası olmadan yerel kayıtlar açılamaz. Dinleme sırasında Tauri yerel ses protokolü HTTP Range aralıklarını işler; her istek için ilgili AES-256-GCM bloğu doğrulanır ve en fazla 1 MiB ses verisi çözülerek yanıtlanır. Böylece uygulama kodu şifreli dosyanın tamamını ve tam çözülmüş kopyasını aynı anda bellekte tutmaz. Dosya başına 128 MiB sınırı şimdilik korunur; yedekleme/dışa aktarma akışı hâlâ tam dosya verilerini bellekte topladığı için bu sınır henüz kaldırılamaz. `.mihenkbackup` dosyası Stronghold snapshot’ını, Argon2 salt’ını ve AES-GCM ile şifrelenmiş materyal dosyalarını tek pakette taşır. Paket kendi başına ek bir parola katmanıyla şifrelenmez; içindeki hassas veriler zaten şifreli kalır. Paket içi SHA-256 özetleri kazara bozulmayı saptar; imza veya kötü niyetli değişikliğe karşı doğrulama değildir. Geri yükleme yalnız boş kasaya yapılır ve aynı kasa parolası gerekir. Parola kurtarma/sıfırlama yoktur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
 
 SHA-256 göstergesi, 128 MiB sınırı içindeki seçilmiş dosyanın parçalı ön kontrolüdür. Delil zinciri, teslim öncesi köken doğrulaması veya dosyanın özgünlüğü hakkında kanıt sayılmaz. 128 MiB üzerindeki dosyalar henüz kasaya alınmaz ve bu prototipte hash üretilmez.
 

@@ -22,6 +22,7 @@ export interface AudioRecord {
   sha256: string | null;
   hashState: HashState;
   segments: TranscriptSegment[];
+  playbackSessionId?: string;
   vaultMetadata?: VaultAudioMetadata;
 }
 

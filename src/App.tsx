@@ -23,6 +23,8 @@ import {
   listStoredAudio,
   lockLocalVault,
   openStoredAudio,
+  closeStoredAudioPlaybackSession,
+  clearStoredAudioPlaybackSessions,
   saveStoredAudioMetadata,
   unlockLocalVault,
   exportLocalVaultBackup,
@@ -198,8 +200,9 @@ export default function App() {
 
   useEffect(() => () => {
     for (const record of recordsRef.current) {
-      if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
+      if (record.objectUrl.startsWith("blob:")) URL.revokeObjectURL(record.objectUrl);
     }
+    void clearStoredAudioPlaybackSessions().catch(() => undefined);
   }, []);
 
   const assignmentRecords = useMemo(
@@ -398,9 +401,12 @@ export default function App() {
     try {
       await persistVaultRecords(recordsRef.current);
       audioRef.current?.pause();
+      audioRef.current?.removeAttribute("src");
+      audioRef.current?.load();
+      await clearStoredAudioPlaybackSessions();
       await lockLocalVault();
       for (const record of recordsRef.current) {
-        if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
+        if (record.objectUrl.startsWith("blob:")) URL.revokeObjectURL(record.objectUrl);
       }
       setRecords([]);
       setVaultSaveStatus("idle");
@@ -428,14 +434,22 @@ export default function App() {
     setActiveId(recordId);
     setCurrentTime(0);
     setRepeatSegmentId(null);
-    if (record.objectUrl || !record.vaultMetadata) return;
+    if (record.playbackSessionId || !record.vaultMetadata) return;
 
     setLoadingRecordId(recordId);
     try {
-      const file = await openStoredAudio(record.vaultMetadata);
-      const objectUrl = URL.createObjectURL(file);
-      updateRecord(recordId, (item) => ({ ...item, file, objectUrl }));
-      setNotice("Şifreli ses dosyası doğrulandı ve dinlemeye açıldı.");
+      await clearStoredAudioPlaybackSessions();
+      setRecords((current) => current.map((item) => (
+        item.playbackSessionId ? { ...item, objectUrl: "", playbackSessionId: undefined } : item
+      )));
+      if (record.objectUrl.startsWith("blob:")) return;
+      const playback = await openStoredAudio(record.vaultMetadata);
+      updateRecord(recordId, (item) => ({
+        ...item,
+        objectUrl: playback.url,
+        playbackSessionId: playback.sessionId,
+      }));
+      setNotice("Şifreli ses kaydı doğrulanmış bloklarla dinlemeye açıldı.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Şifreli ses dosyası açılamadı.");
     } finally {
@@ -518,6 +532,12 @@ export default function App() {
       return;
     }
     audioRef.current?.pause();
+    audioRef.current?.removeAttribute("src");
+    audioRef.current?.load();
+    void clearStoredAudioPlaybackSessions().catch(() => undefined);
+    setRecords((current) => current.map((record) => (
+      record.playbackSessionId ? { ...record, objectUrl: "", playbackSessionId: undefined } : record
+    )));
     setActiveAssignmentId(assignmentId);
     setActiveId(null);
     setCurrentTime(0);
@@ -648,8 +668,9 @@ export default function App() {
     if (!target) return;
 
     try {
+      if (target.playbackSessionId) await closeStoredAudioPlaybackSession(target.playbackSessionId);
       if (target.vaultMetadata) await deleteStoredAudio(recordId);
-      if (target.objectUrl) URL.revokeObjectURL(target.objectUrl);
+      if (target.objectUrl.startsWith("blob:")) URL.revokeObjectURL(target.objectUrl);
       const remaining = records.filter((record) => record.id !== recordId);
       setRecords(remaining);
       if (activeId === recordId) {
@@ -1186,8 +1207,9 @@ export default function App() {
             <div>
               <strong>Prototip sınırı</strong>
               <span>
-                Ses dosyaları yerel kasaya AES-GCM ile şifrelenerek kaydedilir; parola koruması Stronghold ile sağlanır.
-                Bu önizlemede dosya başına 128 MiB sınırı vardır; dinleme sırasında dosya bellekte çözülür.
+                Ses dosyaları AES-GCM bloklarıyla şifrelenir; parola koruması Stronghold ile sağlanır.
+                Dinleme, istenen en fazla 1 MiB'lik doğrulanmış aralıklarla yürür; uygulama kodu tam dosyanın çözülmüş kopyasını üretmez.
+                Bu önizlemede dosya başına 128 MiB sınırı vardır.
                 Kasa yedeğini boş kasaya geri yükleyebilirsiniz; aynı parola gerekir. Paket ayrıca şifrelenmez, ancak içindeki Stronghold snapshot ve AES-GCM materyalleri şifrelidir. SHA-256 denetimi imza değildir. ASR henüz bağlı değildir. Gerçek vaka materyali kullanmayın.
               </span>
             </div>
