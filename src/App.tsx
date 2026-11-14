@@ -200,20 +200,6 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // Güncellemeler ses çalarken veya şifreli dosya belleğe alınırken bekler.
-  // Kayıtlar artık kalıcı olduğundan kuyruk sayısı güncellemeyi engellemez.
-  useEffect(() => {
-    if (
-      vaultState === "unlocked" &&
-      updateState === "available" &&
-      availableUpdate &&
-      !isPlaying &&
-      loadingRecordId === null
-    ) {
-      void installAvailableUpdate();
-    }
-  }, [availableUpdate, updateState, vaultState, isPlaying, loadingRecordId, assignmentProfileDirty]);
-
   useEffect(() => () => {
     for (const record of recordsRef.current) {
       if (record.objectUrl.startsWith("blob:")) URL.revokeObjectURL(record.objectUrl);
@@ -250,6 +236,20 @@ export default function App() {
   const assignmentProfileDirty = Boolean(
     activeAssignment && hasAssignmentProfileChanges(activeAssignment, assignmentProfileDraft),
   );
+
+  // Güncellemeler ses çalarken veya şifreli dosya belleğe alınırken bekler.
+  // Kayıtlar artık kalıcı olduğundan kuyruk sayısı güncellemeyi engellemez.
+  useEffect(() => {
+    if (
+      vaultState === "unlocked" &&
+      updateState === "available" &&
+      availableUpdate &&
+      !isPlaying &&
+      loadingRecordId === null
+    ) {
+      void installAvailableUpdate();
+    }
+  }, [availableUpdate, updateState, vaultState, isPlaying, loadingRecordId, assignmentProfileDirty]);
 
   const activeRecord = useMemo(
     () => assignmentRecords.find((record) => record.id === activeId) ?? null,

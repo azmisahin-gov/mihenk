@@ -143,9 +143,9 @@ test("aynı çok satırlı görev profili kirli sayılmaz; soru değişikliği k
 test("görev soruları LF ve CRLF satır sonlarıyla kayıpsız ayrıştırılıp birleştirilir", () => {
   const questions = ["İlk soru?", "İkinci soru?", "Üçüncü soru?"];
 
-  assert.deepEqual(parseAssignmentQuestions(questions.join("\\n")), questions);
-  assert.deepEqual(parseAssignmentQuestions(questions.join("\\r\\n")), questions);
-  assert.equal(formatAssignmentQuestions(questions), questions.join("\\n"));
+  assert.deepEqual(parseAssignmentQuestions(questions.join("\n")), questions);
+  assert.deepEqual(parseAssignmentQuestions(questions.join("\r\n")), questions);
+  assert.equal(formatAssignmentQuestions(questions), questions.join("\n"));
   assert.deepEqual(
     parseAssignmentQuestions(formatAssignmentQuestions(questions)),
     questions,
