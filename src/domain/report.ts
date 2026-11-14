@@ -179,7 +179,8 @@ function linesForReport(input: TranscriptReportInput): ReportLine[] {
             text: evidence
               ? "Dayanak: " + evidence.fileName + " [" + formatTime(evidence.startSeconds) + " – " +
                 (evidence.endSeconds === null ? "bitiş belirtilmedi" : formatTime(evidence.endSeconds)) +
-                "] · " + evidence.speaker + " · " + evidence.status,
+                "] · " + evidence.speaker + " · " + evidence.status
+              : "[BAĞLANTI BULUNAMADI: " + ref + "]",
             style: "Heading2",
           });
           lines.push({ text: evidence?.text.trim() || (evidence ? "[Metin girilmedi]" : "[BAĞLANTI BULUNAMADI: " + ref + "]") });
