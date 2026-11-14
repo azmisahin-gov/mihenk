@@ -12,6 +12,14 @@ import {
 } from "@tauri-apps/plugin-fs";
 import { Stronghold } from "@tauri-apps/plugin-stronghold";
 import {
+  assertUniqueAssignmentName,
+  createAssignmentRecord,
+  isValidAssignmentId,
+  normalizeAssignmentName,
+  DEFAULT_ASSIGNMENT_NAME,
+  type AssignmentRecord,
+} from "./assignment";
+import {
   MAX_VAULT_AUDIO_BYTES,
   VAULT_AUTH_TAG_BYTES,
   VAULT_CHUNK_SIZE,
@@ -40,6 +48,7 @@ const SALT_NAME = "stronghold.salt";
 const CLIENT_NAME = "mihenk-main";
 const STORE_META_KEY = "mihenk:vault:meta";
 const STORE_AUDIO_INDEX_KEY = "mihenk:vault:audio-index";
+const STORE_ASSIGNMENT_INDEX_KEY = "mihenk:vault:assignment-index";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -54,8 +63,11 @@ type StrongholdInstance = Awaited<ReturnType<typeof Stronghold.load>>;
 
 export type VaultState = "not-created" | "locked" | "unlocked";
 
+export type VaultAssignment = AssignmentRecord;
+
 export interface VaultAudioMetadata {
   fileId: string;
+  assignmentId: string;
   fileName: string;
   mediaType: string;
   sizeBytes: number;
@@ -222,6 +234,10 @@ function audioMetaKey(fileId: string): string {
   return `mihenk:audio:meta:${fileId}`;
 }
 
+function assignmentMetaKey(assignmentId: string): string {
+  return `mihenk:assignment:meta:${assignmentId}`;
+}
+
 function audioKeyKey(fileId: string): string {
   return `mihenk:audio:key:${fileId}`;
 }
@@ -236,8 +252,15 @@ export function assertVaultFileId(fileId: string): void {
   }
 }
 
+export function assertVaultAssignmentId(assignmentId: string): void {
+  if (!isValidAssignmentId(assignmentId)) {
+    throw new Error("Görev alanı kimliği geçersiz.");
+  }
+}
+
 function validateMetadata(meta: VaultAudioMetadata): void {
   assertVaultFileId(meta.fileId);
+  assertVaultAssignmentId(meta.assignmentId);
   if (
     meta.formatVersion !== VAULT_FORMAT_VERSION ||
     !Number.isSafeInteger(meta.sizeBytes) ||
