@@ -597,16 +597,18 @@ export async function transcribeStoredAudio(metadata: VaultAudioMetadata, jobId:
     throw new Error("Ses dosyasının kasa anahtarı bulunamadı.");
   }
 
+  const rawKeyTransfer = Array.from(rawKey);
   try {
     return await invoke<SedaTranscriptSegment[]>("transcribe_stored_audio_command", {
       fileId: metadata.fileId,
       sizeBytes: metadata.sizeBytes,
       noncePrefix: metadata.noncePrefix,
-      rawKey: Array.from(rawKey),
+      rawKey: rawKeyTransfer,
       fileName: metadata.fileName,
       jobId,
     });
   } finally {
+    rawKeyTransfer.fill(0);
     rawKey.fill(0);
   }
 }
@@ -621,13 +623,14 @@ export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<Vau
   }
 
   const sessionId = crypto.randomUUID().replaceAll("-", "").toLowerCase();
+  const rawKeyTransfer = Array.from(rawKey);
   try {
     await invoke("open_audio_playback_session", {
       sessionId,
       fileId: metadata.fileId,
       sizeBytes: metadata.sizeBytes,
       noncePrefix: metadata.noncePrefix,
-      rawKey: Array.from(rawKey),
+      rawKey: rawKeyTransfer,
       mediaType: metadata.mediaType,
     });
     return {
@@ -635,6 +638,7 @@ export async function openStoredAudio(metadata: VaultAudioMetadata): Promise<Vau
       url: `mihenk-audio://localhost/${sessionId}`,
     };
   } finally {
+    rawKeyTransfer.fill(0);
     rawKey.fill(0);
   }
 }
