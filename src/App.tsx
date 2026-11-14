@@ -1114,6 +1114,16 @@ export default function App() {
         sha256Preview: activeRecord.vaultMetadata?.sha256Preview ?? activeRecord.sha256 ?? null,
       },
       segments: activeRecord.segments,
+      questionAnswers: activeAssignment.questionAnswers ?? [],
+      supportingSegments: assignmentRecords.flatMap((record) => record.segments.map((segment) => ({
+        ref: `${record.id}:${segment.id}`,
+        fileName: record.vaultMetadata?.fileName ?? record.file.name,
+        startSeconds: segment.startSeconds,
+        endSeconds: segment.endSeconds,
+        text: segment.text,
+        speaker: segment.speaker,
+        status: segment.status,
+      }))),
     };
   }
 
