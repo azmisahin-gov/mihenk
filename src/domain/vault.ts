@@ -30,6 +30,8 @@ import {
   encryptVaultChunk,
   importVaultFileKey,
  } from "./vault-crypto";
+import { readFileChunks } from "./file-chunks.ts";
+import { Sha256 } from "./sha256.ts";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
@@ -460,7 +462,7 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
   }
   if (file.size <= 0) throw new Error("Boş ses dosyası kasaya alınamaz.");
   if (file.size > MAX_VAULT_AUDIO_BYTES) {
-    throw new Error("Bu önizlemede tek ses dosyası 128 MiB sınırını aşamaz.");
+    throw new Error("Tek ses dosyası 240 MiB sınırını aşamaz.");
   }
 
   await mkdir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
@@ -483,18 +485,22 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
     });
     await fileHandle.write(buildVaultHeader());
 
-    for (let index = 0; index < chunkCount; index += 1) {
-      const start = index * VAULT_CHUNK_SIZE;
-      const end = Math.min(file.size, start + VAULT_CHUNK_SIZE);
-      const plaintext = new Uint8Array(await file.slice(start, end).arrayBuffer());
+    const sourceHasher = new Sha256();
+    let writtenChunks = 0;
+    for await (const plaintext of readFileChunks(file)) {
+      const ciphertext = await encryptVaultChunk(key, fileId, noncePrefix, writtenChunks, plaintext);
       try {
-        const ciphertext = await encryptVaultChunk(key, fileId, noncePrefix, index, plaintext);
+        sourceHasher.update(plaintext);
         await fileHandle.write(ciphertext);
-        ciphertext.fill(0);
       } finally {
-        plaintext.fill(0);
+        ciphertext.fill(0);
       }
+      writtenChunks += 1;
     }
+    if (writtenChunks !== chunkCount) {
+      throw new Error("Ses dosyasının tüm parçaları kasaya alınamadı.");
+    }
+    const sourceSha256 = sourceHasher.digestHex();
 
     await fileHandle.close();
     fileHandle = null;
@@ -515,7 +521,7 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
       chunkCount,
       noncePrefix: Array.from(noncePrefix),
       durationSeconds: null,
-      sha256Preview: null,
+      sha256Preview: sourceSha256,
       segments: [],
       formatVersion: VAULT_FORMAT_VERSION,
     };

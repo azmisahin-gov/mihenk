@@ -5,7 +5,7 @@ export const VAULT_FORMAT_VERSION = 1;
 export const VAULT_CHUNK_SIZE = 1024 * 1024;
 export const VAULT_HEADER_SIZE = 13;
 export const VAULT_AUTH_TAG_BYTES = 16;
-export const MAX_VAULT_AUDIO_BYTES = 128 * 1024 * 1024;
+export const MAX_VAULT_AUDIO_BYTES = 240 * 1024 * 1024;
 
 function toOwnedArrayBuffer(source: Uint8Array): Uint8Array<ArrayBuffer> {
   const copy = new Uint8Array(source.byteLength);

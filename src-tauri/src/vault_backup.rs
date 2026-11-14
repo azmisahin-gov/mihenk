@@ -14,7 +14,7 @@ const MAGIC: &[u8; 8] = b"MHKBAK01";
 const BACKUP_VERSION: u32 = 1;
 const HEADER_BYTES: u64 = 16;
 const HASH_BYTES: usize = 32;
-const MAX_BACKUP_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_BACKUP_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_BACKUP_FILES: usize = 1024;
 const MAX_PATH_BYTES: usize = 256;
 const MAX_ENTRY_BYTES: u64 = 256 * 1024 * 1024;
@@ -30,6 +30,15 @@ struct BackupSource {
     path_bytes: Vec<u8>,
     file_path: PathBuf,
     size_bytes: u64,
+}
+
+fn is_interrupted_audio_part_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    bytes.len() == 37
+        && &bytes[32..] == b".part"
+        && bytes[..32]
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
 }
 
 fn is_material_file_name(name: &str) -> bool {
@@ -103,6 +112,11 @@ fn collect_sources(vault_dir: &Path) -> Result<Vec<BackupSource>, String> {
                     .file_name()
                     .into_string()
                     .map_err(|_| "Kasa materyal dosya adı geçersiz.".to_string())?;
+                if is_interrupted_audio_part_name(&name) {
+                    // Yarım .part verisi indekslenmiş bir materyal değildir;
+                    // yedeğe alınmaz. Eski dosyalar uygulama açılışında temizlenir.
+                    continue;
+                }
                 if !is_material_file_name(&name) {
                     return Err("Kasa materyal klasöründe yedeklenmeye uygun olmayan bir dosya var.".into());
                 }
@@ -136,7 +150,7 @@ fn collect_sources(vault_dir: &Path) -> Result<Vec<BackupSource>, String> {
             .ok_or_else(|| "Yedek paket boyutu hesaplanamadı.".to_string())?;
     }
     if total_bytes > MAX_BACKUP_BYTES {
-        return Err("Kasa yedek paketi 512 MiB sınırını aşıyor.".into());
+        return Err("Kasa yedek paketi 2 GiB sınırını aşıyor.".into());
     }
 
     Ok(sources)
@@ -504,7 +518,7 @@ fn stage_backup_archive<R: Read>(
     stage_dir: &Path,
 ) -> Result<Vec<String>, String> {
     if !(HEADER_BYTES..=MAX_BACKUP_BYTES).contains(&archive_length) {
-        return Err("Yedek dosyası boş, eksik veya 512 MiB sınırını aşıyor.".into());
+        return Err("Yedek dosyası boş, eksik veya 2 GiB sınırını aşıyor.".into());
     }
 
     let mut consumed = 0u64;
@@ -736,7 +750,7 @@ fn restore_vault_backup_file(archive_path: &Path, vault_dir: &Path) -> Result<()
         .metadata()
         .map_err(|_| "Seçilen kasa yedeği doğrulanamadı.".to_string())?;
     if !metadata.is_file() || metadata.len() < HEADER_BYTES || metadata.len() > MAX_BACKUP_BYTES {
-        return Err("Seçilen yedek dosyasının boyutu geçersiz veya 512 MiB sınırını aşıyor.".into());
+        return Err("Seçilen yedek dosyasının boyutu geçersiz veya 2 GiB sınırını aşıyor.".into());
     }
     restore_vault_backup_from_reader(&mut archive, metadata.len(), vault_dir)
 }
@@ -819,6 +833,15 @@ mod tests {
     }
 
     #[test]
+    fn backup_limits_cover_large_encrypted_audio_and_multiple_materials() {
+        let plaintext_bytes = 240 * 1024 * 1024_u64;
+        let chunks = plaintext_bytes.div_ceil(1024 * 1024);
+        let encrypted_bytes = plaintext_bytes + chunks * 16 + 13;
+        assert!(encrypted_bytes <= MAX_ENTRY_BYTES);
+        assert_eq!(MAX_BACKUP_BYTES, 2 * 1024 * 1024 * 1024);
+    }
+
+    #[test]
     fn writes_the_existing_v1_archive_layout_with_streamed_sha256_entries() {
         let root = fixture_directory();
         let sources = collect_sources(&root).unwrap();
@@ -848,6 +871,21 @@ mod tests {
         fs::write(root.join("materials").join("temporary.part"), b"unfinished").unwrap();
 
         assert!(collect_sources(&root).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn excludes_interrupted_import_parts_from_backups() {
+        let root = fixture_directory();
+        let partial = root
+            .join("materials")
+            .join("0123456789abcdef0123456789abcdef.part");
+        fs::write(&partial, b"unfinished encrypted import").unwrap();
+
+        let sources = collect_sources(&root).unwrap();
+        assert_eq!(sources.len(), 3);
+        assert!(!sources.iter().any(|source| source.file_path == partial));
+
         fs::remove_dir_all(root).unwrap();
     }
 

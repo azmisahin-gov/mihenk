@@ -13,6 +13,8 @@ export type HashState = "bekliyor" | "hesaplaniyor" | "hesaplandi" | "buyuk-dosy
 
 import type { VaultAudioMetadata } from "./vault";
 import { Sha256 } from "./sha256.ts";
+import { readFileChunks } from "./file-chunks.ts";
+import { MAX_VAULT_AUDIO_BYTES } from "./vault-crypto.ts";
 
 export interface AudioRecord {
   id: string;
@@ -26,7 +28,7 @@ export interface AudioRecord {
   vaultMetadata?: VaultAudioMetadata;
 }
 
-export const MAX_PREVIEW_HASH_BYTES = 128 * 1024 * 1024;
+export const MAX_PREVIEW_HASH_BYTES = MAX_VAULT_AUDIO_BYTES;
 
 export function formatTime(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) {
@@ -95,10 +97,9 @@ export function createSegment(startSeconds: number): TranscriptSegment {
 }
 
 /**
- * Dosyayı 1 MiB parçalar halinde okuyarak SHA-256 ön kontrolü üretir.
- * Bellekte hiçbir zaman dosyanın tamamı tutulmaz. 128 MiB sınırı,
- * büyük dosyaların mevcut oynatma ve yedekleme yolları da akışlı hale
- * getirilene kadar güvenlik sınırı olarak korunur.
+ * Dosyanın tam SHA-256 özetini 1 MiB parçalar halinde hesaplar.
+ * 240 MiB üst sınırı şifreli kasa, oynatma ve yedekleme sınırlarıyla aynıdır;
+ * hiçbir aşamada dosyanın tamamı belleğe alınmaz.
  */
 export async function calculatePreviewHash(
   file: File,
@@ -112,18 +113,8 @@ export async function calculatePreviewHash(
 
   try {
     const hasher = new Sha256();
-    const chunkSize = 1024 * 1024;
-    for (let offset = 0; offset < file.size; offset += chunkSize) {
-      const end = Math.min(file.size, offset + chunkSize);
-      const bytes = new Uint8Array(await file.slice(offset, end).arrayBuffer());
-      try {
-        if (bytes.byteLength !== end - offset) {
-          throw new Error("Ses dosyası parçası eksik okundu.");
-        }
-        hasher.update(bytes);
-      } finally {
-        bytes.fill(0);
-      }
+    for await (const bytes of readFileChunks(file)) {
+      hasher.update(bytes);
     }
     return { state: "hesaplandi", hash: hasher.digestHex() };
   } catch {

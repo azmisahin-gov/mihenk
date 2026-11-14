@@ -23,7 +23,7 @@ use zeroize::{Zeroize, Zeroizing};
 const VAULT_CHUNK_SIZE: u64 = 1024 * 1024;
 const VAULT_HEADER_SIZE: u64 = 13;
 const VAULT_AUTH_TAG_BYTES: u64 = 16;
-const MAX_VAULT_AUDIO_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_VAULT_AUDIO_BYTES: u64 = 240 * 1024 * 1024;
 const MAX_RESPONSE_BYTES: u64 = VAULT_CHUNK_SIZE;
 const MAX_PLAYBACK_SESSIONS: usize = 8;
 const VAULT_HEADER_MAGIC: &[u8; 8] = b"MHKENC01";
@@ -420,6 +420,17 @@ pub fn handle_protocol_request<R: Runtime>(
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn accepts_large_audio_while_each_playback_range_stays_bounded() {
+        let size_bytes = 129 * 1024 * 1024;
+        assert!(size_bytes <= MAX_VAULT_AUDIO_BYTES);
+        assert!(expected_ciphertext_size(size_bytes).unwrap() > size_bytes);
+        assert_eq!(
+            parse_range("bytes=0-", size_bytes),
+            Some((0, MAX_RESPONSE_BYTES - 1))
+        );
+    }
 
     fn test_session(size_bytes: u64) -> PlaybackSession {
         PlaybackSession {
