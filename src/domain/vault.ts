@@ -56,6 +56,23 @@ export type VaultState = "not-created" | "locked" | "unlocked";
 
 export type VaultAssignment = AssignmentRecord;
 
+export interface AudioTechnicalMetadata {
+  readStatus: "ok" | "unavailable";
+  containerFormat: string | null;
+  codec: string | null;
+  codecShortName: string | null;
+  channelCount: number | null;
+  channelLayout: string | null;
+  sampleRateHz: number | null;
+  bitsPerSample: number | null;
+  bitsPerCodedSample: number | null;
+  sampleFormat: string | null;
+  durationSeconds: number | null;
+  /** Average whole-file rate including container overhead, not codec bitrate. */
+  averageFileBitrateBps: number | null;
+  readMessage: string | null;
+}
+
 export interface VaultAudioMetadata {
   fileId: string;
   assignmentId: string;
@@ -67,6 +84,7 @@ export interface VaultAudioMetadata {
   chunkCount: number;
   noncePrefix: number[];
   durationSeconds: number | null;
+  technicalMetadata?: AudioTechnicalMetadata;
   sha256Preview: string | null;
   segments: Array<{
     id: string;
@@ -529,6 +547,38 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
       readbackNonce.fill(0);
     }
 
+    const inspectionKey = Array.from(rawKey);
+    const inspectionNonce = Array.from(noncePrefix);
+    let technicalMetadata: AudioTechnicalMetadata;
+    try {
+      technicalMetadata = await invoke<AudioTechnicalMetadata>("inspect_stored_audio_command", {
+        fileId,
+        sizeBytes: file.size,
+        noncePrefix: inspectionNonce,
+        rawKey: inspectionKey,
+        fileName: file.name,
+      });
+    } catch (error) {
+      technicalMetadata = {
+        readStatus: "unavailable",
+        containerFormat: null,
+        codec: null,
+        codecShortName: null,
+        channelCount: null,
+        channelLayout: null,
+        sampleRateHz: null,
+        bitsPerSample: null,
+        bitsPerCodedSample: null,
+        sampleFormat: null,
+        durationSeconds: null,
+        averageFileBitrateBps: null,
+        readMessage: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      inspectionKey.fill(0);
+      inspectionNonce.fill(0);
+    }
+
     const metadata: VaultAudioMetadata = {
       fileId,
       assignmentId,
@@ -539,7 +589,8 @@ export async function importAudioToVault(file: File, assignmentId: string): Prom
       chunkSize: VAULT_CHUNK_SIZE,
       chunkCount,
       noncePrefix: Array.from(noncePrefix),
-      durationSeconds: null,
+      durationSeconds: technicalMetadata.durationSeconds,
+      technicalMetadata,
       sha256Preview: sourceSha256,
       segments: [],
       formatVersion: VAULT_FORMAT_VERSION,
