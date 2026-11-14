@@ -212,6 +212,8 @@ export function mergeAsrTranscriptSegments<T extends VersionedTranscriptSegment>
   const fresh = generated.map((segment) => ({
     ...segment,
     source: "asr" as const,
+    channel: segment.channel ?? null,
+    annotationType: segment.annotationType ?? "speech",
     rawAsrText: segment.text,
     revisions: [],
   }) as T);
