@@ -614,6 +614,49 @@ mod tests {
     }
 
     #[test]
+    fn vault_audio_reader_seeks_and_authenticates_without_plaintext_files() {
+        let root = std::env::temp_dir().join(format!("mihenk-asr-vault-reader-{}", std::process::id()));
+        let materials = root.join("mihenk-vault").join("materials");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&materials).unwrap();
+
+        let mut plaintext = vec![0u8; VAULT_CHUNK_SIZE as usize + 257];
+        for (index, byte) in plaintext.iter_mut().enumerate() {
+            *byte = ((index * 13) % 251) as u8;
+        }
+        let session = test_session(plaintext.len() as u64);
+        let encrypted = encrypted_fixture(&plaintext, &session);
+        let path = materials.join(format!("{}.mhn", session.file_id));
+        fs::write(&path, encrypted).unwrap();
+
+        let mut source = open_vault_audio_reader(
+            &root,
+            &session.file_id,
+            session.size_bytes,
+            &session.nonce_prefix,
+            &session.key,
+        ).unwrap();
+
+        let mut first = vec![0u8; 29];
+        source.read_exact(&mut first).unwrap();
+        assert_eq!(first, plaintext[..29]);
+
+        source.seek(SeekFrom::Start(VAULT_CHUNK_SIZE - 11)).unwrap();
+        let mut boundary = vec![0u8; 35];
+        source.read_exact(&mut boundary).unwrap();
+        assert_eq!(boundary, plaintext[(VAULT_CHUNK_SIZE - 11) as usize..(VAULT_CHUNK_SIZE + 24) as usize]);
+
+        source.seek(SeekFrom::End(-17)).unwrap();
+        let mut tail = vec![0u8; 17];
+        source.read_exact(&mut tail).unwrap();
+        assert_eq!(tail, plaintext[plaintext.len() - 17..]);
+
+        assert!(source.seek(SeekFrom::Current(-((plaintext.len() as i64) + 1))).is_err());
+        drop(source);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn caps_a_single_response_to_one_mib() {
         let end = parse_range("bytes=0-", MAX_VAULT_AUDIO_BYTES).unwrap().1;
         assert_eq!(end + 1, MAX_RESPONSE_BYTES);
