@@ -30,7 +30,7 @@ import {
   encryptVaultChunk,
   importVaultFileKey,
  } from "./vault-crypto";
-import { readFileChunks } from "./file-chunks";
+import { readFileChunks } from "./file-chunks.ts";
 import { Sha256 } from "./sha256.ts";
 
 const VAULT_DIR = "mihenk-vault";
