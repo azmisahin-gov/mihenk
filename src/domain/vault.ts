@@ -260,6 +260,14 @@ export function assertVaultAssignmentId(assignmentId: string): void {
 }
 
 function validateMetadata(meta: VaultAudioMetadata): void {
+  if (
+    !meta ||
+    typeof meta !== "object" ||
+    !Array.isArray(meta.noncePrefix) ||
+    !Array.isArray(meta.segments)
+  ) {
+    throw new Error("Şifreli ses kaydının üst verisi geçersiz veya desteklenmiyor.");
+  }
   assertVaultFileId(meta.fileId);
   assertVaultAssignmentId(meta.assignmentId);
   if (
@@ -272,9 +280,7 @@ function validateMetadata(meta: VaultAudioMetadata): void {
     meta.noncePrefix.length !== 4 ||
     meta.noncePrefix.some((part) => !Number.isInteger(part) || part < 0 || part > 255) ||
     typeof meta.fileName !== "string" ||
-    typeof meta.mediaType !== "string" ||
-    !Array.isArray(meta.noncePrefix) ||
-    !Array.isArray(meta.segments)
+    typeof meta.mediaType !== "string"
   ) {
     throw new Error("Şifreli ses kaydının üst verisi geçersiz veya desteklenmiyor.");
   }

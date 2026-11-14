@@ -5,8 +5,10 @@ import {
   assertUniqueAssignmentName,
   createAssignmentRecord,
   filterByAssignment,
+  formatAssignmentQuestions,
   hasAssignmentProfileChanges,
   normalizeAssignmentName,
+  parseAssignmentQuestions,
   normalizeAssignmentProfile,
   normalizeDateField,
   resolveActiveAssignment,
@@ -136,4 +138,21 @@ test("aynı çok satırlı görev profili kirli sayılmaz; soru değişikliği k
     ...draft,
     questionsText: "İlk soru?\nDeğişen ikinci soru?",
   }), true);
+});
+
+test("görev soruları LF ve CRLF satır sonlarıyla kayıpsız ayrıştırılıp birleştirilir", () => {
+  const questions = ["İlk soru?", "İkinci soru?", "Üçüncü soru?"];
+
+  assert.deepEqual(parseAssignmentQuestions(questions.join("\n")), questions);
+  assert.deepEqual(parseAssignmentQuestions(questions.join("\r\n")), questions);
+  assert.equal(formatAssignmentQuestions(questions), questions.join("\n"));
+  assert.deepEqual(
+    parseAssignmentQuestions(formatAssignmentQuestions(questions)),
+    questions,
+  );
+});
+
+test("bozuk görev soru metni kontrollü doğrulama hatası üretir", () => {
+  assert.throws(() => parseAssignmentQuestions(null), /metin olmalıdır/);
+  assert.throws(() => formatAssignmentQuestions(null), /listesi geçersiz/);
 });
