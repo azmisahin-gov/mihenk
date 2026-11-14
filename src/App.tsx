@@ -9,7 +9,7 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { createVaultAudioRecord } from "./domain/vault-audio-record";
-import { findActiveTranscriptSegmentId, mergeAsrTranscriptSegments, recordTranscriptEdit, type TranscriptAnnotationType } from "./domain/transcript";
+import { filterTranscriptSegments, findActiveTranscriptSegmentId, mergeAsrTranscriptSegments, recordTranscriptEdit, type TranscriptAnnotationType, type TranscriptReviewFilter } from "./domain/transcript";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
 import { buildDocxReport, buildOdtReport } from "./domain/report";
 import {
@@ -152,6 +152,7 @@ export default function App() {
   const [assignmentProfileBusy, setAssignmentProfileBusy] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeNavigation, setActiveNavigation] = useState<"tasks" | "audio" | "transcripts" | "reports">("audio");
+  const [transcriptReviewFilter, setTranscriptReviewFilter] = useState<TranscriptReviewFilter>("all");
   const [currentTime, setCurrentTime] = useState(0);
   const [repeatSegmentId, setRepeatSegmentId] = useState<string | null>(null);
   const [notice, setNotice] = useState("Ses seçerek çalışma alanını başlatın.");
@@ -1872,6 +1873,39 @@ export default function App() {
             </section>
 
             <section className="panel transcript-panel" id="transcripts-section" tabIndex={-1}>
+              {activeRecord && (
+                <div className="transcript-review-filters" role="group" aria-label="Transkript inceleme kuyruğu">
+                  <button
+                    type="button"
+                    className={transcriptReviewFilter === "all" ? "selected" : ""}
+                    aria-pressed={transcriptReviewFilter === "all"}
+                    onClick={() => setTranscriptReviewFilter("all")}
+                  ><span>Tümü</span><small>{activeRecord.segments.length}</small></button>
+                  <button
+                    type="button"
+                    className={transcriptReviewFilter === "needs-review" ? "selected" : ""}
+                    aria-pressed={transcriptReviewFilter === "needs-review"}
+                    onClick={() => setTranscriptReviewFilter("needs-review")}
+                  ><span>Kontrol bekliyor</span><small>{filterTranscriptSegments(activeRecord.segments, "needs-review").length}</small></button>
+                  <button
+                    type="button"
+                    className={transcriptReviewFilter === "uncertain" ? "selected" : ""}
+                    aria-pressed={transcriptReviewFilter === "uncertain"}
+                    onClick={() => setTranscriptReviewFilter("uncertain")}
+                  ><span>Belirsiz</span><small>{filterTranscriptSegments(activeRecord.segments, "uncertain").length}</small></button>
+                  <button
+                    type="button"
+                    className={transcriptReviewFilter === "approved" ? "selected" : ""}
+                    aria-pressed={transcriptReviewFilter === "approved"}
+                    onClick={() => setTranscriptReviewFilter("approved")}
+                  ><span>Uzman onaylı</span><small>{filterTranscriptSegments(activeRecord.segments, "approved").length}</small></button>
+                </div>
+              )}
+              {activeRecord &&
+                activeRecord.segments.length > 0 &&
+                filterTranscriptSegments(activeRecord.segments, transcriptReviewFilter).length === 0 && (
+                  <p className="transcript-filter-empty">Bu filtrede görüntülenecek segment yok.</p>
+                )}
               <div className="panel-header transcript-heading">
                 <div>
                   <h2>Transkript taslağı</h2>
@@ -1901,7 +1935,7 @@ export default function App() {
                         <strong>Henüz transkript bölümü yok</strong>
                         <p>SEDA taslağı oluşturun veya sesi dinleyip “Bölüm ekle” ile elle çalışın. Makine metni uzman incelemesi olmadan onaylanmaz.</p>
                       </div>
-                    ) : activeRecord.segments.map((segment) => (
+                    ) : filterTranscriptSegments(activeRecord.segments, transcriptReviewFilter).map((segment) => (
                       <article
                         className={`segment-card ${activePlaybackSegmentId === segment.id ? "playback-active" : ""}`}
                         key={segment.id}
