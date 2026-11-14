@@ -129,10 +129,16 @@ pub fn open_vault_audio_reader(
         return Err("ASR ses dosyası boyutu desteklenmiyor.".into());
     }
 
-    let path = app_data_dir
-        .join("mihenk-vault")
-        .join("materials")
-        .join(format!("{file_id}.mhn"));
+    let vault_dir = app_data_dir.join("mihenk-vault");
+    let materials_dir = vault_dir.join("materials");
+    for directory in [&vault_dir, &materials_dir] {
+        let directory_metadata = fs::symlink_metadata(directory)
+            .map_err(|_| "Şifreli ses materyal klasörü bulunamadı.".to_string())?;
+        if !directory_metadata.file_type().is_dir() {
+            return Err("Şifreli ses materyal yolu normal bir klasör değil.".into());
+        }
+    }
+    let path = materials_dir.join(format!("{file_id}.mhn"));
     let metadata = fs::symlink_metadata(&path)
         .map_err(|_| "Şifreli ses materyali bulunamadı.".to_string())?;
     if !metadata.file_type().is_file() {
