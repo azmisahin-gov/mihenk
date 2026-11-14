@@ -5,8 +5,9 @@ Bu belge Issue #31 kapsamındaki ilk sürüm revizyon modelini açıklar.
 ## Veri katmanları
 
 - ASR tarafından üretilen ham metin, `rawAsrText` alanına ilk makine çıktısı olarak alınır. Uzman düzeltmeleri bu alanı değiştirmez.
-- Görünen transkript metni, zaman aralığı, anonim kanal/konuşmacı etiketi ve kontrol durumu düzenlenebilir çalışma sürümüdür.
-- Her edit olayı `before` ve `after` anlık görüntülerini, zamanını, gerekçe sınıfını ve varsa yerel editör kimliğini içerir.
+- Görünen transkript metni, zaman aralığı, kaynak kanal, anonim konuşmacı etiketi, anotasyon türü ve kontrol durumu ayrı alanlarda saklanır. ASR çok kanallı kayıtta kanal etiketini üretir; konuşmacı kimliği veya diyârizasyon çıkarmaz.
+- Anotasyon türleri konuşma, kısmen anlaşılmayan konuşma, anlaşılmayan konuşma, vokalizasyon ve çevresel ses olayı olarak ayrılır.
+- Her edit olayı `before` ve `after` anlık görüntülerini (kanal ve anotasyon türü dahil), zamanını, gerekçe sınıfını ve varsa yerel editör kimliğini içerir.
 - Aynı alan üzerinde 1,5 saniyelik kesintisiz yazım oturumu tek revizyon olayı olarak birleştirilir. Bu, her tuş için ayrı olay üretmeden ilk/son metin sınırını korur.
 - ASR yeniden çalıştırıldığında yalnızca hiç uzman revizyonu olmayan eski makine taslakları yenilenir. İnsan tarafından yazılmış segmentler ve revize edilmiş makine segmentleri korunur.
 - Metin bölümleri, saniye tabanlı aralıklarla kaynağa bağlanır; oynatma konumunun hangi segmente düştüğü bulunarak ilgili kart vurgulanır. Açık bitişi olan segment, bir sonraki segmentin başlangıcına kadar etkin sayılır. Kart zaman damgası seçildiğinde oynatma o segment başlangıcına gider.
@@ -24,6 +25,7 @@ Revizyon geçmişi yerel Stronghold şifreli kasa metadata'sıyla birlikte sakla
 - Yerel uzman kimliği henüz mevcut değildir.
 - Segment silme işlemi bu ilk dilimde silme olayı olarak kayda alınmıyor.
 - Kelime düzeyinde forced alignment, otomatik konuşmacı diarization, bağımsız audit imzası, tam review queue ve uzman kabul oturumu bu değişiklikle tamamlanmış sayılmaz.
+- Eski kasalarda ASR `speaker: "Kanal N"` değeri, açık kanal alanı yoksa okuma sırasında `channel` alanına taşınır; uzman konuşmacı etiketleri korunur.
 - Mevcut segment timecode'ları saniye tabanlı aralıktır; kaynak ofseti veya kelime seviyesinde hassasiyet iddiası taşımaz.
 
 Bu nedenle bu dikey dilim K-06 için teknik altyapıyı ve birim testlerini, K-03 için oynatma konumundan segment vurgulama ve segment başlangıcından sese atlama dilimini sağlar; Issue #31'in bütün kabul maddelerini geçtiği anlamına gelmez.
