@@ -667,7 +667,9 @@ mod tests {
             while recognizer.is_ready(&stream) {
                 recognizer.decode(&stream);
             }
-            let _ = recognizer.get_result(&stream);
+            recognizer
+                .get_result(&stream)
+                .ok_or_else(|| "SEDA akış sonucu oluşturulamadı.".to_string())?;
             Ok(())
         })();
 
