@@ -383,6 +383,10 @@ export default function App() {
 
   async function lockVault(): Promise<void> {
     if (vaultState !== "unlocked" || vaultBusy) return;
+    if (assignmentProfileDirty) {
+      setNotice("Kasayı kilitlemeden önce görev profilindeki değişiklikleri kaydedin.");
+      return;
+    }
     setVaultBusy(true);
     setVaultState("locking");
     try {
@@ -812,6 +816,10 @@ export default function App() {
   const activeDuration = activeRecord?.durationSeconds ?? 0;
 
   async function installAvailableUpdate(): Promise<void> {
+    if (assignmentProfileDirty) {
+      setNotice("Güncellemeden önce görev profilindeki değişiklikleri kaydedin.");
+      return;
+    }
     if (!availableUpdate || isPlaying || loadingRecordId !== null || vaultState !== "unlocked" || updateState === "installing") return;
     setUpdateState("installing");
     setUpdateProgress(0);
