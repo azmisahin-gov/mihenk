@@ -31,6 +31,10 @@ import {
   closeStoredAudioPlaybackSession,
   clearStoredAudioPlaybackSessions,
   saveStoredAudioMetadata,
+  getSedaModelStatus,
+  installSedaModel,
+  transcribeStoredAudio,
+  type SedaModelStatus,
   unlockLocalVault,
   exportLocalVaultBackup,
   restoreLocalVaultBackup,
@@ -135,6 +139,9 @@ export default function App() {
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [backupInputBusy, setBackupInputBusy] = useState(false);
+  const [sedaModelStatus, setSedaModelStatus] = useState<SedaModelStatus | null>(null);
+  const [sedaInstalling, setSedaInstalling] = useState(false);
+  const [asrBusyRecordId, setAsrBusyRecordId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
@@ -259,6 +266,17 @@ export default function App() {
     () => assignmentRecords.reduce((total, record) => total + (record.durationSeconds ?? 0), 0),
     [assignmentRecords],
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
+    let cancelled = false;
+    void getSedaModelStatus().then((status) => {
+      if (!cancelled) setSedaModelStatus(status);
+    }).catch(() => {
+      if (!cancelled) setSedaModelStatus(null);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     function handleKeyboardShortcuts(event: KeyboardEvent): void {
@@ -754,6 +772,56 @@ export default function App() {
         segment.id === segmentId ? update(segment) : segment
       )),
     }));
+  }
+
+  async function installLocalSedaModel(): Promise<void> {
+    if (sedaInstalling) return;
+    setSedaInstalling(true);
+    setNotice("SEDA v0.1 yerel modeli sabit sürümden indiriliyor ve bütünlük doğrulaması yapılıyor…");
+    try {
+      const status = await installSedaModel();
+      setSedaModelStatus(status);
+      setNotice(status.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "SEDA modeli kurulamadı.";
+      setNotice(message);
+      setSedaModelStatus((current) => current ? { ...current, installed: false, message } : null);
+    } finally {
+      setSedaInstalling(false);
+    }
+  }
+
+  async function transcribeActiveRecord(): Promise<void> {
+    if (!activeRecord?.vaultMetadata || vaultState !== "unlocked") {
+      setNotice("Transkripsiyon için açık kasa ve kayıtlı bir ses materyali gerekir.");
+      return;
+    }
+    if (!sedaModelStatus?.installed) {
+      setNotice("Önce Yerel Model bölümünden SEDA v0.1'i kurun.");
+      return;
+    }
+    if (asrBusyRecordId) return;
+
+    const recordId = activeRecord.id;
+    const metadata = activeRecord.vaultMetadata;
+    setAsrBusyRecordId(recordId);
+    setNotice("Şifreli ses blokları doğrulanarak yerel SEDA transkripsiyonu hazırlanıyor…");
+    try {
+      const generated = await saveQueueRef.current.enqueue(() => transcribeStoredAudio(metadata));
+      setRecords((current) => current.map((record) => record.id === recordId
+        ? {
+            ...record,
+            segments: [...record.segments, ...generated].sort((a, b) => (
+              a.startSeconds - b.startSeconds
+            )),
+          }
+        : record));
+      setNotice(`SEDA ${generated.length} makine taslağı bölümü oluşturdu. Her bölümü ses kaydından dinleyerek uzman kontrolü yapın.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Yerel transkripsiyon tamamlanamadı.");
+    } finally {
+      setAsrBusyRecordId(null);
+    }
   }
 
   function addSegment(): void {
@@ -1330,7 +1398,7 @@ export default function App() {
                 Ses dosyaları AES-GCM bloklarıyla şifrelenir; parola koruması Stronghold ile sağlanır.
                 Dinleme, istenen en fazla 1 MiB'lik doğrulanmış aralıklarla yürür; uygulama kodu tam dosyanın çözülmüş kopyasını üretmez.
                 Bu sürümde dosya başına 240 MiB üst sınırı uygulanır.
-                Kasa yedeğini boş kasaya geri yükleyebilirsiniz; aynı parola gerekir. Paket ayrıca şifrelenmez, ancak içindeki Stronghold snapshot ve AES-GCM materyalleri şifrelidir. SHA-256 denetimi imza değildir. ASR henüz bağlı değildir. Gerçek vaka materyali kullanmayın.
+                Kasa yedeğini boş kasaya geri yükleyebilirsiniz; aynı parola gerekir. Paket ayrıca şifrelenmez, ancak içindeki Stronghold snapshot ve AES-GCM materyalleri şifrelidir. SHA-256 denetimi imza değildir. SEDA v0.1 yerel ASR taslak üretir; kelime hizalaması/uzman onayı sağlamaz. Gerçek vaka materyali kullanmayın.
               </span>
             </div>
           </div>
@@ -1352,9 +1420,17 @@ export default function App() {
               <span className="stat-foot">Elle eklenen bölümler</span>
             </div>
             <div className="stat-card engine-card">
-              <span className="stat-label">ASR MOTORU</span>
-              <strong>Bağlı değil</strong>
-              <span className="stat-foot">Yerel motor entegrasyonu bekliyor</span>
+              <span className="stat-label">YEREL ASR · SEDA v0.1</span>
+              <strong>{sedaModelStatus?.installed ? "Kurulu" : sedaInstalling ? "İndiriliyor" : "Kurulu değil"}</strong>
+              <span className="stat-foot">{sedaModelStatus?.installed
+                ? `${(sedaModelStatus.bytesOnDisk / (1024 * 1024)).toFixed(1)} MiB · çevrimdışı`
+                : "İndirme sonrası yerel CPU ile çalışır"}</span>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => void installLocalSedaModel()}
+                disabled={sedaInstalling || sedaModelStatus?.installed || vaultState !== "unlocked"}
+              >{sedaInstalling ? "Model kuruluyor…" : sedaModelStatus?.installed ? "Model hazır" : "Yerel modeli kur"}</button>
             </div>
           </div>
 
@@ -1529,8 +1605,16 @@ export default function App() {
               {activeRecord ? (
                 <>
                   <div className="transcript-toolbar">
-                    <span><span className="toolbar-dot" /> Uzman kontrolü bekliyor</span>
-                    <button className="text-button" type="button" onClick={addSegment} disabled={!activeRecord}>+ Bölüm</button>
+                    <span><span className="toolbar-dot" /> Makine taslağı / uzman kontrolü</span>
+                    <div className="transcript-toolbar-actions">
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() => void transcribeActiveRecord()}
+                        disabled={!sedaModelStatus?.installed || asrBusyRecordId === activeRecord.id || vaultState !== "unlocked"}
+                      >{asrBusyRecordId === activeRecord.id ? "Transkripsiyon…" : "Yerel ASR çalıştır"}</button>
+                      <button className="text-button" type="button" onClick={addSegment} disabled={!activeRecord}>+ Bölüm</button>
+                    </div>
                   </div>
                   <div className="segment-list">
                     {activeRecord.segments.length === 0 ? (
@@ -1624,7 +1708,7 @@ export default function App() {
 
           <footer className="app-footer">
             <span className="footer-state"><span className="status-dot" /> {notice}</span>
-            <span>Yerel şifreli kasa · Bulut yok · ASR henüz bağlı değil</span>
+            <span>Yerel şifreli kasa · SEDA v0.1 yerel ASR · Model kurulduktan sonra çevrimdışı</span>
           </footer>
         </section>
       </main>
