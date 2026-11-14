@@ -54,6 +54,11 @@ test("büyük ses dosyalarında önizleme hash işlemini belleğe almadan atlar"
   assert.deepEqual(result, { state: "buyuk-dosya", hash: null });
 });
 
+test("tam SHA-256 sınırı eski 128 MiB sınırının üzerindedir", () => {
+  assert.equal(MAX_PREVIEW_HASH_BYTES, 240 * 1024 * 1024);
+  assert.ok(MAX_PREVIEW_HASH_BYTES > 128 * 1024 * 1024);
+});
+
 test("küçük dosyanın SHA-256 özeti bilinen değerle eşleşir", async () => {
   const file = new File(["abc"], "ornek.wav", { type: "audio/wav" });
   const result = await calculatePreviewHash(file);
@@ -64,7 +69,7 @@ test("küçük dosyanın SHA-256 özeti bilinen değerle eşleşir", async () =>
   );
 });
 
-test("128 MiB altındaki büyük dosya SHA-256 özeti parçalı okunur", async () => {
+test("3 MiB dosyanın SHA-256 özeti 1 MiB parçalarla hesaplanır", async () => {
   const contents = Buffer.alloc(3 * 1024 * 1024 + 123, 0x61);
   const file = new File([contents], "buyuk-ornek.wav", { type: "audio/wav" });
   const originalSlice = file.slice.bind(file);
