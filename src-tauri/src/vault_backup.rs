@@ -14,7 +14,7 @@ const MAGIC: &[u8; 8] = b"MHKBAK01";
 const BACKUP_VERSION: u32 = 1;
 const HEADER_BYTES: u64 = 16;
 const HASH_BYTES: usize = 32;
-const MAX_BACKUP_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_BACKUP_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_BACKUP_FILES: usize = 1024;
 const MAX_PATH_BYTES: usize = 256;
 const MAX_ENTRY_BYTES: u64 = 256 * 1024 * 1024;
@@ -136,7 +136,7 @@ fn collect_sources(vault_dir: &Path) -> Result<Vec<BackupSource>, String> {
             .ok_or_else(|| "Yedek paket boyutu hesaplanamadı.".to_string())?;
     }
     if total_bytes > MAX_BACKUP_BYTES {
-        return Err("Kasa yedek paketi 512 MiB sınırını aşıyor.".into());
+        return Err("Kasa yedek paketi 2 GiB sınırını aşıyor.".into());
     }
 
     Ok(sources)
@@ -504,7 +504,7 @@ fn stage_backup_archive<R: Read>(
     stage_dir: &Path,
 ) -> Result<Vec<String>, String> {
     if !(HEADER_BYTES..=MAX_BACKUP_BYTES).contains(&archive_length) {
-        return Err("Yedek dosyası boş, eksik veya 512 MiB sınırını aşıyor.".into());
+        return Err("Yedek dosyası boş, eksik veya 2 GiB sınırını aşıyor.".into());
     }
 
     let mut consumed = 0u64;
@@ -736,7 +736,7 @@ fn restore_vault_backup_file(archive_path: &Path, vault_dir: &Path) -> Result<()
         .metadata()
         .map_err(|_| "Seçilen kasa yedeği doğrulanamadı.".to_string())?;
     if !metadata.is_file() || metadata.len() < HEADER_BYTES || metadata.len() > MAX_BACKUP_BYTES {
-        return Err("Seçilen yedek dosyasının boyutu geçersiz veya 512 MiB sınırını aşıyor.".into());
+        return Err("Seçilen yedek dosyasının boyutu geçersiz veya 2 GiB sınırını aşıyor.".into());
     }
     restore_vault_backup_from_reader(&mut archive, metadata.len(), vault_dir)
 }
@@ -816,6 +816,15 @@ mod tests {
         }
         assert_eq!(offset, bytes.len());
         files
+    }
+
+    #[test]
+    fn backup_limits_cover_large_encrypted_audio_and_multiple_materials() {
+        let plaintext_bytes = 240 * 1024 * 1024_u64;
+        let chunks = plaintext_bytes.div_ceil(1024 * 1024);
+        let encrypted_bytes = plaintext_bytes + chunks * 16 + 13;
+        assert!(encrypted_bytes <= MAX_ENTRY_BYTES);
+        assert_eq!(MAX_BACKUP_BYTES, 2 * 1024 * 1024 * 1024);
     }
 
     #[test]
