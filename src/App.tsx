@@ -1804,18 +1804,6 @@ export default function App() {
                             </select>
                           </label>
                           <label>
-                            <span>Anonim konuşmacı etiketi</span>
-                            <input
-                              value={segment.speaker}
-                              placeholder="Örn. Konuşmacı 1"
-                              onChange={(event) => {
-                                const value = event.currentTarget.value;
-                                updateSegment(segment.id, (item) => ({ ...item, speaker: value }));
-                              }}
-                              aria-label="Anonim konuşmacı etiketi"
-                            />
-                          </label>
-                          <label>
                             <span>Kontrol durumu</span>
                             <select
                               value={segment.status}
