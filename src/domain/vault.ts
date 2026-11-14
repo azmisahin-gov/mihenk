@@ -32,6 +32,7 @@ import {
  } from "./vault-crypto";
 import { readFileChunks } from "./file-chunks.ts";
 import { Sha256 } from "./sha256.ts";
+import { normalizeStoredTranscriptSegment, type TranscriptAnnotationType, type TranscriptRevisionEvent } from "./transcript";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
@@ -91,9 +92,13 @@ export interface VaultAudioMetadata {
     startSeconds: number;
     endSeconds: number | null;
     text: string;
+    channel?: string | null;
     speaker: string;
+    annotationType?: TranscriptAnnotationType;
     status: "taslak" | "belirsiz" | "uzman-onayli";
     source?: "asr" | "uzman";
+    rawAsrText?: string;
+    revisions?: TranscriptRevisionEvent[];
   }>;
   formatVersion: 1;
 }
@@ -452,7 +457,8 @@ export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
     const metadata = await readJson<VaultAudioMetadata>(store, audioMetaKey(fileId));
     if (!metadata) throw new Error("Kasa materyal listesinde kaydı bulunmayan dosya var.");
     validateMetadata(metadata);
-    records.push(metadata);
+    const segments = metadata.segments.map(normalizeStoredTranscriptSegment);
+    records.push({ ...metadata, segments });
   }
   return records;
 }
@@ -643,7 +649,9 @@ export interface SedaTranscriptSegment {
   startSeconds: number;
   endSeconds: number | null;
   text: string;
+  channel?: string | null;
   speaker: string;
+  annotationType?: TranscriptAnnotationType;
   status: "taslak";
   source: "asr";
 }
