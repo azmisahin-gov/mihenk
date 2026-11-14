@@ -533,3 +533,26 @@ audio { width: 100%; height: 34px; }
   color: #315f43;
   font-weight: 750;
 }
+
+
+.segment-channel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 7px;
+  border: 1px solid #e4ebe5;
+  border-radius: 5px;
+  background: #f6f9f6;
+  color: #87958c;
+  font-size: 8px;
+}
+.segment-channel strong {
+  color: #53685a;
+  font-size: 9px;
+  font-weight: 700;
+}
+.segment-meta select {
+  text-overflow: ellipsis;
+}
