@@ -1,5 +1,5 @@
-import { formatBytes, formatTime, type TranscriptSegment } from "./audio";
-import type { AssignmentRecord } from "./assignment";
+import { formatBytes, formatTime, type TranscriptSegment } from "./audio.ts";
+import type { AssignmentRecord } from "./assignment.ts";
 
 export interface TranscriptReportSource {
   fileName: string;
