@@ -3,7 +3,7 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -73,6 +73,49 @@ fn startup_log(event: &str, detail: &str) {
     }
 }
 
+fn is_interrupted_audio_part_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    bytes.len() == 37
+        && &bytes[32..] == b".part"
+        && bytes[..32]
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+}
+
+fn cleanup_interrupted_audio_imports(materials_dir: &Path) -> std::io::Result<usize> {
+    match fs::symlink_metadata(materials_dir) {
+        Ok(metadata) if metadata.file_type().is_dir() => {}
+        Ok(_) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Ses materyali yolu normal bir klasör değil.",
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(error),
+    }
+
+    let mut removed = 0;
+    for entry in fs::read_dir(materials_dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_file() {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        if !is_interrupted_audio_part_name(&name) {
+            continue;
+        }
+        let path = entry.path();
+        if fs::symlink_metadata(&path)?.file_type().is_file() {
+            fs::remove_file(path)?;
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
 fn configure_startup_log(app: &tauri::App) {
     // Windows'ta tanılama yolu kullanıcı belgeleriyle tutarlı ve kullanıcıya
     // gösterilebilir olsun: %LOCALAPPDATA%\\com.mihenk.desktop\\logs.
@@ -118,6 +161,42 @@ fn show_startup_error() {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recognizes_only_generated_partial_import_names() {
+        assert!(is_interrupted_audio_part_name("0123456789abcdef0123456789abcdef.part"));
+        assert!(!is_interrupted_audio_part_name("0123456789ABCDEF0123456789ABCDEF.part"));
+        assert!(!is_interrupted_audio_part_name("0123456789abcdef0123456789abcdef.mhn"));
+        assert!(!is_interrupted_audio_part_name("../0123456789abcdef0123456789abcdef.part"));
+    }
+
+    #[test]
+    fn removes_only_regular_partial_import_files() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "mihenk-part-recovery-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let part = directory.join("0123456789abcdef0123456789abcdef.part");
+        let encrypted = directory.join("0123456789abcdef0123456789abcdef.mhn");
+        fs::write(&part, b"partial").unwrap();
+        fs::write(&encrypted, b"encrypted").unwrap();
+
+        let result = cleanup_interrupted_audio_imports(&directory);
+        assert_eq!(result.unwrap(), 1);
+        assert!(!part.exists());
+        assert!(encrypted.exists());
+        fs::remove_dir_all(&directory).unwrap();
+    }
+}
+
 fn main() {
     // Bu kayıt Tauri/WebView2 kurulumundan önce yazılır. Dosya yoksa süreç
     // Rust main() giriş noktasına ulaşmadan Windows DLL yüklemesinde kapanmıştır.
@@ -158,7 +237,16 @@ fn main() {
                 let app_data_dir = app.path().app_data_dir()?;
                 let vault_dir = app_data_dir.join("mihenk-vault");
                 fs::create_dir_all(&vault_dir)?;
-                startup_log("app_data", "Yerel kasa dizini hazır.");
+                let materials_dir = vault_dir.join("materials");
+                fs::create_dir_all(&materials_dir)?;
+                let recovered_imports = cleanup_interrupted_audio_imports(&materials_dir)?;
+                if recovered_imports > 0 {
+                    startup_log(
+                        "import_recovery",
+                        &format!("{recovered_imports} yarım ses içe aktarma dosyası temizlendi."),
+                    );
+                }
+                startup_log("app_data", "Yerel kasa dizini ve materyal kurtarma denetimi hazır.");
 
                 let salt_path = vault_dir.join("stronghold.salt");
 
