@@ -28,4 +28,4 @@ Revizyon geçmişi yerel Stronghold şifreli kasa metadata'sıyla birlikte sakla
 - Eski kasalarda ASR `speaker: "Kanal N"` değeri, açık kanal alanı yoksa okuma sırasında `channel` alanına taşınır; uzman konuşmacı etiketleri korunur.
 - Mevcut segment timecode'ları saniye tabanlı aralıktır; kaynak ofseti veya kelime seviyesinde hassasiyet iddiası taşımaz.
 
-Bu nedenle bu dikey dilim K-06 için teknik altyapıyı ve birim testlerini, K-03 için oynatma konumundan segment vurgulama ve segment başlangıcından sese atlama dilimini sağlar; Issue #31'in bütün kabul maddelerini geçtiği anlamına gelmez.
+Bu nedenle bu dikey dilim K-06 için teknik altyapıyı ve birim testlerini, K-03 için oynatma konumundan segment vurgulama ve segment başlangıcından sese atlama dilimini sağlar; Issue #31'in bütün kabul maddelerini geçtiği anlamına gelmez; tam inceleme kuyruğu, yerel uzman kimliği ve saha kabulü hâlâ gereklidir.
