@@ -12,6 +12,7 @@ use tauri::Manager;
 
 mod audio_playback;
 mod vault_backup;
+mod asr;
 
 static STARTUP_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 const ORPHAN_IMPORT_MIN_AGE: Duration = Duration::from_secs(24 * 60 * 60);
@@ -260,6 +261,9 @@ fn main() {
             audio_playback::clear_audio_playback_sessions,
             vault_backup::export_local_vault_backup,
             vault_backup::restore_local_vault_backup,
+            asr::get_seda_model_status_command,
+            asr::install_seda_model_command,
+            asr::transcribe_stored_audio_command,
         ])
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
