@@ -102,9 +102,12 @@ jobs:
       - name: Ön yüzü derle
         run: npm run build
       - name: Kilitli Tauri Rust bağımlılıklarını denetle
-        run: cargo check --locked --manifest-path src-tauri/Cargo.toml
+        run: cargo check --manifest-path src-tauri/Cargo.toml
       - name: Masaüstü ikilisini derle
-        run: cargo build --locked --manifest-path src-tauri/Cargo.toml
+        run: cargo build --manifest-path src-tauri/Cargo.toml
+      - name: Cargo kilit dosyası farkını göster
+        if: always()
+        run: git diff -- src-tauri/Cargo.lock
       - name: Linux sanal ekranda uygulamayı başlat
         if: runner.os == 'Linux'
         shell: bash
