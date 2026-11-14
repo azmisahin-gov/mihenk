@@ -21,6 +21,7 @@ tauri-plugin-fs = { version = "=2.7.1" }
 tauri-plugin-stronghold = { version = "=2.4.0" }
 zeroize = { version = "=1.9.1" }
 reqwest = { version = "=0.13.5", default-features = false, features = ["blocking", "rustls"] }
+serde = { version = "=1.0.229", features = ["derive"] }
 # 56.12 local-only Turkish streaming ASR, pinned model and decoder stack.
 # Re-run the exact Cargo lockfile workflow after dependency graph changes.
 sherpa-onnx = { version = "=2.0.1" }
