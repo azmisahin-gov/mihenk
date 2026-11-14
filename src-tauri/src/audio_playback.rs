@@ -5,7 +5,8 @@ use aes_gcm::{
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{Read, Seek, SeekFrom},
+    io::{self, Read, Seek, SeekFrom},
+    path::Path,
     sync::Mutex,
 };
 use tauri::{
@@ -47,6 +48,115 @@ impl Drop for PlaybackSession {
         self.key.zeroize();
         self.nonce_prefix.zeroize();
     }
+}
+
+/// A seekable, authenticated plaintext view over one encrypted vault audio file.
+/// Symphonia can seek and read it without creating a plaintext temporary file.
+pub struct VaultAudioReader {
+    session: PlaybackSession,
+    file: File,
+    cursor: u64,
+    cached_chunk_index: Option<u64>,
+    cached_plaintext: Zeroizing<Vec<u8>>,
+}
+
+impl Read for VaultAudioReader {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if output.is_empty() || self.cursor >= self.session.size_bytes {
+            return Ok(0);
+        }
+
+        let chunk_index = self.cursor / VAULT_CHUNK_SIZE;
+        if self.cached_chunk_index != Some(chunk_index) {
+            let start = chunk_index * VAULT_CHUNK_SIZE;
+            let end = (self.session.size_bytes - 1).min(start + VAULT_CHUNK_SIZE - 1);
+            let plaintext = read_plaintext_range(&mut self.file, &self.session, start, end)
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Şifreli ses bloğu doğrulanamadı."))?;
+            self.cached_plaintext = Zeroizing::new(plaintext);
+            self.cached_chunk_index = Some(chunk_index);
+        }
+
+        let chunk_offset = (self.cursor % VAULT_CHUNK_SIZE) as usize;
+        let available = self.cached_plaintext.len().saturating_sub(chunk_offset);
+        let count = available.min(output.len()).min((self.session.size_bytes - self.cursor) as usize);
+        if count == 0 {
+            return Ok(0);
+        }
+        output[..count].copy_from_slice(&self.cached_plaintext[chunk_offset..chunk_offset + count]);
+        self.cursor += count as u64;
+        Ok(count)
+    }
+}
+
+impl Seek for VaultAudioReader {
+    fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
+        let target = match position {
+            SeekFrom::Start(value) => i128::from(value),
+            SeekFrom::Current(delta) => i128::from(self.cursor) + i128::from(delta),
+            SeekFrom::End(delta) => i128::from(self.session.size_bytes) + i128::from(delta),
+        };
+        if target < 0 || target > i128::from(u64::MAX) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Ses konumu geçersiz."));
+        }
+        self.cursor = target as u64;
+        Ok(self.cursor)
+    }
+}
+
+impl symphonia::core::io::MediaSource for VaultAudioReader {
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
+    fn byte_len(&self) -> Option<u64> {
+        Some(self.session.size_bytes)
+    }
+}
+
+/// Opens the encrypted source as a lazy authenticated reader. At most one
+/// decrypted 1 MiB vault chunk is cached and it is zeroized when replaced/dropped.
+pub fn open_vault_audio_reader(
+    app_data_dir: &Path,
+    file_id: &str,
+    size_bytes: u64,
+    nonce_prefix: &[u8],
+    raw_key: &[u8],
+) -> Result<VaultAudioReader, String> {
+    if !is_hex_id(file_id) || raw_key.len() != 32 || nonce_prefix.len() != 4 {
+        return Err("ASR ses kaydı kimlik bilgileri geçersiz.".into());
+    }
+    if size_bytes == 0 || size_bytes > MAX_VAULT_AUDIO_BYTES {
+        return Err("ASR ses dosyası boyutu desteklenmiyor.".into());
+    }
+
+    let path = app_data_dir
+        .join("mihenk-vault")
+        .join("materials")
+        .join(format!("{file_id}.mhn"));
+    let metadata = fs::symlink_metadata(&path)
+        .map_err(|_| "Şifreli ses materyali bulunamadı.".to_string())?;
+    if !metadata.file_type().is_file() {
+        return Err("Şifreli ses materyali normal bir dosya değil.".into());
+    }
+
+    let mut session = PlaybackSession {
+        file_id: file_id.to_string(),
+        size_bytes,
+        nonce_prefix: nonce_prefix.try_into().map_err(|_| "Nonce geçersiz.".to_string())?,
+        key: [0; 32],
+        media_type: "application/octet-stream".into(),
+    };
+    session.key.copy_from_slice(raw_key);
+
+    let mut file = File::open(&path).map_err(|_| "Şifreli ses materyali açılamadı.".to_string())?;
+    verify_container(&mut file, &session)?;
+    Ok(VaultAudioReader {
+        session,
+        file,
+        cursor: 0,
+        cached_chunk_index: None,
+        cached_plaintext: Zeroizing::new(Vec::new()),
+    })
 }
 
 fn is_hex_id(value: &str) -> bool {
