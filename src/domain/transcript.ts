@@ -1,8 +1,17 @@
+export type TranscriptAnnotationType =
+  | "speech"
+  | "partially_unintelligible"
+  | "unintelligible"
+  | "vocalization"
+  | "environmental_event";
+
 export interface TranscriptRevisionSnapshot {
   startSeconds: number;
   endSeconds: number | null;
   text: string;
+  channel: string | null;
   speaker: string;
+  annotationType: TranscriptAnnotationType;
   status: string;
 }
 
@@ -24,6 +33,8 @@ export interface VersionedTranscriptSegment {
   speaker: string;
   status: string;
   source?: "asr" | "uzman";
+  channel?: string | null;
+  annotationType?: TranscriptAnnotationType;
   /** Immutable machine output captured before the first expert edit. */
   rawAsrText?: string;
   revisions?: TranscriptRevisionEvent[];
@@ -41,7 +52,9 @@ function snapshot(segment: VersionedTranscriptSegment): TranscriptRevisionSnapsh
     startSeconds: segment.startSeconds,
     endSeconds: segment.endSeconds,
     text: segment.text,
+    channel: segment.channel ?? null,
     speaker: segment.speaker,
+    annotationType: segment.annotationType ?? "speech",
     status: segment.status,
   };
 }
@@ -53,7 +66,9 @@ function sameSnapshot(
   return left.startSeconds === right.startSeconds
     && left.endSeconds === right.endSeconds
     && left.text === right.text
+    && left.channel === right.channel
     && left.speaker === right.speaker
+    && left.annotationType === right.annotationType
     && left.status === right.status;
 }
 
@@ -63,7 +78,9 @@ function revisionReason(
 ): string {
   const changes: string[] = [];
   if (before.text !== after.text) changes.push("Metin düzeltmesi");
+  if (before.channel !== after.channel) changes.push("Kaynak kanal değişikliği");
   if (before.speaker !== after.speaker) changes.push("Anonim konuşmacı etiketi değişikliği");
+  if (before.annotationType !== after.annotationType) changes.push("Anotasyon türü değişikliği");
   if (before.startSeconds !== after.startSeconds || before.endSeconds !== after.endSeconds) {
     changes.push("Zaman aralığı değişikliği");
   }
@@ -73,7 +90,7 @@ function revisionReason(
 
 /**
  * Keeps the machine source immutable and appends a before/after audit event
- * whenever an expert changes text, speaker, timing, or review status.
+ * whenever an expert changes text, channel, speaker, annotation, timing, or review status.
  * Consecutive keystrokes in the same field are coalesced into one edit event.
  */
 export function recordTranscriptEdit<T extends VersionedTranscriptSegment>(
