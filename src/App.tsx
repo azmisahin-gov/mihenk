@@ -1103,7 +1103,7 @@ export default function App() {
           )}
           <div className="vault-gate-notice">
             <strong>Önizleme sınırları</strong>
-            Her ses dosyası en fazla 128 MiB olabilir. Şifreli yedek snapshot, salt ve materyalleri birlikte taşır; geri yükleme yalnız boş kasaya yapılır. Kasa parolası kaybolursa yedek de açılamaz. Yalnızca sentetik veya kullanım izni bulunan test kayıtlarıyla deneyin.
+            Her ses dosyası en fazla 240 MiB olabilir. Şifreli yedek snapshot, salt ve materyalleri birlikte taşır; geri yükleme yalnız boş kasaya yapılır. Kasa parolası kaybolursa yedek de açılamaz. Yalnızca sentetik veya kullanım izni bulunan test kayıtlarıyla deneyin.
           </div>
         </section>
       </main>
@@ -1329,7 +1329,7 @@ export default function App() {
               <span>
                 Ses dosyaları AES-GCM bloklarıyla şifrelenir; parola koruması Stronghold ile sağlanır.
                 Dinleme, istenen en fazla 1 MiB'lik doğrulanmış aralıklarla yürür; uygulama kodu tam dosyanın çözülmüş kopyasını üretmez.
-                Bu önizlemede dosya başına 128 MiB sınırı vardır.
+                Bu sürümde dosya başına 240 MiB üst sınırı uygulanır.
                 Kasa yedeğini boş kasaya geri yükleyebilirsiniz; aynı parola gerekir. Paket ayrıca şifrelenmez, ancak içindeki Stronghold snapshot ve AES-GCM materyalleri şifrelidir. SHA-256 denetimi imza değildir. ASR henüz bağlı değildir. Gerçek vaka materyali kullanmayın.
               </span>
             </div>
@@ -1474,7 +1474,7 @@ export default function App() {
                     <div className="integrity-heading">
                       <span className="integrity-check">✓</span>
                       <div>
-                        <strong>Kaynak dosya ön kontrolü</strong>
+                        <strong>Kaynak SHA-256 özeti</strong>
                         <small>{hashLabel(activeRecord)}</small>
                       </div>
                     </div>
@@ -1483,13 +1483,13 @@ export default function App() {
                         ? <code>{activeRecord.sha256}</code>
                         : <span>
                             {activeRecord.hashState === "buyuk-dosya"
-                              ? "Dosya 128 MiB sınırını aşıyor; bu prototip hash hesaplamasını atladı."
+                              ? "Dosya 240 MiB sınırını aşıyor; kasaya alınmadı ve SHA-256 hesaplanmadı."
                               : activeRecord.hashState === "hesaplaniyor"
                                 ? "SHA-256 hesaplanıyor…"
                                 : "Hash bilgisi henüz yok."}
                           </span>}
                     </div>
-                    <p>Bu değer yalnızca prototip ön kontrolüdür; delil kökeni veya özgünlük doğrulaması değildir.</p>
+                    <p>Özet, içe aktarma sırasında okunan kaynak byte’larını tanımlar; bağımsız read-back, delil kökeni, imza veya ses özgünlüğü kanıtı değildir.</p>
                   </div>
 
                   <div className="player-actions">
