@@ -222,7 +222,7 @@ export default function App() {
       appointedAt: activeAssignment.appointedAt,
       dueAt: activeAssignment.dueAt,
       scope: activeAssignment.scope,
-      questionsText: activeAssignment.questions.join("\\n"),
+      questionsText: activeAssignment.questions.join("\n"),
     });
   }, [activeAssignmentId]);
 
