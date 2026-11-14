@@ -1,140 +1,43 @@
-# MİHENK — Masaüstü Uygulaması
+# MİHENK
 
-> **Durum:** 56.12 ses çalışma alanı prototipi  
-> **Sürüm:** 0.1.0  
-> **Kullanım:** Geliştirme ve sentetik/açık test verisi
+MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda yürütmeyi hedefleyen masaüstü uygulamasıdır. Bu depo uygulama kodunu içerir; araştırma ve 56.12 gereksinimlerinin asıl kaydı [mihenk-arge](https://github.com/azmisahin-gov/mihenk-arge) deposundadır.
 
-MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürütebilmesi için sıfırdan geliştirilen bütünleşik masaüstü uygulamasıdır.
+## Mevcut prototip yetenekleri
 
-Ürün keşfi, gereksinimler, mevzuat araştırması ve karar kayıtları [mihenk-arge](https://github.com/azmisahin-gov/mihenk-arge) deposunda tutulur. Bu depo yalnız uygulama kaynak kodunu, testlerini ve derleme/yayın süreçlerini içerir.
+- Görev/atama alanı, ses materyali kuyruğu ve görev bazlı çalışma alanı.
+- En fazla 240 MiB ses dosyası için 1 MiB sabit parçalarla şifreli içe aktarma ve tam kaynak SHA-256 özeti.
+- AES-256-GCM şifreli yerel kasa ve kimlik doğrulamalı, en fazla 1 MiB aralıklı ses oynatma.
+- Dosyayı diske çözmeden, doğrulanmış şifreli kasa bloklarından okuyan yerel Symphonia decoder hattı.
+- İsteğe bağlı yerel SEDA v0.1 Türkçe ASR modeli kurulumu; sabit model revision ve dosya hash kontrolleri.
+- Yerel SEDA akışlı transkripsiyon; model kurulduktan sonra ses işleme ağ bağlantısı kullanmaz. Çok kanallı kayıtlarda her kanal ayrı anonim kanal etiketiyle taslak üretir.
+- Makine çıktıları yalnızca `taslak` durumundadır. Uzman düzeltmeleri kaynak türüyle ayrılır; ASR tekrar çalıştığında yalnızca düzeltilmemiş makine taslakları yenilenir.
+- Zaman aralığına bağlı transkript bölümleri, manuel bölüm ekleme ve ses konumuna atlama.
+- Şifreli kasa yedeği ve geri yükleme; toplam 2 GiB ve tek dosya 256 MiB sınırı.
+- Atama profili ve transkript değişikliklerini kasada otomatik kaydetme.
 
-## Bu prototipte
+## ASR sınırları ve kabul durumu
 
-- Şifreli kasa içinde birden fazla yerel görev alanı oluşturma ve aralarında geçiş yapma.
-- Her ses kaydını seçili görev alanına bağlama; ses kuyruğu, transkript bölümleri ve sayaçları görev bazında filtreleme.
-- Eski kasalardaki görev kimliği bulunmayan sesleri, içerik ve anahtarları değiştirmeden varsayılan "Genel çalışma" alanına taşıma.
-- Birden fazla ses dosyasını belleğe alma ve listeleme.
-- HTML5 ses oynatımı; Tauri yerel protokolü üzerinden HTTP Range aralıklarıyla, AES-GCM doğrulaması yapılarak en fazla 1 MiB çözülmüş veri sunma.
-- Oynatma konumunda zaman kodlu transkript bölümü ekleme.
-- Metin, başlangıç/bitiş zamanı, nötr konuşmacı etiketi ve kontrol durumunu elle düzenleme.
-- İşaretlenmiş bir transkript aralığını tekrar tekrar dinleme.
-- Space oynat/duraklat, sol/sağ ok 5 saniye sarma, Ctrl/⌘ + Enter bölüm ekleme kısayolları.
-- Görev profili (yerel referans, atama mercii, tarihler, inceleme kapsamı ve sorular) bilgisini şifreli kasada saklama; transkript ve görev profili değişikliklerini 450 ms hareketsizlikte otomatik kaydetme.
-- Görev ve kaynak bilgileriyle birlikte zaman kodlu TXT/JSON, DOCX ve ODT çalışma taslağı dışa aktarma.
-- Türkçe ASR adaylarını değerlendirmek için WER/CER metrik hesaplayıcısı; bu kod bir ASR motoru içermez ([değerlendirme planı](docs/ASR_MODEL_EVALUATION.md)).
-- En fazla 240 MiB ses dosyası için, şifreleme sırasında aynı 1 MiB plaintext parçalarından tam kaynak SHA-256 özeti.
-- Şifreli kasa yedeğini Rust tarafında 64 KiB parçalarla dışa aktarma ve geri yükleme; mevcut `.mihenkbackup` v1 biçimi korunur, SHA-256 doğrulaması akışlı yapılır ve paket baştan sona belleğe alınmaz.
+SEDA v0.1 akustik ONNX ağırlıkları ve token dosyası Apache-2.0 lisanslı sabit revision'dan indirilir. İsteğe bağlı `lm/` dosyaları CC BY-SA 4.0 nedeniyle kurulum dışında tutulur. İlk kurulum için internet gerekir; onaylı dosyalar indirildikten sonra model CPU üzerinde yerel çalışır. ASR sırasında kaynak ses bulut servisine gönderilmez.
 
-**Henüz bağlı olmayanlar:** yerel ASR motoru, kasa parolası kurtarma/sıfırlama, resmi belge/OCR akışı, teknik medya envanteri (kapsayıcı/codec/kanal/örnekleme hızı/bit derinliği/bit hızı), şifreli kopyadan bağımsız read-back hash karşılaştırması, disk dolması ve güç kesintisi dahil uçtan uca kurtarma kabul testleri, PDF son çıktısı, doğrulanmış UYAP/UDF entegrasyonu ve temiz cihaz pilot kabulü.
+SEDA girdisi 16 kHz mono gerektirir. MİHENK çok kanallı dosyalarda kanalları ayrı işleyip `Kanal 1`, `Kanal 2` gibi etiketlerle gösterir; bu, kişi kimliği veya otomatik konuşmacı diyârizasyonu değildir. ASR'nin verdiği zaman aralıkları akış/endpoint segment sınırlarıdır; kelime düzeyinde forced alignment değildir. Ham metin küçük harf ve noktalama normalizasyonu yapılmadan taslak olarak saklanır. Her bölüm uzman tarafından sesle karşılaştırılmalıdır.
 
-## Güvenli kullanım sınırı
+SEDA model kartındaki WER, CPU hızı ve RAM değerleri geliştirici beyanıdır; MİHENK'in bağımsız ölçümü veya adli doğruluk kanıtı değildir. Model kartı okunmuş konuşmanın baskın olduğunu; spontan, gürültülü, uzak mikrofonlu ve telefon konuşması başarımının ölçülmediğini bildirir. Bu nedenle gerçek pilot benchmark'ı, uzman referans metinleri ve kritik hata sınıfları henüz kabul edilmeden model "bilirkişi kullanımına hazır" sayılmaz.
 
-Yerel kasa önizlemesi, içe alınan sesleri 1 MiB AES-256-GCM şifreli bloklar halinde cihazdaki Stronghold snapshot ve materyal dosyalarında saklar. İçe alma sırasında tam kaynak SHA-256 özeti, AES-256-GCM ile şifrelenen aynı 1 MiB plaintext parçalarından hesaplanır; dosyanın tamamı RAM'e alınmaz. Kasa parolası olmadan yerel kayıtlar açılamaz. Dinleme sırasında Tauri yerel ses protokolü HTTP Range aralıklarını işler; her istek için ilgili AES-256-GCM bloğu doğrulanır ve en fazla 1 MiB ses verisi çözülerek yanıtlanır. Böylece uygulama kodu şifreli dosyanın tamamını ve tam çözülmüş kopyasını aynı anda bellekte tutmaz. Kasa yedeği dışa aktarılırken Rust tarafı her dosyayı 64 KiB tamponla iki geçişte okur: ilk geçiş SHA-256 özetini hesaplar, ikinci geçişte veri hedef dosyaya yazılırken aynı özet yeniden doğrulanır. Yedek paketi v1 biçiminde kaldığından eski yedeklerle uyumludur. Transkript ve görev profili değişiklikleri, 450 ms hareketsizlikten sonra şifreli kasaya otomatik yazılır. Uygulama penceresi kapanırken bekleyen kayıt kuyruğu tamamlanmadan kapanışa izin verilmez; pencere arka plana geçtiğinde de bekleyen veriler kaydedilmeye çalışılır. Güç kesilmesi veya işletim sisteminin süreci zorla sonlandırması son otomatik kayıt aralığındaki değişiklikleri yine kaybettirebilir; bu nedenle fiziksel çökme/kurtarma kabul testi tamamlanmadan kurtarma garantisi verilmez. Geri yükleme de Rust tarafında 64 KiB tamponlarla yürütülür: her kayıt diskte geçici alana yazılırken SHA-256 doğrulanır, tüm paket ve zorunlu snapshot/salt dosyaları doğrulanmadan kasa içine yayımlanmaz. Snapshot en son taşınır; hata durumunda yapılan dosya değişiklikleri geri alınmaya çalışılır. 2 GiB toplam paket, 256 MiB tek dosya ve 1024 dosya sınırları korunur. Ses dosyası başına 240 MiB üst sınırı uygulanır. `.mihenkbackup` dosyası Stronghold snapshot’ını, Argon2 salt’ını ve AES-GCM ile şifrelenmiş materyal dosyalarını tek pakette taşır. Paket kendi başına ek bir parola katmanıyla şifrelenmez; içindeki hassas veriler zaten şifreli kalır. Paket içi SHA-256 özetleri kazara bozulmayı saptar; imza veya kötü niyetli değişikliğe karşı doğrulama değildir. Geri yükleme yalnız boş kasaya yapılır ve aynı kasa parolası gerekir. Parola kurtarma/sıfırlama yoktur. Harici servise ses göndermez ve otomatik transkripsiyon yapmaz.
+Symphonia 0.6.1 decoder matrisiyle eşleştirmek için `.opus` ve `.wma` uzantıları içe alma filtresinde kabul edilmez. Teknik envanterde kapsayıcı/codec/kanal/örnekleme hızı/bit derinliği/bit hızı, bağımsız şifreli-kopya read-back hash, crash/power-loss E2E ve tam K-01..K-12 uzman kabulü hâlâ açıktır. Ayrıntı: [Yerel ASR teknik notu](docs/LOCAL_ASR.md) ve [ASR pilot değerlendirme planı](docs/ASR_MODEL_EVALUATION.md).
 
-SHA-256 göstergesi, içe alınan plaintext byte dizisinin tam özetidir; en fazla 240 MiB dosya kabul edilir. Delil zinciri, teslim öncesi köken doğrulaması veya dosyanın özgünlüğü hakkında kanıt sayılmaz. 240 MiB üzerindeki dosyalar henüz kasaya alınmaz.
-
-**Görev alanı yalıtımı ilk düzeyde uygulanmıştır; bu tam atama profili veya vaka yönetimi değildir. Gerçek dava/soruşturma materyalini bu önizlemede kullanmayın.** Gerçek materyalle kullanım için resmî atama profili ve belge akışı, yerel ASR, büyük dosya/düşük bellek desteği, rapor çıktıları, kasa/çökme kurtarma kabul testleri, bağımsız güvenlik incelemesi ve hukuk/veri koruma değerlendirmesi tamamlanmalıdır.
+**Bu prototipte gerçek dava/soruşturma materyali kullanmayın.** Bağımsız güvenlik incelemesi, temiz cihaz testi, dağıtım imzası, hukuk/veri koruma değerlendirmesi ve uzman pilotu tamamlanmamıştır. SHA-256 ve GCM bütünlük doğrulaması kaynağın kökenini, sesin özgünlüğünü veya manipülasyon bulunmadığını tek başına kanıtlamaz.
 
 ## Geliştirme
 
-Gerekenler:
-- Node.js 22.12 veya üzeri
-- Rust stable 1.90 veya üzeri
-- İşletim sistemine göre Tauri masaüstü ön koşulları
-
-Komutlar:
-
 ```bash
 npm ci
-npm run tauri:dev
-```
-
-Ön yüz denetimi ve derlemesi:
-
-```bash
 npm test
 npm run check
 npm run build
 ```
 
-### Linux / Pardus notu
+Masaüstü geliştirmesi için Tauri 2 ve Rust toolchain gerekir; CI Windows ve Linux hedeflerinde Tauri test, build ve başlatma kontrolleri yürütür. `sherpa-onnx` Rust bağımlılığı sürümle sabitlenmiştir; native runtime'ın build aşamasındaki edinim zinciri ve dosya hash doğrulaması ayrıca sertleştirilmelidir.
 
-Tauri geliştirme ortamı Linux'ta WebKitGTK 4.1 ve derleme bağımlılıkları gerektirir. Dağıtıma göre paket adları değişebilir; kurulumdan önce Tauri'nin güncel Linux ön koşulları izlenmelidir.
+## Yayın ve lisans
 
-### Windows notu
-
-Tauri geliştirme ortamında Microsoft C++ Build Tools ve WebView2 gerekir.
-
-### Windows'ta uygulama açılmıyorsa
-
-Uygulama başlangıçta kapanırsa MİHENK artık yerel tanılama günlüğü yazar:
-
-`%LOCALAPPDATA%\\com.mihenk.desktop\\logs\\startup.log`
-
-Bu dosyayı açılış hatasının saatine göre kontrol edin. Hata bildirirken ses, transkript, kişi bilgisi veya UYAP belgesi paylaşmayın; yalnızca günlükteki teknik hata satırlarını ve uygulama sürümünü paylaşın. Günlük dosyası yerel kalır; kendiliğinden GitHub'a yüklenmez.
-
-## Teknoloji adayı
-
-İlk masaüstü prototip, geçici olarak Tauri 2 + React + TypeScript + Vite kullanır. Bu seçim nihai platform mimarisi değildir; hedef cihaz, Windows/Pardus paketlemesi, kaynak tüketimi, güvenlik ve bakım denemelerinden sonra tekrar değerlendirilecektir.
-
-## Lisans
-
-Depo herkese açık olsa da kaynak kod için henüz açık kaynak lisansı verilmemiştir. Bu nedenle açık kaynak lisansı veya yeniden kullanım izni varsayılmamalıdır. Lisans kararı ayrıca yayımlanacaktır.
-
-## Katkı ve dil
-
-README, issue, pull request başlık/açıklamaları ve commit mesajları Türkçe tutulur. Teknik tanımlayıcılar, standart kod isimleri ve kütüphane/API adları özgün biçimlerinde kalabilir.
-
-
-## Kurulum ve otomatik güncelleme
-
-> **Yayın durumu (14 Kasım 2026):** Kararlı sürüm henüz yoktur. Güncel geliştirme önizlemesi `0.1.0-44` olarak yayımlanmıştır; önizlemeler yalnızca sentetik veya kullanım izni bulunan test verisi içindir. GitHub Releases bölümündeki `draft` durumundaki kayıtlar halka açık indirme değildir.
-
-### Hedeflenen kullanıcı indirmeleri
-
-- **Windows Setup.exe (önerilen):** Varsayılan NSIS kurulumu yalnızca geçerli Windows kullanıcısına, `%LOCALAPPDATA%` altına yapılır; normalde yönetici izni istemez.
-- **Windows MSI:** WiX paketi varsayılan olarak Program Files içine bilgisayar geneli kurulum yapar ve yönetici izni gerektirir. EXE ve MSI alternatif kurulum biçimleridir; aynı bilgisayara ikisini birden kurmayın.
-- **Windows WebView2:** Kurulum paketleri çevrimdışı WebView2 Runtime yükleyicisini içerir. Bu, runtime'ın cihazda bulunmadığı ve internet erişiminin olmadığı ortamlarda da açılışı mümkün kılar; Windows kurulum dosyaları bu nedenle yaklaşık 127 MiB daha büyük olur.
-- **Windows yayıncı imzası:** Setup.exe ve MSI henüz Authenticode kod imzalama sertifikasıyla imzalanmıyor. Bu nedenle Windows “bilinmeyen yayımcı” veya SmartScreen uyarısı gösterebilir. İndirilen paketin yanındaki Tauri `.sig` dosyası otomatik güncelleme imzasıdır; Authenticode imzası değildir. İmzalama sertifikası ve SmartScreen itibarı tamamlanmadan bu kurulumlar üretim onayı almış sayılmaz.
-- **Pardus / Debian tabanlı Linux:** .deb paketi.
-- **Linux:** AppImage paketi.
-
-Sürüm ve indirme sayfası: https://azmisahin-gov.github.io/mihenk/  
-Tüm GitHub sürümleri: https://github.com/azmisahin-gov/mihenk/releases  
-Kararlı sürüm adresi (kararlı etiket yayımlandığında): https://github.com/azmisahin-gov/mihenk/releases/latest
-
-Geliştirme önizlemesi ile kararlı sürüm ayrı kanallardır. Önizleme sürümü kuran kullanıcılar yalnızca önizleme kanalından güncelleme alır; kararlı sürüm kullanıcıları önizleme koduna otomatik geçirilmez.
-
-### Otomatik güncelleme güvenliği
-
-Yayın derlemesi Tauri imza doğrulamasını kullanacak şekilde yapılandırılmıştır. İmza doğrulanmadan güncelleme kurulmaz.
-
-**Bir defalık imza yapılandırması 13 Kasım 2026 tarihinde tamamlandı.** `TAURI_UPDATER_PUBLIC_KEY` GitHub repository variable ve `TAURI_SIGNING_PRIVATE_KEY` GitHub Actions secret olarak ayarlandı. Özel anahtar uygulama kaynak koduna veya yayın paketlerine eklenmez.
-
-Özel anahtarın yerel çevrimdışı kopyasını koruyun; bilgisayar hesabını ve diski şifreleyin, ayrıca güvenli çevrimdışı yedek alın. Anahtarı sohbet, issue, PR, dosya eki, commit veya log içinde paylaşmayın. Anahtar kaybolursa mevcut imza kimliğiyle güncelleme yayımlamak mümkün olmayabilir. Anahtarı yeniden üretmek veya değiştirmek mevcut kurulumların güncelleme zincirini etkileyebilir; gelişigüzel yenilemeyin.
-
-Tauri güncelleme imzası Windows Authenticode yayıncı sertifikasının veya UYAP e-imza sertifikasının yerine geçmez. Windows kurulum dosyalarında Authenticode imzası henüz yoktur; bu nedenle SmartScreen/UAC uyarısı beklenebilir. Geçerli bir kod imzalama sertifikasıyla imza atmak yayıncı kimliğini gösterir, ancak yeni uygulamalarda SmartScreen uyarısının hemen kalkacağını garanti etmez.
-
-### Yayın akışı
-
-- `main` dalına birleştirilen değişiklikler, önizleme yayın iş akışını tetikler.
-- `vX.Y.Z` biçimindeki etiket kararlı sürüm paketlerini ve güncelleme manifestini üretir.
-- Yayından önce `package.json`, `src-tauri/tauri.conf.json` ve `src-tauri/Cargo.toml` sürümleri eşitlenir.
-- Uygulama açılışında güncelleme kontrolü yapılır; manifest imzası doğrulandıktan sonra yeni sürüm indirilip kurulabilir. Güncelleme akışının gerçek kullanıcı cihazlarında ve her kurulum türünde uçtan uca kabul testi henüz tamamlanmamıştır.
-
-**Platform sınırı:** Tauri Updater Linux'ta AppImage ve Debian `.deb`, Windows'ta NSIS ve MSI paketlerini destekler. Debian güncellemesi sistem paket kurulumunu (`dpkg`) ve gerekli yönetici yetkisini isteyebilir. Windows kurulumları için Authenticode yayıncı sertifikası ayrıca gerekir; Tauri güncelleme imzası bunun yerine geçmez.
-
-### Test ve yayın güvenliği
-
-GitHub Actions PR aşamasında kilitli bağımlılıkları, ön yüz derlemesini ve Windows/Linux masaüstü başlatma kontrollerini yürütür. Bu kontroller kurulum paketinin yayımlandığını, otomatik güncellemenin çalıştığını veya uygulamanın bilirkişi iş akışı için hazır olduğunu kanıtlamaz. Gerçek dağıtım, kalıcı/şifreli çalışma kasası, yerel ASR ve uçtan uca kullanıcı testleri tamamlanmadan ürün hazır ilan edilmeyecektir.
-
-## Geliştirme ve yayın akışı
-
-- Varsayılan geliştirme dalı `main`'dir. Yeni işler `feat/*` veya `fix/*` gibi kısa ömürlü dallarda yapılır.
-- Değişiklikler PR ile `main` dalına gelir. PR doğrulaması birim testleri, TypeScript/üretim derlemesi ve Linux/Windows masaüstü derleme denetimlerini çalıştırır.
-- `main` güncellendiğinde geliştirme önizlemesi otomatik hazırlanır. Tek bir taslak GitHub Release kaydı kullanılır; Linux ve Windows paketleri ile imzaları aynı kayda yüklenir. Her iki yayın ikilisi açılış testini geçip gerekli dosyalar doğrulanmadan önizleme yayımlanmaz.
-- Kararlı sürüm, `vX.Y.Z` etiketiyle başlatılır. Paket sürümleri birbiriyle karşılaştırılır; Linux ve Windows kurulumları/imzaları ile yayın ikilisi açılış testleri tamamlanınca taslak Release yayımlanır.
-- Bir PR birleştirilince aynı depodaki çalışma dalı otomatik silinir. Eski dalların ilk temizliği de tamamlanmıştır.
-
-**Depo yönetişimi notu:** PR doğrulaması otomatik çalışır. Bu bağlantı, yönetici izni gerektiren `main` dalı koruma kurallarını okuyamıyor; bu nedenle PR zorunluluğu ve üç CI denetiminin zorunlu olması depo sahibi tarafından GitHub ayarlarında ayrıca doğrulanmalıdır. Birleştirme sonrası dalları temizleyen iş akışı ayrıca çalışır.
-
+Kararlı sürüm ilan edilmemiştir. Yayın önizlemeleri sentetik veya izinli test verisi içindir. Depo herkese açık olsa da uygulama kaynak kodunun yeniden kullanım lisansı ayrıca belirtilmedikçe açık kaynak lisansı varsayılmamalıdır.
