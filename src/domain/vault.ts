@@ -285,6 +285,9 @@ export async function createLocalVault(password: string): Promise<void> {
       audioChunkBytes: VAULT_CHUNK_SIZE,
     });
     await writeJson(store, STORE_AUDIO_INDEX_KEY, [] as string[]);
+    const defaultAssignment = createAssignmentRecord(DEFAULT_ASSIGNMENT_NAME);
+    await writeJson(store, assignmentMetaKey(defaultAssignment.id), defaultAssignment);
+    await writeJson(store, STORE_ASSIGNMENT_INDEX_KEY, [defaultAssignment.id]);
     await stronghold.save();
     activeStronghold = stronghold;
     activeStore = store;
@@ -315,6 +318,7 @@ export async function unlockLocalVault(password: string): Promise<void> {
     if (!Array.isArray(ids)) throw new Error("Kasa materyal listesi bozuk.");
     for (const fileId of ids) assertVaultFileId(fileId);
 
+    await ensureAssignmentRecords(stronghold, store);
     activeStronghold = stronghold;
     activeStore = store;
   } catch {
@@ -329,6 +333,43 @@ export async function lockLocalVault(): Promise<void> {
   await stronghold.unload();
   activeStronghold = null;
   activeStore = null;
+}
+
+export async function listAssignments(): Promise<VaultAssignment[]> {
+  return readAssignments(requireStore());
+}
+
+export async function createVaultAssignment(name: string): Promise<VaultAssignment> {
+  const store = requireStore();
+  const stronghold = requireStronghold();
+  const assignments = await readAssignments(store);
+  const normalizedName = normalizeAssignmentName(name);
+  assertUniqueAssignmentName(normalizedName, assignments);
+  const assignment = createAssignmentRecord(normalizedName);
+  await writeJson(store, assignmentMetaKey(assignment.id), assignment);
+  try {
+    await writeJson(store, STORE_ASSIGNMENT_INDEX_KEY, [...assignments.map((item) => item.id), assignment.id]);
+    await stronghold.save();
+    return assignment;
+  } catch (error) {
+    await store.remove(assignmentMetaKey(assignment.id)).catch(() => undefined);
+    throw error;
+  }
+}
+
+export async function renameVaultAssignment(assignmentId: string, name: string): Promise<VaultAssignment> {
+  const store = requireStore();
+  const stronghold = requireStronghold();
+  assertVaultAssignmentId(assignmentId);
+  const assignments = await readAssignments(store);
+  const current = assignments.find((item) => item.id === assignmentId);
+  if (!current) throw new Error("Görev alanı bulunamadı.");
+  const normalizedName = normalizeAssignmentName(name);
+  assertUniqueAssignmentName(normalizedName, assignments, assignmentId);
+  const updated = { ...current, name: normalizedName, updatedAt: new Date().toISOString() };
+  await writeJson(store, assignmentMetaKey(assignmentId), updated);
+  await stronghold.save();
+  return updated;
 }
 
 export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
@@ -350,6 +391,10 @@ export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
 export async function saveStoredAudioMetadata(metadata: VaultAudioMetadata): Promise<void> {
   const store = requireStore();
   validateMetadata(metadata);
+  const assignments = await readAssignments(store);
+  if (!assignments.some((assignment) => assignment.id === metadata.assignmentId)) {
+    throw new Error("Ses kaydının bağlı olduğu görev alanı bulunamadı.");
+  }
   if (!(await store.get(audioKeyKey(metadata.fileId)))) {
     throw new Error("Ses dosyasının kasa anahtarı bulunamadı.");
   }
@@ -357,9 +402,14 @@ export async function saveStoredAudioMetadata(metadata: VaultAudioMetadata): Pro
   await requireStronghold().save();
 }
 
-export async function importAudioToVault(file: File): Promise<VaultAudioMetadata> {
+export async function importAudioToVault(file: File, assignmentId: string): Promise<VaultAudioMetadata> {
   const store = requireStore();
   const stronghold = requireStronghold();
+  assertVaultAssignmentId(assignmentId);
+  const assignments = await readAssignments(store);
+  if (!assignments.some((assignment) => assignment.id === assignmentId)) {
+    throw new Error("Ses dosyasının ekleneceği görev alanı bulunamadı.");
+  }
   if (file.size <= 0) throw new Error("Boş ses dosyası kasaya alınamaz.");
   if (file.size > MAX_VAULT_AUDIO_BYTES) {
     throw new Error("Bu önizlemede tek ses dosyası 128 MiB sınırını aşamaz.");
@@ -408,6 +458,7 @@ export async function importAudioToVault(file: File): Promise<VaultAudioMetadata
 
     const metadata: VaultAudioMetadata = {
       fileId,
+      assignmentId,
       fileName: file.name,
       mediaType: file.type || "application/octet-stream",
       sizeBytes: file.size,
