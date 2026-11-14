@@ -66,7 +66,7 @@ test("konuşmacı, zaman aralığı ve inceleme durumu değişiklikleri geçmiş
     machine,
     {
       ...machine,
-      speaker: "Kanal 2",
+      speaker: "Konuşmacı 2",
       endSeconds: 3.25,
       status: "uzman-onayli",
     },
