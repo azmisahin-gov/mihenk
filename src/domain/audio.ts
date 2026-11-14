@@ -12,6 +12,7 @@ export interface TranscriptSegment {
 export type HashState = "bekliyor" | "hesaplaniyor" | "hesaplandi" | "buyuk-dosya" | "desteklenmiyor" | "hata";
 
 import type { VaultAudioMetadata } from "./vault";
+import { Sha256 } from "./sha256";
 
 export interface AudioRecord {
   id: string;
@@ -93,28 +94,37 @@ export function createSegment(startSeconds: number): TranscriptSegment {
 }
 
 /**
- * Prototipte yalnızca küçük dosyalar için ön kontrol amaçlı hash üretir.
- * Büyük dosyalarda tam dosyayı belleğe almaz; yerel akışlı hash servisi sonraki aşamadır.
+ * Dosyayı 1 MiB parçalar halinde okuyarak SHA-256 ön kontrolü üretir.
+ * Bellekte hiçbir zaman dosyanın tamamı tutulmaz. 128 MiB sınırı,
+ * büyük dosyaların mevcut oynatma ve yedekleme yolları da akışlı hale
+ * getirilene kadar güvenlik sınırı olarak korunur.
  */
 export async function calculatePreviewHash(
   file: File,
 ): Promise<{ state: HashState; hash: string | null }> {
+  if (!Number.isSafeInteger(file.size) || file.size < 0) {
+    return { state: "hata", hash: null };
+  }
   if (file.size > MAX_PREVIEW_HASH_BYTES) {
     return { state: "buyuk-dosya", hash: null };
   }
 
-  if (!globalThis.crypto?.subtle) {
-    return { state: "desteklenmiyor", hash: null };
-  }
-
   try {
-    const bytes = await file.arrayBuffer();
-    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-    const hash = Array.from(new Uint8Array(digest))
-      .map((value) => value.toString(16).padStart(2, "0"))
-      .join("");
-
-    return { state: "hesaplandi", hash };
+    const hasher = new Sha256();
+    const chunkSize = 1024 * 1024;
+    for (let offset = 0; offset < file.size; offset += chunkSize) {
+      const end = Math.min(file.size, offset + chunkSize);
+      const bytes = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+      try {
+        if (bytes.byteLength !== end - offset) {
+          throw new Error("Ses dosyası parçası eksik okundu.");
+        }
+        hasher.update(bytes);
+      } finally {
+        bytes.fill(0);
+      }
+    }
+    return { state: "hesaplandi", hash: hasher.digestHex() };
   } catch {
     return { state: "hata", hash: null };
   }
