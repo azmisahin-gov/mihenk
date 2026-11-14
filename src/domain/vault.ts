@@ -34,10 +34,8 @@ import {
   importVaultFileKey,
  } from "./vault-crypto";
 import {
-  buildVaultBackup,
   parseVaultBackup,
   MAX_VAULT_BACKUP_BYTES,
-  type VaultBackupEntry,
   isVaultMaterialFileName,
 } from "./vault-backup";
 
@@ -637,36 +635,10 @@ export async function deleteStoredAudio(fileId: string): Promise<void> {
  * ve zaten AES-GCM ile şifrelenmiş materyal dosyalarını taşır.
  * Dış paket gerçek dosya adı veya transkript metnini açığa çıkarmaz.
  */
-export async function exportLocalVaultBackup(): Promise<Uint8Array<ArrayBuffer>> {
+export async function exportLocalVaultBackup(fileName: string): Promise<boolean> {
   const stronghold = requireStronghold();
   await stronghold.save();
-
-  const entries: VaultBackupEntry[] = [];
-  try {
-    const snapshot = await readFile(snapshotRelativePath(), { baseDir: BaseDirectory.AppData });
-    const salt = await readFile(saltRelativePath(), { baseDir: BaseDirectory.AppData });
-    if (salt.byteLength === 0) throw new Error("Stronghold Argon2 salt dosyası boş.");
-
-    entries.push({ path: snapshotRelativePath(), data: snapshot });
-    entries.push({ path: saltRelativePath(), data: salt });
-
-    const materialsExist = await exists(MATERIALS_DIR, { baseDir: BaseDirectory.AppData });
-    if (materialsExist) {
-      const children = await readDir(MATERIALS_DIR, { baseDir: BaseDirectory.AppData });
-      for (const child of children) {
-        if (!child.isFile) {
-          throw new Error("Kasa materyal klasöründe beklenmeyen bir alt klasör var; yedek durduruldu.");
-        }
-        const path = backupMaterialPath(child.name);
-        const data = await readFile(path, { baseDir: BaseDirectory.AppData });
-        entries.push({ path, data });
-      }
-    }
-
-    return await buildVaultBackup(entries);
-  } finally {
-    for (const entry of entries) entry.data.fill(0);
-  }
+  return invoke<boolean>("export_local_vault_backup", { fileName });
 }
 
 /**

@@ -759,11 +759,11 @@ export default function App() {
     setBackupInputBusy(true);
     try {
       await persistVaultRecords(recordsRef.current);
-      const backup = await exportLocalVaultBackup();
       const dateStamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
-      saveBinaryFile(`MİHENK-yerel-kasa-${dateStamp}.mihenkbackup`, backup);
-      backup.fill(0);
-      setNotice("Kasa yedeği oluşturuldu. İçindeki veriler mevcut kasa parolasıyla açılır.");
+      const saved = await exportLocalVaultBackup(`MİHENK-yerel-kasa-${dateStamp}.mihenkbackup`);
+      setNotice(saved
+        ? "Kasa yedeği oluşturuldu. İçindeki veriler mevcut kasa parolasıyla açılır."
+        : "Kasa yedeği oluşturma işlemi iptal edildi.");
     } catch (error) {
       setNotice(error instanceof Error ? `Kasa yedeği oluşturulamadı: ${error.message}` : "Şifreli yedek oluşturulamadı.");
     } finally {

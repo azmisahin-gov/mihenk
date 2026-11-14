@@ -11,6 +11,7 @@ use std::{
 use tauri::Manager;
 
 mod audio_playback;
+mod vault_backup;
 
 static STARTUP_LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
 
@@ -140,7 +141,9 @@ fn main() {
             audio_playback::open_audio_playback_session,
             audio_playback::close_audio_playback_session,
             audio_playback::clear_audio_playback_sessions,
+            vault_backup::export_local_vault_backup,
         ])
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
