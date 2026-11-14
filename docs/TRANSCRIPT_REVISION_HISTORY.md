@@ -9,6 +9,7 @@ Bu belge Issue #31 kapsamındaki ilk sürüm revizyon modelini açıklar.
 - Her edit olayı `before` ve `after` anlık görüntülerini, zamanını, gerekçe sınıfını ve varsa yerel editör kimliğini içerir.
 - Aynı alan üzerinde 1,5 saniyelik kesintisiz yazım oturumu tek revizyon olayı olarak birleştirilir. Bu, her tuş için ayrı olay üretmeden ilk/son metin sınırını korur.
 - ASR yeniden çalıştırıldığında yalnızca hiç uzman revizyonu olmayan eski makine taslakları yenilenir. İnsan tarafından yazılmış segmentler ve revize edilmiş makine segmentleri korunur.
+- Metin bölümleri, saniye tabanlı aralıklarla kaynağa bağlanır; oynatma konumunun hangi segmente düştüğü bulunarak ilgili kart vurgulanır. Açık bitişi olan segment, bir sonraki segmentin başlangıcına kadar etkin sayılır. Kart zaman damgası seçildiğinde oynatma o segment başlangıcına gider.
 
 ## Kimlik ve denetim sınırı
 
