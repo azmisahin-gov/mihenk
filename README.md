@@ -13,6 +13,7 @@ MİHENK, ses kayıtları üzerinde bilirkişi çalışma sürecini yerel cihazda
 - Makine çıktıları yalnızca `taslak` durumundadır. Uzman düzeltmeleri kaynak türüyle ayrılır; ASR tekrar çalıştığında yalnızca düzeltilmemiş makine taslakları yenilenir.
 - Zaman aralığına bağlı transkript bölümleri, manuel bölüm ekleme ve ses konumuna atlama.
 - Ham ASR çıktısını uzman düzeltmesinden ayrı koruyan, önce/sonra revizyon geçmişi ve oynatma konumuna göre aktif transkript bölümünü vurgulayan inceleme akışı.
+- Kaynak kanalını anonim konuşmacı etiketinden ayrı tutan; konuşma, anlaşılmayan konuşma, vokalizasyon ve çevresel ses anotasyonlarını destekleyen segment modeli.
 - Şifreli kasa yedeği ve geri yükleme; toplam 2 GiB ve tek dosya 256 MiB sınırı.
 - Atama profili ve transkript değişikliklerini kasada otomatik kaydetme.
 
