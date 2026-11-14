@@ -319,15 +319,17 @@ jobs:
             fi
           done
 
-          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F draft=false -F prerelease=true
-
-          # Yeni önizleme tamamen yayımlandıktan sonra eski yayımlanmış
-          # preview kayıtlarını temizle; hazırlık aşamasında çalışan indirmeyi kesme.
+          # Tüm yeni paketler doğrulandı. GitHub aynı "preview" etiketi için
+          # iki yayımlanmış release'e izin vermediğinden, eski yayımlanmış
+          # kaydı yalnızca yeni paketlerin tamamı hazır olduktan sonra kaldır.
           OLD_RELEASE_IDS="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[] | select(.tag_name == "preview" and .draft == false) | .id')"
           if [[ -n "$OLD_RELEASE_IDS" ]]; then
             while IFS= read -r old_release_id; do
               [[ -n "$old_release_id" && "$old_release_id" != "$RELEASE_ID" ]] || continue
-              echo "Yeni önizleme yayımlandı; eski kayıt kaldırılıyor: $old_release_id"
+              echo "Yeni paketler doğrulandı; eski preview kaydı kaldırılıyor: $old_release_id"
               gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/${old_release_id}"
             done <<< "$OLD_RELEASE_IDS"
           fi
+
+          # Eski kayıt kaldırıldıktan sonra aynı preview etiketiyle yeni taslağı yayımla.
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -F draft=false -F prerelease=true
