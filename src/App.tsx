@@ -805,7 +805,7 @@ export default function App() {
         mediaType: activeRecord.vaultMetadata?.mediaType ?? activeRecord.file.type,
         sizeBytes: activeRecord.vaultMetadata?.sizeBytes ?? activeRecord.file.size,
         durationSeconds: activeRecord.durationSeconds,
-        sha256Preview: activeRecord.sha256 ?? activeRecord.vaultMetadata?.sha256Preview ?? null,
+        sha256Preview: activeRecord.vaultMetadata?.sha256Preview ?? activeRecord.sha256 ?? null,
       },
       segments: activeRecord.segments,
     };
