@@ -16,6 +16,7 @@ import {
   createAssignmentRecord,
   isValidAssignmentId,
   normalizeAssignmentName,
+  resolveStoredAssignmentId,
   DEFAULT_ASSIGNMENT_NAME,
   type AssignmentRecord,
 } from "./assignment";
@@ -212,16 +213,17 @@ async function ensureAssignmentRecords(
     );
     if (!metadata) throw new Error("Kasa materyal listesinde kaydı bulunmayan dosya var.");
 
-    if (!metadata.assignmentId) {
-      const migrated = { ...metadata, assignmentId: defaultAssignment.id } as VaultAudioMetadata;
+    const resolvedAssignmentId = resolveStoredAssignmentId(
+      metadata.assignmentId,
+      [...assignmentIds],
+      defaultAssignment.id,
+    );
+    if (metadata.assignmentId !== resolvedAssignmentId) {
+      const migrated = { ...metadata, assignmentId: resolvedAssignmentId } as VaultAudioMetadata;
       validateMetadata(migrated);
       await writeJson(store, audioMetaKey(fileId), migrated);
       changed = true;
     } else {
-      assertVaultAssignmentId(metadata.assignmentId);
-      if (!assignmentIds.has(metadata.assignmentId)) {
-        throw new Error("Ses kaydı var olmayan bir görev alanına bağlı; veri otomatik taşınmadı.");
-      }
       validateMetadata(metadata as VaultAudioMetadata);
     }
   }
@@ -375,7 +377,9 @@ export async function createVaultAssignment(name: string): Promise<VaultAssignme
     await stronghold.save();
     return assignment;
   } catch (error) {
+    await writeJson(store, STORE_ASSIGNMENT_INDEX_KEY, assignments.map((item) => item.id)).catch(() => undefined);
     await store.remove(assignmentMetaKey(assignment.id)).catch(() => undefined);
+    await stronghold.save().catch(() => undefined);
     throw error;
   }
 }
