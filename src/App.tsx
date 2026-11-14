@@ -9,7 +9,7 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { createVaultAudioRecord } from "./domain/vault-audio-record";
-import { mergeAsrTranscriptSegments, recordTranscriptEdit } from "./domain/transcript";
+import { findActiveTranscriptSegmentId, mergeAsrTranscriptSegments, recordTranscriptEdit } from "./domain/transcript";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
 import { buildDocxReport, buildOdtReport } from "./domain/report";
 import {
@@ -261,6 +261,13 @@ export default function App() {
   const activeRecord = useMemo(
     () => assignmentRecords.find((record) => record.id === activeId) ?? null,
     [assignmentRecords, activeId],
+  );
+
+  const activePlaybackSegmentId = useMemo(
+    () => activeRecord
+      ? findActiveTranscriptSegmentId(activeRecord.segments, currentTime)
+      : null,
+    [activeRecord, currentTime],
   );
 
   const totalDuration = useMemo(
@@ -1626,9 +1633,17 @@ export default function App() {
                         <p>SEDA taslağı oluşturun veya sesi dinleyip “Bölüm ekle” ile elle çalışın. Makine metni uzman incelemesi olmadan onaylanmaz.</p>
                       </div>
                     ) : activeRecord.segments.map((segment) => (
-                      <article className="segment-card" key={segment.id}>
+                      <article
+                        className={`segment-card ${activePlaybackSegmentId === segment.id ? "playback-active" : ""}`}
+                        key={segment.id}
+                      >
                         <div className="segment-topline">
-                          <button className="timestamp-button" type="button" onClick={() => jumpTo(segment.startSeconds)}>
+                          <button
+                            className="timestamp-button"
+                            type="button"
+                            onClick={() => jumpTo(segment.startSeconds)}
+                            aria-current={activePlaybackSegmentId === segment.id ? "time" : undefined}
+                          >
                             <span>▶</span> {formatTime(segment.startSeconds)}
                           </button>
                           <span className={`segment-source ${segment.source === "asr" ? "machine" : "expert"}`}>
