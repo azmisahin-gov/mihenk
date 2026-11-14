@@ -323,10 +323,10 @@ jobs:
 
           # Yeni önizleme tamamen yayımlandıktan sonra eski yayımlanmış
           # preview kayıtlarını temizle; hazırlık aşamasında çalışan indirmeyi kesme.
-          OLD_RELEASE_IDS="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq --arg current "$RELEASE_ID" '.[] | select(.tag_name == "preview" and .draft == false and (.id | tostring) != $current) | .id')"
+          OLD_RELEASE_IDS="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" --jq '.[] | select(.tag_name == "preview" and .draft == false) | .id')"
           if [[ -n "$OLD_RELEASE_IDS" ]]; then
             while IFS= read -r old_release_id; do
-              [[ -n "$old_release_id" ]] || continue
+              [[ -n "$old_release_id" && "$old_release_id" != "$RELEASE_ID" ]] || continue
               echo "Yeni önizleme yayımlandı; eski kayıt kaldırılıyor: $old_release_id"
               gh api --method DELETE "repos/${GITHUB_REPOSITORY}/releases/${old_release_id}"
             done <<< "$OLD_RELEASE_IDS"
