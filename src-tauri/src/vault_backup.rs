@@ -45,7 +45,7 @@ fn add_source(
     archive_path: String,
     file_path: PathBuf,
 ) -> Result<(), String> {
-    let path_bytes = archive_path.as_bytes();
+    let path_bytes = archive_path.as_bytes().to_vec();
     if path_bytes.is_empty() || path_bytes.len() > MAX_PATH_BYTES {
         return Err("Yedek dosya yolu uzunluğu geçersiz.".into());
     }
@@ -64,7 +64,7 @@ fn add_source(
 
     sources.push(BackupSource {
         archive_path,
-        path_bytes: path_bytes.to_vec(),
+        path_bytes,
         file_path,
         size_bytes: metadata.len(),
     });
