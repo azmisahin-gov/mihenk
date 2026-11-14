@@ -522,3 +522,14 @@ audio { width: 100%; height: 34px; }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+
+.segment-card.playback-active {
+  border-color: #9eb9a6;
+  box-shadow: inset 3px 0 0 #789b82, 0 0 0 1px #e4eee6;
+  background: #fbfdfb;
+}
+.segment-card.playback-active .timestamp-button {
+  color: #315f43;
+  font-weight: 750;
+}
