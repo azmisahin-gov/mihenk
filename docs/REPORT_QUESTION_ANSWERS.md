@@ -6,7 +6,7 @@ Bu belge Issue #33 için uygulanan ilk rapor dikey dilimini açıklar.
 
 - Her görev sorusu için ayrı yanıt alanı vardır.
 - Yanıtlar seçili görev/atama kaydının Stronghold şifreli metadata'sında saklanır.
-- Her yanıt, aynı görev alanındaki bir veya daha fazla transkript segmentine bağlanabilir. Referans biçimi ses materyali kimliği ile segment kimliğini birleştirir.
+- Her yanıt, aynı görev alanındaki bir veya daha fazla transkript segmentine bağlanabilir. Yanıtı dolu her soru en az bir dayanak segmenti seçmelidir. Referans biçimi ses materyali kimliği ile segment kimliğini birleştirir.
 - Rapor oluşturulurken dayanaklar yalnızca aktif görev alanındaki seslerden çözülür; başka görevlerin segmentleri UI seçicisinde veya rapor girdisinde bulunmaz.
 - Soru metni değişir veya kaldırılırsa eski yanıt sessizce silinmez; artık etkin olmayan soru yanıtları görev profilinde kurtarılabilir kayıt olarak kalır.
 - Yanıt veya dayanak güncellemesi kaydedilmemişse DOCX/ODT dışa aktarma engellenir. Kullanıcı önce görev profilini kaydetmelidir.
