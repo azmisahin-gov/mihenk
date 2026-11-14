@@ -19,10 +19,11 @@ MİHENK, bilirkişilerin görevlerini tek bir yerel çalışma alanında yürüt
 - Metin, başlangıç/bitiş zamanı, nötr konuşmacı etiketi ve kontrol durumunu elle düzenleme.
 - İşaretlenmiş bir transkript aralığını tekrar tekrar dinleme.
 - Space oynat/duraklat, sol/sağ ok 5 saniye sarma, Ctrl/⌘ + Enter bölüm ekleme kısayolları.
-- Düzenlenmiş taslağı TXT veya JSON olarak kullanıcının cihazına dışa aktarma.
+- Görev profili (yerel referans, atama mercii, tarihler, inceleme kapsamı ve sorular) bilgisini şifreli kasada saklama.
+- Görev ve kaynak bilgileriyle birlikte zaman kodlu TXT/JSON, DOCX ve ODT çalışma taslağı dışa aktarma.
 - Küçük dosyalarda tarayıcı içi SHA-256 ön kontrolü.
 
-**Henüz bağlı olmayanlar:** ASR motoru, kasa parolası kurtarma/sıfırlama, resmî atama profili ve belge yönetimi, görev soruları/iş akışı, DOCX/ODT/PDF rapor çıktıları, 128 MiB üzerindeki sesler için güvenli düşük bellekli dinleme, uzun dosyalarda akışlı hash ve doğrulanmış UYAP/UDF entegrasyonu.
+**Henüz bağlı olmayanlar:** yerel ASR motoru, kasa parolası kurtarma/sıfırlama, resmi belge/OCR akışı, otomatik kayıt ve çökme sonrası kurtarma kabul testleri, PDF son çıktısı, 128 MiB üzerindeki sesler için güvenli düşük bellekli dinleme, uzun dosyalarda akışlı hash, doğrulanmış UYAP/UDF entegrasyonu ve temiz cihaz pilot kabulü.
 
 ## Güvenli kullanım sınırı
 
