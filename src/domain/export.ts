@@ -27,7 +27,7 @@ function sourceForExport(record: AudioRecord): TranscriptExport["source"] {
     mediaType: record.vaultMetadata?.mediaType ?? record.file.type ?? "bilinmiyor",
     sizeBytes: record.vaultMetadata?.sizeBytes ?? record.file.size,
     durationSeconds: record.durationSeconds ?? record.vaultMetadata?.durationSeconds ?? null,
-    sha256Preview: record.sha256 ?? record.vaultMetadata?.sha256Preview ?? null,
+    sha256Preview: record.vaultMetadata?.sha256Preview ?? record.sha256 ?? null,
   };
 }
 
