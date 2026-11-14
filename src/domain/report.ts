@@ -44,17 +44,20 @@ export function buildReportQualityChecklist(input: TranscriptReportInput): Repor
   ));
   const evidenceMap = new Map((input.supportingSegments ?? []).map((item) => [item.ref, item]));
   const missingEvidence = evidenceRefs.filter((ref) => !evidenceMap.has(ref));
-  const resolvedSegments = [
-    ...input.segments,
-    ...(input.supportingSegments ?? []).map((item) => ({
-      id: item.ref,
-      startSeconds: item.startSeconds,
-      endSeconds: item.endSeconds,
-      text: item.text,
-      speaker: item.speaker,
-      status: item.status,
-    })),
-  ];
+  const answeredWithoutEvidence = activeQuestions.filter((question) => {
+    const answer = answerByQuestion.get(question);
+    return Boolean(answer?.answer.trim()) && (answer?.supportingSegmentRefs.length ?? 0) === 0;
+  });
+  const resolvedSegments = input.supportingSegments
+    ? input.supportingSegments.map((item) => ({
+        id: item.ref,
+        startSeconds: item.startSeconds,
+        endSeconds: item.endSeconds,
+        text: item.text,
+        speaker: item.speaker,
+        status: item.status,
+      }))
+    : input.segments;
   const uniqueSegments = [...new Map(resolvedSegments.map((item) => [item.id, item])).values()];
   const unreviewed = uniqueSegments.filter((segment) => segment.status !== "uzman-onayli").length;
   const unknownDuration = input.source.durationSeconds === null || !Number.isFinite(input.source.durationSeconds);
@@ -70,10 +73,15 @@ export function buildReportQualityChecklist(input: TranscriptReportInput): Repor
     {
       id: "evidence-links",
       label: "Yanıt-dayanak bağlantıları",
-      passed: missingEvidence.length === 0,
-      detail: missingEvidence.length === 0
+      passed: missingEvidence.length === 0 && answeredWithoutEvidence.length === 0,
+      detail: missingEvidence.length === 0 && answeredWithoutEvidence.length === 0
         ? `${evidenceRefs.length} destek bağlantısı mevcut segmentlerle eşleşiyor.`
-        : `${missingEvidence.length} dayanak bağlantısı bulunamadı.`,
+        : [
+            missingEvidence.length > 0 ? `${missingEvidence.length} dayanak bağlantısı bulunamadı.` : "",
+            answeredWithoutEvidence.length > 0
+              ? `${answeredWithoutEvidence.length} yanıtın ses dayanağı seçilmedi: ${answeredWithoutEvidence.join(" · ")}`
+              : "",
+          ].filter(Boolean).join(" "),
     },
     {
       id: "expert-review",
