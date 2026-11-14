@@ -145,6 +145,43 @@ export function recordTranscriptEdit<T extends VersionedTranscriptSegment>(
 }
 
 /**
+ * Resolves the transcript interval at the current playback position.
+ * When a segment has no explicit end, the next segment start forms its
+ * provisional boundary; the final open-ended segment remains active to EOF.
+ */
+export function findActiveTranscriptSegmentId(
+  segments: ReadonlyArray<Pick<VersionedTranscriptSegment, "id" | "startSeconds" | "endSeconds">>,
+  currentSeconds: number,
+): string | null {
+  if (!Number.isFinite(currentSeconds) || currentSeconds < 0 || segments.length === 0) {
+    return null;
+  }
+
+  const ordered = [...segments].sort((left, right) => (
+    left.startSeconds - right.startSeconds || left.id.localeCompare(right.id)
+  ));
+
+  for (let index = ordered.length - 1; index >= 0; index -= 1) {
+    const segment = ordered[index];
+    if (!Number.isFinite(segment.startSeconds) || segment.startSeconds < 0) continue;
+    if (currentSeconds < segment.startSeconds) continue;
+
+    const nextStart = ordered[index + 1]?.startSeconds;
+    const endSeconds = segment.endSeconds !== null
+      ? segment.endSeconds
+      : (nextStart !== undefined && nextStart > segment.startSeconds
+          ? nextStart
+          : Number.POSITIVE_INFINITY);
+
+    if (endSeconds > segment.startSeconds && currentSeconds < endSeconds) {
+      return segment.id;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Replaces untouched machine drafts with a new run while retaining every
  * human-authored segment and every machine segment that has an expert edit.
  */
