@@ -10,8 +10,11 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
+import { resolveActiveAssignment } from "./domain/assignment";
 import {
   createLocalVault,
+  createVaultAssignment,
+  listAssignments,
   deleteStoredAudio,
   getVaultState,
   importAudioToVault,
@@ -23,6 +26,7 @@ import {
   exportLocalVaultBackup,
   restoreLocalVaultBackup,
   type VaultAudioMetadata,
+  type VaultAssignment,
   type VaultState,
 } from "./domain/vault";
 import { MAX_VAULT_BACKUP_BYTES } from "./domain/vault-backup";
@@ -78,6 +82,9 @@ function isTextEntryTarget(target: EventTarget | null): boolean {
 
 export default function App() {
   const [records, setRecords] = useState<AudioRecord[]>([]);
+  const [assignments, setAssignments] = useState<VaultAssignment[]>([]);
+  const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(null);
+  const [assignmentNameDraft, setAssignmentNameDraft] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [repeatSegmentId, setRepeatSegmentId] = useState<string | null>(null);
@@ -169,14 +176,19 @@ export default function App() {
     }
   }, []);
 
+  const assignmentRecords = useMemo(
+    () => records.filter((record) => record.vaultMetadata?.assignmentId === activeAssignmentId),
+    [records, activeAssignmentId],
+  );
+
   const activeRecord = useMemo(
-    () => records.find((record) => record.id === activeId) ?? null,
-    [records, activeId],
+    () => assignmentRecords.find((record) => record.id === activeId) ?? null,
+    [assignmentRecords, activeId],
   );
 
   const totalDuration = useMemo(
-    () => records.reduce((total, record) => total + (record.durationSeconds ?? 0), 0),
-    [records],
+    () => assignmentRecords.reduce((total, record) => total + (record.durationSeconds ?? 0), 0),
+    [assignmentRecords],
   );
 
   useEffect(() => {
@@ -229,6 +241,9 @@ export default function App() {
   }, [activeRecord, currentTime]);
 
   async function restoreVaultRecords(): Promise<void> {
+    const availableAssignments = await listAssignments();
+    setAssignments(availableAssignments);
+    setActiveAssignmentId((current) => resolveActiveAssignment(availableAssignments, current));
     const stored = await listStoredAudio();
     const restored: AudioRecord[] = stored.map((metadata) => ({
       id: metadata.fileId,
@@ -323,6 +338,8 @@ export default function App() {
         if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
       }
       setRecords([]);
+      setAssignments([]);
+      setActiveAssignmentId(null);
       setActiveId(null);
       setCurrentTime(0);
       setRepeatSegmentId(null);
@@ -360,6 +377,39 @@ export default function App() {
     }
   }
 
+
+  async function addAssignment(): Promise<void> {
+    const name = assignmentNameDraft.trim();
+    if (!name) {
+      setNotice("Yeni görev alanına kısa bir etiket verin.");
+      return;
+    }
+
+    try {
+      const created = await createVaultAssignment(name);
+      setAssignments((current) => [...current, created]);
+      setActiveAssignmentId(created.id);
+      setAssignmentNameDraft("");
+      audioRef.current?.pause();
+      setActiveId(null);
+      setCurrentTime(0);
+      setRepeatSegmentId(null);
+      setNotice(`“${created.name}” görev alanı oluşturuldu. Yeni sesler yalnızca bu alana kaydedilecek.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Görev alanı oluşturulamadı.");
+    }
+  }
+
+  function switchAssignment(assignmentId: string): void {
+    if (!assignments.some((assignment) => assignment.id === assignmentId)) return;
+    audioRef.current?.pause();
+    setActiveAssignmentId(assignmentId);
+    setActiveId(null);
+    setCurrentTime(0);
+    setRepeatSegmentId(null);
+    setNotice("Görev alanı değiştirildi. Yalnızca seçili görevin kayıtları gösteriliyor.");
+  }
+
   function updateRecord(recordId: string, update: (record: AudioRecord) => AudioRecord): void {
     setRecords((current) => current.map((record) => (
       record.id === recordId ? update(record) : record
@@ -369,6 +419,10 @@ export default function App() {
   async function addFiles(fileList: FileList | File[]): Promise<void> {
     if (vaultState !== "unlocked") {
       setNotice("Ses eklemeden önce yerel kasayı açın.");
+      return;
+    }
+    if (!activeAssignmentId) {
+      setNotice("Ses eklemek için önce bir görev alanı oluşturun veya seçin.");
       return;
     }
 
@@ -385,7 +439,7 @@ export default function App() {
     for (const file of accepted) {
       try {
         setNotice(`“${file.name}” şifreli yerel kasaya alınıyor…`);
-        const imported = await importAudioToVault(file);
+        const imported = await importAudioToVault(file, activeAssignmentId);
         const hash = await calculatePreviewHash(file);
         const metadata: VaultAudioMetadata = {
           ...imported,
@@ -404,7 +458,7 @@ export default function App() {
         };
 
         setRecords((current) => [...current, record]);
-        if (records.length === 0 && addedCount === 0) {
+        if (assignmentRecords.length === 0 && addedCount === 0) {
           setActiveId(metadata.fileId);
           setCurrentTime(0);
         }
