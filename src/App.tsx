@@ -10,10 +10,11 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
-import { resolveActiveAssignment } from "./domain/assignment";
+import { resolveActiveAssignment, type AssignmentProfileInput } from "./domain/assignment";
 import {
   createLocalVault,
   createVaultAssignment,
+  updateVaultAssignment,
   listAssignments,
   deleteStoredAudio,
   getVaultState,
@@ -64,6 +65,26 @@ function saveBinaryFile(fileName: string, bytes: Uint8Array): void {
   owned.fill(0);
 }
 
+interface AssignmentProfileDraft {
+  name: string;
+  localReference: string;
+  authority: string;
+  appointedAt: string;
+  dueAt: string;
+  scope: string;
+  questionsText: string;
+}
+
+const EMPTY_ASSIGNMENT_PROFILE: AssignmentProfileDraft = {
+  name: "",
+  localReference: "",
+  authority: "",
+  appointedAt: "",
+  dueAt: "",
+  scope: "",
+  questionsText: "",
+};
+
 function hashLabel(record: AudioRecord): string {
   switch (record.hashState) {
     case "bekliyor": return "Sırada";
@@ -85,6 +106,8 @@ export default function App() {
   const [assignments, setAssignments] = useState<VaultAssignment[]>([]);
   const [activeAssignmentId, setActiveAssignmentId] = useState<string | null>(null);
   const [assignmentNameDraft, setAssignmentNameDraft] = useState("");
+  const [assignmentProfileDraft, setAssignmentProfileDraft] = useState<AssignmentProfileDraft>(EMPTY_ASSIGNMENT_PROFILE);
+  const [assignmentProfileBusy, setAssignmentProfileBusy] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [repeatSegmentId, setRepeatSegmentId] = useState<string | null>(null);
@@ -180,6 +203,27 @@ export default function App() {
     () => records.filter((record) => record.vaultMetadata?.assignmentId === activeAssignmentId),
     [records, activeAssignmentId],
   );
+
+  const activeAssignment = useMemo(
+    () => assignments.find((assignment) => assignment.id === activeAssignmentId) ?? null,
+    [assignments, activeAssignmentId],
+  );
+
+  useEffect(() => {
+    if (!activeAssignment) {
+      setAssignmentProfileDraft(EMPTY_ASSIGNMENT_PROFILE);
+      return;
+    }
+    setAssignmentProfileDraft({
+      name: activeAssignment.name,
+      localReference: activeAssignment.localReference,
+      authority: activeAssignment.authority,
+      appointedAt: activeAssignment.appointedAt,
+      dueAt: activeAssignment.dueAt,
+      scope: activeAssignment.scope,
+      questionsText: activeAssignment.questions.join("\\n"),
+    });
+  }, [activeAssignmentId]);
 
   const activeRecord = useMemo(
     () => assignmentRecords.find((record) => record.id === activeId) ?? null,
@@ -397,6 +441,30 @@ export default function App() {
       setNotice(`“${created.name}” görev alanı oluşturuldu. Yeni sesler yalnızca bu alana kaydedilecek.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Görev alanı oluşturulamadı.");
+    }
+  }
+
+  async function saveAssignmentProfile(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!activeAssignment || assignmentProfileBusy) return;
+    setAssignmentProfileBusy(true);
+    try {
+      const input: AssignmentProfileInput = {
+        name: assignmentProfileDraft.name,
+        localReference: assignmentProfileDraft.localReference,
+        authority: assignmentProfileDraft.authority,
+        appointedAt: assignmentProfileDraft.appointedAt,
+        dueAt: assignmentProfileDraft.dueAt,
+        scope: assignmentProfileDraft.scope,
+        questions: assignmentProfileDraft.questionsText.split(/\\r?\\n/u),
+      };
+      const updated = await updateVaultAssignment(activeAssignment.id, input);
+      setAssignments((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setNotice("Görev profili şifreli kasaya kaydedildi.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Görev profili kaydedilemedi.");
+    } finally {
+      setAssignmentProfileBusy(false);
     }
   }
 
@@ -958,6 +1026,56 @@ export default function App() {
               <small>Etikette kişi adı veya resmî dosya numarası kullanmayın.</small>
             </form>
           </div>
+
+          {activeAssignment && (
+            <form className="assignment-profile" onSubmit={(event) => void saveAssignmentProfile(event)}>
+              <div className="assignment-profile-heading">
+                <div>
+                  <strong>Görev / atama profili</strong>
+                  <span>Bu bilgiler yalnızca bu cihazdaki şifreli kasada saklanır.</span>
+                </div>
+                <button className="primary-button" type="submit" disabled={assignmentProfileBusy}>
+                  {assignmentProfileBusy ? "Kaydediliyor…" : "Görev profilini kaydet"}
+                </button>
+              </div>
+              <div className="assignment-profile-grid">
+                <label>
+                  <span>Yerel dosya referansı</span>
+                  <input maxLength={160} value={assignmentProfileDraft.localReference}
+                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, localReference: event.currentTarget.value }))}
+                    placeholder="Cihaz içinde kullanacağınız kısa referans" />
+                </label>
+                <label>
+                  <span>Atama mercii</span>
+                  <input maxLength={240} value={assignmentProfileDraft.authority}
+                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, authority: event.currentTarget.value }))}
+                    placeholder="Mahkeme / savcılık / kurum" />
+                </label>
+                <label>
+                  <span>Görevlendirme tarihi</span>
+                  <input type="date" value={assignmentProfileDraft.appointedAt}
+                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, appointedAt: event.currentTarget.value }))} />
+                </label>
+                <label>
+                  <span>Rapor için son tarih</span>
+                  <input type="date" value={assignmentProfileDraft.dueAt}
+                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, dueAt: event.currentTarget.value }))} />
+                </label>
+                <label className="assignment-profile-wide">
+                  <span>İnceleme kapsamı / görevin konusu</span>
+                  <textarea rows={2} maxLength={4000} value={assignmentProfileDraft.scope}
+                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, scope: event.currentTarget.value }))}
+                    placeholder="Görevlendirme yazısında belirtilen inceleme kapsamını kendi notunuz olarak girin." />
+                </label>
+                <label className="assignment-profile-wide">
+                  <span>Yanıtlanacak sorular (her satıra bir soru)</span>
+                  <textarea rows={4} maxLength={40000} value={assignmentProfileDraft.questionsText}
+                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, questionsText: event.currentTarget.value }))}
+                    placeholder="1. ...&#10;2. ..." />
+                </label>
+              </div>
+            </form>
+          )}
 
           <div className="prototype-warning" role="status">
             <span className="warning-icon">i</span>
