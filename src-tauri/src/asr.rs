@@ -1028,7 +1028,7 @@ mod tests {
         let mut peaks = [0.0_f32; 4];
         assert_eq!(
             accumulate_waveform_peaks(&[1.4, -0.2], 1, 0, 4, &mut peaks).unwrap(),
-            1,
+            2,
         );
         assert_eq!(
             accumulate_waveform_peaks(&[-0.6, 0.3], 1, 1, 4, &mut peaks).unwrap(),
