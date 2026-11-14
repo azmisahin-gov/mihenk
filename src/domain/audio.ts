@@ -97,7 +97,9 @@ export function createSegment(startSeconds: number): TranscriptSegment {
     startSeconds: Math.max(0, startSeconds),
     endSeconds: null,
     text: "",
+    channel: null,
     speaker: "Konuşmacı 1",
+    annotationType: "speech",
     status: "taslak",
     source: "uzman",
   };
