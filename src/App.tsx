@@ -473,6 +473,7 @@ export default function App() {
       setRepeatSegmentId(null);
       setNotice(`“${created.name}” görev alanı oluşturuldu. Yeni sesler yalnızca bu alana kaydedilecek.`);
     } catch (error) {
+      setVaultSaveStatus("error");
       setNotice(error instanceof Error ? error.message : "Görev alanı oluşturulamadı.");
     }
   }
@@ -509,6 +510,7 @@ export default function App() {
       });
       setNotice("Görev profili şifreli kasaya kaydedildi.");
     } catch (error) {
+      setVaultSaveStatus("error");
       setNotice(error instanceof Error ? error.message : "Görev profili kaydedilemedi.");
     } finally {
       setAssignmentProfileBusy(false);
