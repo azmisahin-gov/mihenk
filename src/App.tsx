@@ -16,7 +16,9 @@ import {
   formatAssignmentQuestions,
   hasAssignmentProfileChanges,
   parseAssignmentQuestions,
+  reconcileAssignmentQuestionAnswers,
   resolveActiveAssignment,
+  type AssignmentQuestionAnswer,
 } from "./domain/assignment";
 import {
   createLocalVault,
@@ -110,6 +112,7 @@ interface AssignmentProfileDraft {
   dueAt: string;
   scope: string;
   questionsText: string;
+  questionAnswers: AssignmentQuestionAnswer[];
 }
 
 const EMPTY_ASSIGNMENT_PROFILE: AssignmentProfileDraft = {
@@ -120,6 +123,7 @@ const EMPTY_ASSIGNMENT_PROFILE: AssignmentProfileDraft = {
   dueAt: "",
   scope: "",
   questionsText: "",
+  questionAnswers: [],
 };
 
 function hashLabel(record: AudioRecord): string {
@@ -260,11 +264,25 @@ export default function App() {
       dueAt: activeAssignment.dueAt,
       scope: activeAssignment.scope,
       questionsText: formatAssignmentQuestions(activeAssignment.questions),
+      questionAnswers: reconcileAssignmentQuestionAnswers(
+        activeAssignment.questions,
+        activeAssignment.questionAnswers ?? [],
+      ),
     });
   }, [activeAssignmentId]);
 
   const assignmentProfileDirty = Boolean(
     activeAssignment && hasAssignmentProfileChanges(activeAssignment, assignmentProfileDraft),
+  );
+  const assignmentDraftQuestions = parseAssignmentQuestions(assignmentProfileDraft.questionsText)
+    .map((question) => question.normalize("NFC").trim())
+    .filter(Boolean);
+  const assignmentEvidenceOptions = useMemo(
+    () => assignmentRecords.flatMap((record) => record.segments.map((segment) => ({
+      ref: `${record.id}:${segment.id}`,
+      label: `${record.vaultMetadata?.fileName ?? record.file.name} · ${formatTime(segment.startSeconds)} · ${segment.text.trim().slice(0, 72) || "[Metin yok]"}`,
+    }))),
+    [assignmentRecords],
   );
 
   // Güncellemeler ses çalarken veya şifreli dosya belleğe alınırken bekler.
@@ -415,6 +433,7 @@ export default function App() {
         dueAt: snapshot.dueAt,
         scope: snapshot.scope,
         questions: parseAssignmentQuestions(snapshot.questionsText),
+        questionAnswers: snapshot.questionAnswers,
       });
 
       const nextAssignments = assignmentsRef.current.map((item) => (
@@ -435,6 +454,10 @@ export default function App() {
           dueAt: updated.dueAt,
           scope: updated.scope,
           questionsText: formatAssignmentQuestions(updated.questions),
+          questionAnswers: reconcileAssignmentQuestionAnswers(
+            updated.questions,
+            updated.questionAnswers ?? [],
+          ),
         };
         assignmentProfileDraftRef.current = normalizedDraft;
         setAssignmentProfileDraft(normalizedDraft);
@@ -681,8 +704,40 @@ export default function App() {
     }
   }
 
-  function updateAssignmentProfileField(field: keyof AssignmentProfileDraft, value: string): void {
-    setAssignmentProfileDraft((draft) => ({ ...draft, [field]: value }));
+  function updateAssignmentProfileField(
+    field: Exclude<keyof AssignmentProfileDraft, "questionAnswers">,
+    value: string,
+  ): void {
+    setAssignmentProfileDraft((draft) => ({
+      ...draft,
+      [field]: value,
+      ...(field === "questionsText"
+        ? {
+            questionAnswers: reconcileAssignmentQuestionAnswers(
+              parseAssignmentQuestions(value).map((question) => question.normalize("NFC").trim()).filter(Boolean),
+              draft.questionAnswers,
+            ),
+          }
+        : {}),
+    }));
+  }
+
+  function updateAssignmentQuestionAnswer(
+    question: string,
+    patch: Partial<Pick<AssignmentQuestionAnswer, "answer" | "supportingSegmentRefs">>,
+  ): void {
+    setAssignmentProfileDraft((draft) => {
+      const questions = parseAssignmentQuestions(draft.questionsText)
+        .map((item) => item.normalize("NFC").trim())
+        .filter(Boolean);
+      const answers = reconcileAssignmentQuestionAnswers(questions, draft.questionAnswers);
+      return {
+        ...draft,
+        questionAnswers: answers.map((item) => item.question === question
+          ? { ...item, ...patch, updatedAt: new Date().toISOString() }
+          : item),
+      };
+    });
   }
 
   async function saveAssignmentProfile(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -1057,6 +1112,10 @@ export default function App() {
       setNotice("Rapor taslağı için görev alanı ve ses kaydı seçin.");
       return null;
     }
+    if (assignmentProfileDirty) {
+      setNotice("Rapor oluşturmadan önce görev sorularını ve uzman yanıtlarını kaydedin.");
+      return null;
+    }
     return {
       assignment: activeAssignment,
       source: {
@@ -1067,6 +1126,16 @@ export default function App() {
         sha256Preview: activeRecord.vaultMetadata?.sha256Preview ?? activeRecord.sha256 ?? null,
       },
       segments: activeRecord.segments,
+      questionAnswers: activeAssignment.questionAnswers ?? [],
+      supportingSegments: assignmentRecords.flatMap((record) => record.segments.map((segment) => ({
+        ref: `${record.id}:${segment.id}`,
+        fileName: record.vaultMetadata?.fileName ?? record.file.name,
+        startSeconds: segment.startSeconds,
+        endSeconds: segment.endSeconds,
+        text: segment.text,
+        speaker: segment.speaker,
+        status: segment.status,
+      }))),
     };
   }
 
@@ -1418,6 +1487,57 @@ export default function App() {
                     onChange={(event) => updateAssignmentProfileField("questionsText", event.currentTarget.value)}
                     placeholder="1. ...&#10;2. ..." />
                 </label>
+                {assignmentDraftQuestions.length > 0 && (
+                  <section className="assignment-question-answers assignment-profile-wide" aria-label="Soru yanıtları ve dayanakları">
+                    <div className="assignment-question-answers-heading">
+                      <strong>Soru yanıtları ve dayanak segmentleri</strong>
+                      <span>Yanıtlar seçili görevin şifreli profilinde saklanır. Her soru için ayrı yanıt ve ses dayanağı girin.</span>
+                    </div>
+                    {assignmentDraftQuestions.map((question, index) => {
+                      const answer = assignmentProfileDraft.questionAnswers.find((item) => item.question === question)
+                        ?? { question, answer: "", supportingSegmentRefs: [], updatedAt: "" };
+                      return (
+                        <article className="assignment-question-card" key={question + "-" + index}>
+                          <div className="assignment-question-title">{index + 1}. {question}</div>
+                          <label>
+                            <span>Uzman yanıtı / sonucu</span>
+                            <textarea
+                              rows={3}
+                              maxLength={10000}
+                              value={answer.answer}
+                              onChange={(event) => updateAssignmentQuestionAnswer(question, { answer: event.currentTarget.value })}
+                              placeholder="Yanıtınızı, kapsam ve sınırlılıkları belirterek yazın. Otomatik kanaat üretilmez."
+                            />
+                          </label>
+                          <fieldset className="assignment-evidence-picker">
+                            <legend>Destekleyen transkript segmentleri</legend>
+                            {assignmentEvidenceOptions.length === 0 ? (
+                              <small>Bu görev alanında henüz segment yok. Ses ekleyip transkript taslağı oluşturduğunuzda dayanak seçebilirsiniz.</small>
+                            ) : (
+                              <div className="assignment-evidence-options">
+                                {assignmentEvidenceOptions.map((option) => (
+                                  <label key={option.ref}>
+                                    <input
+                                      type="checkbox"
+                                      checked={answer.supportingSegmentRefs.includes(option.ref)}
+                                      onChange={(event) => {
+                                        const nextRefs = event.currentTarget.checked
+                                          ? [...answer.supportingSegmentRefs, option.ref]
+                                          : answer.supportingSegmentRefs.filter((ref) => ref !== option.ref);
+                                        updateAssignmentQuestionAnswer(question, { supportingSegmentRefs: nextRefs });
+                                      }}
+                                    />
+                                    <span>{option.label}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </fieldset>
+                        </article>
+                      );
+                    })}
+                  </section>
+                )}
               </div>
             </form>
           )}
