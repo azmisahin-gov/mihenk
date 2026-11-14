@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  filterTranscriptSegments,
   findActiveTranscriptSegmentId,
   mergeAsrTranscriptSegments,
   normalizeStoredTranscriptSegment,
@@ -194,4 +195,27 @@ test("manuel konuşmacı etiketi ve önceden atanmış kanal migrasyonda korunur
   assert.equal(modern.channel, "Kanal 1");
   assert.equal(modern.speaker, "Konuşmacı 2");
   assert.equal(modern.annotationType, "vocalization");
+});
+
+
+test("transkript inceleme filtresi kontrol bekleyen, belirsiz ve onaylı segmentleri ayırır", () => {
+  const segments = [
+    segment({ id: "draft", status: "taslak", annotationType: "speech" }),
+    segment({ id: "uncertain-status", status: "belirsiz", annotationType: "speech" }),
+    segment({ id: "uncertain-type", status: "taslak", annotationType: "partially_unintelligible" }),
+    segment({ id: "approved", status: "uzman-onayli", annotationType: "speech" }),
+  ];
+
+  assert.deepEqual(filterTranscriptSegments(segments, "all").map((item) => item.id), [
+    "draft", "uncertain-status", "uncertain-type", "approved",
+  ]);
+  assert.deepEqual(filterTranscriptSegments(segments, "needs-review").map((item) => item.id), [
+    "draft", "uncertain-status", "uncertain-type",
+  ]);
+  assert.deepEqual(filterTranscriptSegments(segments, "uncertain").map((item) => item.id), [
+    "uncertain-status", "uncertain-type",
+  ]);
+  assert.deepEqual(filterTranscriptSegments(segments, "approved").map((item) => item.id), [
+    "approved",
+  ]);
 });
