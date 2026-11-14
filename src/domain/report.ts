@@ -48,7 +48,7 @@ export function buildReportQualityChecklist(input: TranscriptReportInput): Repor
     const answer = answerByQuestion.get(question);
     return Boolean(answer?.answer.trim()) && (answer?.supportingSegmentRefs.length ?? 0) === 0;
   });
-  const resolvedSegments = input.supportingSegments
+  const resolvedSegments = input.supportingSegments && input.supportingSegments.length > 0
     ? input.supportingSegments.map((item) => ({
         id: item.ref,
         startSeconds: item.startSeconds,
