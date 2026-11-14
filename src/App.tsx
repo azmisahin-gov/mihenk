@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   calculatePreviewHash,
   createSegment,
@@ -35,6 +35,8 @@ import {
 } from "./domain/vault";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { SerialTaskQueue } from "./domain/save-queue";
 
 const AUDIO_EXTENSION = /\.(wav|mp3|m4a|aac|ogg|flac|opus|wma|aiff?)$/i;
 
@@ -131,12 +133,22 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const recordsRef = useRef<AudioRecord[]>([]);
-  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const assignmentsRef = useRef<VaultAssignment[]>([]);
+  const activeAssignmentIdRef = useRef<string | null>(null);
+  const assignmentProfileDraftRef = useRef<AssignmentProfileDraft>(EMPTY_ASSIGNMENT_PROFILE);
+  const vaultStateRef = useRef(vaultState);
+  const saveQueueRef = useRef(new SerialTaskQueue());
   const saveRevisionRef = useRef(0);
+  const allowWindowCloseRef = useRef(false);
+  const windowCloseInProgressRef = useRef(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     recordsRef.current = records;
-  }, [records]);
+    assignmentsRef.current = assignments;
+    activeAssignmentIdRef.current = activeAssignmentId;
+    assignmentProfileDraftRef.current = assignmentProfileDraft;
+    vaultStateRef.current = vaultState;
+  }, [records, assignments, activeAssignmentId, assignmentProfileDraft, vaultState]);
 
   useEffect(() => {
     const isDesktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -332,15 +344,84 @@ export default function App() {
 
     const revision = ++saveRevisionRef.current;
     setVaultSaveStatus("saving");
-    const queued = saveQueueRef.current.then(write, write);
-    saveQueueRef.current = queued.catch(() => undefined);
     try {
-      await queued;
+      await saveQueueRef.current.enqueue(write);
       if (revision === saveRevisionRef.current) setVaultSaveStatus("saved");
     } catch (error) {
       if (revision === saveRevisionRef.current) setVaultSaveStatus("error");
       throw error;
     }
+  }
+
+  async function persistAssignmentProfileSnapshot(
+    assignmentId: string,
+    snapshot: AssignmentProfileDraft,
+  ): Promise<void> {
+    const write = async () => {
+      const current = assignmentsRef.current.find((item) => item.id === assignmentId);
+      if (!current) throw new Error("Görev alanı bulunamadı.");
+
+      if (!hasAssignmentProfileChanges(current, snapshot)) return;
+
+      const updated = await updateVaultAssignment(assignmentId, {
+        name: snapshot.name,
+        localReference: snapshot.localReference,
+        authority: snapshot.authority,
+        appointedAt: snapshot.appointedAt,
+        dueAt: snapshot.dueAt,
+        scope: snapshot.scope,
+        questions: snapshot.questionsText.split(/\\r?\\n/u),
+      });
+
+      const nextAssignments = assignmentsRef.current.map((item) => (
+        item.id === updated.id ? updated : item
+      ));
+      assignmentsRef.current = nextAssignments;
+      setAssignments(nextAssignments);
+
+      if (
+        activeAssignmentIdRef.current === assignmentId &&
+        JSON.stringify(assignmentProfileDraftRef.current) === JSON.stringify(snapshot)
+      ) {
+        const normalizedDraft: AssignmentProfileDraft = {
+          name: updated.name,
+          localReference: updated.localReference,
+          authority: updated.authority,
+          appointedAt: updated.appointedAt,
+          dueAt: updated.dueAt,
+          scope: updated.scope,
+          questionsText: updated.questions.join("\\n"),
+        };
+        assignmentProfileDraftRef.current = normalizedDraft;
+        setAssignmentProfileDraft(normalizedDraft);
+      }
+    };
+
+    const revision = ++saveRevisionRef.current;
+    setVaultSaveStatus("saving");
+    try {
+      await saveQueueRef.current.enqueue(write);
+      if (revision === saveRevisionRef.current) setVaultSaveStatus("saved");
+    } catch (error) {
+      if (revision === saveRevisionRef.current) setVaultSaveStatus("error");
+      throw error;
+    }
+  }
+
+  async function persistCurrentVaultState(): Promise<void> {
+    // Finish storage work already in progress before taking the latest UI snapshot.
+    await saveQueueRef.current.drain();
+    await persistVaultRecords(recordsRef.current);
+
+    const assignmentId = activeAssignmentIdRef.current;
+    if (assignmentId) {
+      const stored = assignmentsRef.current.find((item) => item.id === assignmentId);
+      const draft = { ...assignmentProfileDraftRef.current };
+      if (stored && hasAssignmentProfileChanges(stored, draft)) {
+        await persistAssignmentProfileSnapshot(assignmentId, draft);
+      }
+    }
+    await saveQueueRef.current.drain();
   }
 
   useEffect(() => {
@@ -353,6 +434,83 @@ export default function App() {
     }, 450);
     return () => window.clearTimeout(timeout);
   }, [records, vaultState]);
+
+  useEffect(() => {
+    if (vaultState !== "unlocked" || !activeAssignment || !assignmentProfileDirty) return;
+    const snapshot = { ...assignmentProfileDraft };
+    if (!snapshot.name.trim()) return;
+
+    setVaultSaveStatus("pending");
+    const assignmentId = activeAssignment.id;
+    const timeout = window.setTimeout(() => {
+      void persistAssignmentProfileSnapshot(assignmentId, snapshot).catch((error) => {
+        setNotice(error instanceof Error
+          ? `Görev profili otomatik kaydedilemedi: ${error.message}`
+          : "Görev profili otomatik kaydedilemedi.");
+      });
+    }, 450);
+    return () => window.clearTimeout(timeout);
+  }, [vaultState, activeAssignment?.id, assignmentProfileDraft, assignmentProfileDirty]);
+
+  useEffect(() => {
+    const isDesktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isDesktopRuntime) return;
+
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const currentWindow = getCurrentWindow();
+
+    void currentWindow.onCloseRequested((event) => {
+      if (allowWindowCloseRef.current) return;
+      // Tauri requires this to happen synchronously, before the async flush starts.
+      event.preventDefault();
+      if (windowCloseInProgressRef.current) return;
+      windowCloseInProgressRef.current = true;
+
+      void (async () => {
+        try {
+          await saveQueueRef.current.drain();
+          const currentState = vaultStateRef.current;
+          if (currentState === "creating" || currentState === "unlocking" || currentState === "locking") {
+            throw new Error("Kasa işlemi devam ediyor. İşlem tamamlandıktan sonra pencereyi kapatın.");
+          }
+          if (currentState === "unlocked") {
+            await persistCurrentVaultState();
+          }
+
+          allowWindowCloseRef.current = true;
+          await currentWindow.close();
+        } catch (error) {
+          allowWindowCloseRef.current = false;
+          windowCloseInProgressRef.current = false;
+          const message = error instanceof Error ? error.message : "Kapanış öncesi kasa kaydı tamamlanamadı.";
+          setVaultSaveStatus("error");
+          setVaultError(message);
+          setNotice("Bekleyen kayıtlar tamamlanamadığı için pencere açık bırakıldı.");
+        }
+      })();
+    }).then((stopListening) => {
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    }).catch((error) => {
+      setVaultError(error instanceof Error ? error.message : "Güvenli kapanış denetimi başlatılamadı.");
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "hidden" || vaultStateRef.current !== "unlocked") return;
+      void persistCurrentVaultState().catch((error) => {
+        setVaultSaveStatus("error");
+        setNotice(error instanceof Error ? `Arka plana geçerken kayıt tamamlanamadı: ${error.message}` : "Arka plana geçerken kayıt tamamlanamadı.");
+      });
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
 
   async function submitVaultPassword(): Promise<void> {
     if (vaultBusy) return;
@@ -390,14 +548,10 @@ export default function App() {
 
   async function lockVault(): Promise<void> {
     if (vaultState !== "unlocked" || vaultBusy) return;
-    if (assignmentProfileDirty) {
-      setNotice("Kasayı kilitlemeden önce görev profilindeki değişiklikleri kaydedin.");
-      return;
-    }
     setVaultBusy(true);
     setVaultState("locking");
     try {
-      await persistVaultRecords(recordsRef.current);
+      await persistCurrentVaultState();
       audioRef.current?.pause();
       audioRef.current?.removeAttribute("src");
       audioRef.current?.load();
@@ -468,7 +622,7 @@ export default function App() {
     }
 
     try {
-      const created = await createVaultAssignment(name);
+      const created = await saveQueueRef.current.enqueue(() => createVaultAssignment(name));
       setAssignments((current) => [...current, created]);
       setVaultSaveStatus("saved");
       setActiveAssignmentId(created.id);
@@ -493,27 +647,7 @@ export default function App() {
     if (!activeAssignment || assignmentProfileBusy) return;
     setAssignmentProfileBusy(true);
     try {
-      const input: AssignmentProfileInput = {
-        name: assignmentProfileDraft.name,
-        localReference: assignmentProfileDraft.localReference,
-        authority: assignmentProfileDraft.authority,
-        appointedAt: assignmentProfileDraft.appointedAt,
-        dueAt: assignmentProfileDraft.dueAt,
-        scope: assignmentProfileDraft.scope,
-        questions: assignmentProfileDraft.questionsText.split(/\r?\n/u),
-      };
-      const updated = await updateVaultAssignment(activeAssignment.id, input);
-      setAssignments((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setVaultSaveStatus("saved");
-      setAssignmentProfileDraft({
-        name: updated.name,
-        localReference: updated.localReference,
-        authority: updated.authority,
-        appointedAt: updated.appointedAt,
-        dueAt: updated.dueAt,
-        scope: updated.scope,
-        questionsText: updated.questions.join("\n"),
-      });
+      await persistAssignmentProfileSnapshot(activeAssignment.id, { ...assignmentProfileDraft });
       setNotice("Görev profili şifreli kasaya kaydedildi.");
     } catch (error) {
       setVaultSaveStatus("error");
@@ -572,13 +706,16 @@ export default function App() {
     for (const file of accepted) {
       try {
         setNotice(`“${file.name}” şifreli yerel kasaya alınıyor…`);
-        const imported = await importAudioToVault(file, activeAssignmentId);
-        const hash = await calculatePreviewHash(file);
-        const metadata: VaultAudioMetadata = {
-          ...imported,
-          sha256Preview: hash.hash,
-        };
-        await saveStoredAudioMetadata(metadata);
+        const { metadata, hash } = await saveQueueRef.current.enqueue(async () => {
+          const imported = await importAudioToVault(file, activeAssignmentId);
+          const preview = await calculatePreviewHash(file);
+          const storedMetadata: VaultAudioMetadata = {
+            ...imported,
+            sha256Preview: preview.hash,
+          };
+          await saveStoredAudioMetadata(storedMetadata);
+          return { metadata: storedMetadata, hash: preview };
+        });
         const record: AudioRecord = {
           id: metadata.fileId,
           file,
@@ -667,7 +804,9 @@ export default function App() {
 
     try {
       if (target.playbackSessionId) await closeStoredAudioPlaybackSession(target.playbackSessionId);
-      if (target.vaultMetadata) await deleteStoredAudio(recordId);
+      if (target.vaultMetadata) {
+        await saveQueueRef.current.enqueue(() => deleteStoredAudio(recordId));
+      }
       if (target.objectUrl.startsWith("blob:")) URL.revokeObjectURL(target.objectUrl);
       const remaining = records.filter((record) => record.id !== recordId);
       setRecords(remaining);
@@ -749,16 +888,12 @@ export default function App() {
   }
 
   async function createEncryptedBackup(): Promise<void> {
-    if (assignmentProfileDirty) {
-      setNotice("Yedek oluşturmadan önce görev profilindeki değişiklikleri kaydedin.");
-      return;
-    }
     if (vaultState !== "unlocked" || backupInputBusy) return;
     setBackupInputBusy(true);
     try {
-      await persistVaultRecords(recordsRef.current);
+      await persistCurrentVaultState();
       const dateStamp = new Date().toISOString().replaceAll(":", "-").replaceAll(".", "-");
-      const saved = await exportLocalVaultBackup(`MİHENK-yerel-kasa-${dateStamp}.mihenkbackup`);
+      const saved = await saveQueueRef.current.enqueue(() => exportLocalVaultBackup(`MİHENK-yerel-kasa-${dateStamp}.mihenkbackup`));
       setNotice(saved
         ? "Kasa yedeği oluşturuldu. İçindeki veriler mevcut kasa parolasıyla açılır."
         : "Kasa yedeği oluşturma işlemi iptal edildi.");
@@ -776,7 +911,7 @@ export default function App() {
     setVaultError("");
     let restored = false;
     try {
-      restored = await restoreLocalVaultBackup();
+      restored = await saveQueueRef.current.enqueue(() => restoreLocalVaultBackup());
       if (!restored) {
         setNotice("Kasa yedeği seçme işlemi iptal edildi.");
         return;
