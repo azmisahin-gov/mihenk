@@ -6,6 +6,8 @@ import {
   createAssignmentRecord,
   filterByAssignment,
   normalizeAssignmentName,
+  normalizeAssignmentProfile,
+  normalizeDateField,
   resolveActiveAssignment,
   resolveStoredAssignmentId,
 } from "../src/domain/assignment.ts";
@@ -64,4 +66,45 @@ test("bilinen görev kimliği korunur; bozuk veya yetim görev kimliği reddedil
     () => resolveStoredAssignmentId("c".repeat(32), [first.id, second.id], first.id),
     /var olmayan/,
   );
+});
+
+test("atama profili alanlarını doğrular ve satır satır soruları korur", () => {
+  const updated = normalizeAssignmentProfile(first, {
+    name: "  Dosya A  ",
+    localReference: "  Yerel-01  ",
+    authority: "  Örnek Mahkemesi  ",
+    appointedAt: "2026-11-01",
+    dueAt: "2026-12-01",
+    scope: " Ses kaydının incelenmesi ",
+    questions: [" İlk soru? ", "", "İkinci soru?"],
+  });
+  assert.equal(updated.name, "Dosya A");
+  assert.equal(updated.localReference, "Yerel-01");
+  assert.equal(updated.authority, "Örnek Mahkemesi");
+  assert.equal(updated.appointedAt, "2026-11-01");
+  assert.deepEqual(updated.questions, ["İlk soru?", "İkinci soru?"]);
+  assert.equal(updated.scope, "Ses kaydının incelenmesi");
+});
+
+test("atama profili geçersiz tarih, kontrol karakteri ve aşırı uzun alanları reddeder", () => {
+  assert.throws(() => normalizeDateField("2026-02-30", "Son tarih"), /geçerli bir tarih/);
+  assert.throws(() => normalizeDateField("01.12.2026", "Son tarih"), /YYYY-AA-GG/);
+  assert.throws(() => normalizeAssignmentProfile(first, {
+    name: first.name, localReference: "x".repeat(161), authority: "", appointedAt: "", dueAt: "", scope: "", questions: [],
+  }), /en fazla 160/);
+  assert.throws(() => normalizeAssignmentProfile(first, {
+    name: first.name, localReference: "", authority: "", appointedAt: "", dueAt: "", scope: "", questions: Array(101).fill("soru"),
+  }), /en fazla 100/);
+});
+
+test("atama profilindeki satır sonları korunur; kontrol karakterleri reddedilir", () => {
+  const updated = normalizeAssignmentProfile(first, {
+    name: first.name, localReference: "", authority: "", appointedAt: "", dueAt: "",
+    scope: "Birinci satır\\r\\nİkinci satır", questions: [],
+  });
+  assert.equal(updated.scope, "Birinci satır\\nİkinci satır");
+  assert.throws(() => normalizeAssignmentProfile(first, {
+    name: first.name, localReference: "", authority: "", appointedAt: "", dueAt: "",
+    scope: "geçersiz\\u0001veri", questions: [],
+  }), /kontrol karakteri/);
 });
