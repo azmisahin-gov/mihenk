@@ -9,9 +9,15 @@ import {
   type AudioRecord,
   type SegmentStatus,
 } from "./domain/audio";
+import { createVaultAudioRecord } from "./domain/vault-audio-record";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
 import { buildDocxReport, buildOdtReport } from "./domain/report";
-import { hasAssignmentProfileChanges, resolveActiveAssignment } from "./domain/assignment";
+import {
+  formatAssignmentQuestions,
+  hasAssignmentProfileChanges,
+  parseAssignmentQuestions,
+  resolveActiveAssignment,
+} from "./domain/assignment";
 import {
   createLocalVault,
   createVaultAssignment,
@@ -206,7 +212,7 @@ export default function App() {
     ) {
       void installAvailableUpdate();
     }
-  }, [availableUpdate, updateState, vaultState, isPlaying, loadingRecordId]);
+  }, [availableUpdate, updateState, vaultState, isPlaying, loadingRecordId, assignmentProfileDirty]);
 
   useEffect(() => () => {
     for (const record of recordsRef.current) {
@@ -237,7 +243,7 @@ export default function App() {
       appointedAt: activeAssignment.appointedAt,
       dueAt: activeAssignment.dueAt,
       scope: activeAssignment.scope,
-      questionsText: activeAssignment.questions.join("\n"),
+      questionsText: formatAssignmentQuestions(activeAssignment.questions),
     });
   }, [activeAssignmentId]);
 
@@ -309,19 +315,9 @@ export default function App() {
     setAssignments(availableAssignments);
     setActiveAssignmentId((current) => resolveActiveAssignment(availableAssignments, current));
     const stored = await listStoredAudio();
-    const restored: AudioRecord[] = stored.map((metadata) => ({
-      id: metadata.fileId,
-      file: new File([], metadata.fileName, {
-        type: metadata.mediaType,
-        lastModified: metadata.lastModified,
-      }),
-      objectUrl: "",
-      durationSeconds: metadata.durationSeconds,
-      sha256: metadata.sha256Preview,
-      hashState: metadata.sha256Preview ? "hesaplandi" : "bekliyor",
-      segments: metadata.segments,
-      vaultMetadata: metadata,
-    }));
+    const restored: AudioRecord[] = stored.map((metadata) =>
+      createVaultAudioRecord(metadata, metadata.sha256Preview ? "hesaplandi" : "bekliyor")
+    );
     setRecords(restored);
     setActiveId(null);
     setCurrentTime(0);
@@ -370,7 +366,7 @@ export default function App() {
         appointedAt: snapshot.appointedAt,
         dueAt: snapshot.dueAt,
         scope: snapshot.scope,
-        questions: snapshot.questionsText.split(/\\r?\\n/u),
+        questions: parseAssignmentQuestions(snapshot.questionsText),
       });
 
       const nextAssignments = assignmentsRef.current.map((item) => (
@@ -390,7 +386,7 @@ export default function App() {
           appointedAt: updated.appointedAt,
           dueAt: updated.dueAt,
           scope: updated.scope,
-          questionsText: updated.questions.join("\\n"),
+          questionsText: formatAssignmentQuestions(updated.questions),
         };
         assignmentProfileDraftRef.current = normalizedDraft;
         setAssignmentProfileDraft(normalizedDraft);
@@ -594,7 +590,6 @@ export default function App() {
       setRecords((current) => current.map((item) => (
         item.playbackSessionId ? { ...item, objectUrl: "", playbackSessionId: undefined } : item
       )));
-      if (record.objectUrl.startsWith("blob:")) return;
       const playback = await openStoredAudio(record.vaultMetadata);
       updateRecord(recordId, (item) => ({
         ...item,
@@ -716,16 +711,7 @@ export default function App() {
           await saveStoredAudioMetadata(storedMetadata);
           return { metadata: storedMetadata, hash: preview };
         });
-        const record: AudioRecord = {
-          id: metadata.fileId,
-          file,
-          objectUrl: URL.createObjectURL(file),
-          durationSeconds: metadata.durationSeconds,
-          sha256: metadata.sha256Preview,
-          hashState: hash.state,
-          segments: metadata.segments,
-          vaultMetadata: metadata,
-        };
+        const record = createVaultAudioRecord(metadata, hash.state);
 
         setRecords((current) => [...current, record]);
         if (assignmentRecords.length === 0 && addedCount === 0) {
@@ -803,6 +789,12 @@ export default function App() {
     if (!target) return;
 
     try {
+      if (activeId === recordId) {
+        audioRef.current?.pause();
+        audioRef.current?.removeAttribute("src");
+        audioRef.current?.load();
+        setIsPlaying(false);
+      }
       if (target.playbackSessionId) await closeStoredAudioPlaybackSession(target.playbackSessionId);
       if (target.vaultMetadata) {
         await saveQueueRef.current.enqueue(() => deleteStoredAudio(recordId));

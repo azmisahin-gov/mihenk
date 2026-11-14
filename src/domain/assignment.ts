@@ -124,7 +124,17 @@ export function createAssignmentRecord(
   };
 }
 
-function normalizeQuestions(questions: string[]): string[] {
+export function parseAssignmentQuestions(value: string): string[] {
+  if (typeof value !== "string") throw new Error("İnceleme soruları metin olmalıdır.");
+  return value.split(/\\r\\n|\\n|\\r/u);
+}
+
+export function formatAssignmentQuestions(questions: readonly string[]): string {
+  if (!Array.isArray(questions)) throw new Error("İnceleme soruları listesi geçersiz.");
+  return questions.join("\\n");
+}
+
+function normalizeQuestions(questions: string[]): string {
   if (!Array.isArray(questions)) throw new Error("İnceleme soruları listesi geçersiz.");
   if (questions.length > 100) throw new Error("Bir görev alanında en fazla 100 inceleme sorusu olabilir.");
   return questions.map((question, index) =>
