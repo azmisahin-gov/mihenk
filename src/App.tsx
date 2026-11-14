@@ -486,7 +486,7 @@ export default function App() {
         appointedAt: updated.appointedAt,
         dueAt: updated.dueAt,
         scope: updated.scope,
-        questionsText: updated.questions.join("\\n"),
+        questionsText: updated.questions.join("\n"),
       });
       setNotice("Görev profili şifreli kasaya kaydedildi.");
     } catch (error) {
