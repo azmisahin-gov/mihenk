@@ -124,6 +124,14 @@ export function createAssignmentRecord(
   };
 }
 
+function normalizeQuestions(questions: string[]): string[] {
+  if (!Array.isArray(questions)) throw new Error("İnceleme soruları listesi geçersiz.");
+  if (questions.length > 100) throw new Error("Bir görev alanında en fazla 100 inceleme sorusu olabilir.");
+  return questions.map((question, index) =>
+    normalizeAssignmentField(question, "İnceleme sorusu " + (index + 1), 1000)
+  ).filter(Boolean);
+}
+
 export function normalizeAssignmentProfile(
   current: AssignmentRecord,
   input: AssignmentProfileInput,
@@ -136,9 +144,7 @@ export function normalizeAssignmentProfile(
     appointedAt: normalizeDateField(input.appointedAt, "Görevlendirme tarihi"),
     dueAt: normalizeDateField(input.dueAt, "Son tarih"),
     scope: normalizeAssignmentField(input.scope, "İnceleme kapsamı", 4000),
-    questions: input.questions.map((question, index) =>
-      normalizeAssignmentField(question, `İnceleme sorusu ${index + 1}`, 1000)
-    ).filter(Boolean).slice(0, 100),
+    questions: normalizeQuestions(input.questions),
     updatedAt: new Date().toISOString(),
   };
 }
