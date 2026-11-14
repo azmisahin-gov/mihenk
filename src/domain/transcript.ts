@@ -162,6 +162,28 @@ export function recordTranscriptEdit<T extends VersionedTranscriptSegment>(
 }
 
 /**
+ * Normalizes older vault entries that stored "Kanal N" in the speaker field.
+ * This migration is deliberately conservative: it only applies to ASR-origin
+ * segments with no explicit channel value and preserves their machine text.
+ */
+export function normalizeStoredTranscriptSegment<T extends VersionedTranscriptSegment>(segment: T): T {
+  const legacyChannel = segment.source === "asr"
+    && !segment.channel
+    && /^Kanal \\d+$/.test(segment.speaker);
+  const rawAsrText = segment.source === "asr"
+    ? (segment.rawAsrText ?? segment.text)
+    : segment.rawAsrText;
+
+  return {
+    ...segment,
+    channel: segment.channel ?? (legacyChannel ? segment.speaker : null),
+    speaker: legacyChannel ? "" : segment.speaker,
+    annotationType: segment.annotationType ?? "speech",
+    ...(rawAsrText === undefined ? {} : { rawAsrText }),
+  } as T;
+}
+
+/**
  * Resolves the transcript interval at the current playback position.
  * When a segment has no explicit end, the next segment start forms its
  * provisional boundary; the final open-ended segment remains active to EOF.
