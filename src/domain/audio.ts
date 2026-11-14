@@ -8,6 +8,8 @@ export interface TranscriptSegment {
   speaker: string;
   status: SegmentStatus;
   source?: "asr" | "uzman";
+  channel?: string | null;
+  annotationType?: TranscriptAnnotationType;
   rawAsrText?: string;
   revisions?: TranscriptRevisionEvent[];
 }
@@ -15,7 +17,7 @@ export interface TranscriptSegment {
 export type HashState = "bekliyor" | "hesaplaniyor" | "hesaplandi" | "buyuk-dosya" | "desteklenmiyor" | "hata";
 
 import type { VaultAudioMetadata } from "./vault";
-import type { TranscriptRevisionEvent } from "./transcript";
+import type { TranscriptAnnotationType, TranscriptRevisionEvent } from "./transcript";
 import { Sha256 } from "./sha256.ts";
 import { readFileChunks } from "./file-chunks.ts";
 import { MAX_VAULT_AUDIO_BYTES } from "./vault-crypto.ts";
