@@ -457,3 +457,68 @@ audio { width: 100%; height: 34px; }
   color: #a33e35;
   background: #fbedeb;
 }
+
+
+/* Transkript kaynak ve değişiklik geçmişi */
+.segment-audit-details {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border: 1px solid #e4eae5;
+  border-radius: 7px;
+  background: #f8faf8;
+  color: #53645a;
+  font-size: 10px;
+}
+.segment-audit-details > summary {
+  cursor: pointer;
+  color: #52675a;
+  font-size: 10px;
+  font-weight: 650;
+}
+.segment-audit-details > p {
+  margin: 8px 0 0;
+  color: #52645a;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.segment-audit-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 9px;
+}
+.segment-audit-event {
+  padding-top: 8px;
+  border-top: 1px solid #e3e9e4;
+}
+.segment-audit-event:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.segment-audit-event > small {
+  display: block;
+  color: #87958d;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.segment-audit-diff {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 3px;
+  margin-top: 7px;
+}
+.segment-audit-diff > span {
+  color: #829087;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.segment-audit-diff > p,
+.segment-audit-change {
+  margin: 0 0 6px;
+  color: #4e6255;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
