@@ -151,6 +151,7 @@ export default function App() {
   const [assignmentProfileDraft, setAssignmentProfileDraft] = useState<AssignmentProfileDraft>(EMPTY_ASSIGNMENT_PROFILE);
   const [assignmentProfileBusy, setAssignmentProfileBusy] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeNavigation, setActiveNavigation] = useState<"tasks" | "audio" | "transcripts" | "reports">("audio");
   const [currentTime, setCurrentTime] = useState(0);
   const [repeatSegmentId, setRepeatSegmentId] = useState<string | null>(null);
   const [notice, setNotice] = useState("Ses seçerek çalışma alanını başlatın.");
@@ -786,7 +787,29 @@ export default function App() {
   }
 
   async function addFiles(fileList: FileList | File[]): Promise<void> {
-    if (vaultState !== "unlocked") {
+    function navigateToWorkspaceSection(section: "tasks" | "audio" | "transcripts" | "reports"): void {
+    const targetIds: Record<typeof section, string> = {
+      tasks: "tasks-section",
+      audio: "audio-section",
+      transcripts: "transcripts-section",
+      reports: "reports-section",
+    };
+    let target = document.getElementById(targetIds[section]);
+    if (!target && section === "audio") {
+      target = document.getElementById("recordings-section");
+      setNotice("Bir ses kaydı seçtiğinizde dinleme alanı burada açılır.");
+    } else if (!target && section === "reports") {
+      target = document.getElementById("transcripts-section");
+      setNotice("Rapor taslakları için önce bir ses kaydı seçin.");
+    }
+
+    if (!target) return;
+    setActiveNavigation(section);
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    target.focus({ preventScroll: true });
+  }
+
+  if (vaultState !== "unlocked") {
       setNotice("Ses eklemeden önce yerel kasayı açın.");
       return;
     }
@@ -1338,19 +1361,39 @@ export default function App() {
 
         <div className="workspace-label">ÇALIŞMA ALANI</div>
         <nav className="nav-list" aria-label="Ana menü">
-          <button className="nav-item" type="button" disabled>
+          <button
+            className={`nav-item ${activeNavigation === "tasks" ? "active" : ""}`}
+            type="button"
+            aria-current={activeNavigation === "tasks" ? "page" : undefined}
+            onClick={() => navigateToWorkspaceSection("tasks")}
+          >
             <span className="nav-icon">▦</span>
             <span>Görevler</span>
           </button>
-          <button className="nav-item active" type="button" aria-current="page">
+          <button
+            className={`nav-item ${activeNavigation === "audio" ? "active" : ""}`}
+            type="button"
+            aria-current={activeNavigation === "audio" ? "page" : undefined}
+            onClick={() => navigateToWorkspaceSection("audio")}
+          >
             <span className="nav-icon">◖</span>
             <span>Ses çalışma alanı</span>
           </button>
-          <button className="nav-item" type="button" disabled>
+          <button
+            className={`nav-item ${activeNavigation === "transcripts" ? "active" : ""}`}
+            type="button"
+            aria-current={activeNavigation === "transcripts" ? "page" : undefined}
+            onClick={() => navigateToWorkspaceSection("transcripts")}
+          >
             <span className="nav-icon">≡</span>
             <span>Transkriptler</span>
           </button>
-          <button className="nav-item" type="button" disabled>
+          <button
+            className={`nav-item ${activeNavigation === "reports" ? "active" : ""}`}
+            type="button"
+            aria-current={activeNavigation === "reports" ? "page" : undefined}
+            onClick={() => navigateToWorkspaceSection("reports")}
+          >
             <span className="nav-icon">▤</span>
             <span>Raporlar</span>
           </button>
@@ -1449,7 +1492,7 @@ export default function App() {
             />
           </div>
 
-          <div className="assignment-toolbar">
+          <div className="assignment-toolbar" id="tasks-section" tabIndex={-1}>
             <div className="assignment-picker">
               <label htmlFor="active-assignment">GÖREV ALANI</label>
               <select
@@ -1633,7 +1676,7 @@ export default function App() {
           </div>
 
           <div className="workbench-grid">
-            <section className="panel recordings-panel">
+            <section className="panel recordings-panel" id="recordings-section" tabIndex={-1}>
               <div className="panel-header">
                 <div>
                   <h2>Kayıt kuyruğu</h2>
@@ -1714,7 +1757,7 @@ export default function App() {
                     <span className="file-index">#{String(assignmentRecords.findIndex((item) => item.id === activeRecord.id) + 1).padStart(2, "0")}</span>
                   </div>
 
-                  <div className="audio-stage">
+                  <div className="audio-stage" id="audio-section" tabIndex={-1}>
                     <div className="stage-caption">
                       <span>DALGA BİÇİMİ · ŞİFRELİ KAYNAKTAN ÇÖZÜMLENDİ</span>
                       <span>{formatTime(currentTime)} / {formatTime(activeRecord.durationSeconds)}</span>
@@ -1828,7 +1871,7 @@ export default function App() {
               )}
             </section>
 
-            <section className="panel transcript-panel">
+            <section className="panel transcript-panel" id="transcripts-section" tabIndex={-1}>
               <div className="panel-header transcript-heading">
                 <div>
                   <h2>Transkript taslağı</h2>
@@ -2020,7 +2063,7 @@ export default function App() {
                       </article>
                     ))}
                   </div>
-                  <div className="export-actions">
+                  <div className="export-actions" id="reports-section" tabIndex={-1}>
                     <button className="secondary-button export-text" type="button" onClick={exportText}>TXT dışa aktar</button>
                     <button className="secondary-button export-docx" type="button" onClick={exportDocx}>DOCX taslak</button>
                     <button className="secondary-button export-odt" type="button" onClick={exportOdt}>ODT taslak</button>
