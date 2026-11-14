@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   calculatePreviewHash,
   createSegment,
@@ -444,7 +444,7 @@ export default function App() {
     }
   }
 
-  async function saveAssignmentProfile(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+  async function saveAssignmentProfile(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!activeAssignment || assignmentProfileBusy) return;
     setAssignmentProfileBusy(true);
@@ -456,7 +456,7 @@ export default function App() {
         appointedAt: assignmentProfileDraft.appointedAt,
         dueAt: assignmentProfileDraft.dueAt,
         scope: assignmentProfileDraft.scope,
-        questions: assignmentProfileDraft.questionsText.split(/\\r?\\n/u),
+        questions: assignmentProfileDraft.questionsText.split(/\r?\n/u),
       };
       const updated = await updateVaultAssignment(activeAssignment.id, input);
       setAssignments((current) => current.map((item) => item.id === updated.id ? updated : item));
@@ -1039,6 +1039,11 @@ export default function App() {
                 </button>
               </div>
               <div className="assignment-profile-grid">
+                <label className="assignment-profile-wide">
+                  <span>Görev alanı adı</span>
+                  <input required maxLength={100} value={assignmentProfileDraft.name}
+                    onChange={(event) => setAssignmentProfileDraft((draft) => ({ ...draft, name: event.currentTarget.value }))} />
+                </label>
                 <label>
                   <span>Yerel dosya referansı</span>
                   <input maxLength={160} value={assignmentProfileDraft.localReference}
