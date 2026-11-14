@@ -439,7 +439,20 @@ export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
     const metadata = await readJson<VaultAudioMetadata>(store, audioMetaKey(fileId));
     if (!metadata) throw new Error("Kasa materyal listesinde kaydı bulunmayan dosya var.");
     validateMetadata(metadata);
-    records.push(metadata);
+    const segments = metadata.segments.map((segment) => {
+      const legacyAsrChannel = segment.source === "asr"
+        && !segment.channel
+        && /^Kanal \\d+$/.test(segment.speaker);
+      return {
+        ...segment,
+        ...(legacyAsrChannel ? { channel: segment.speaker, speaker: "" } : {}),
+        ...(segment.source === "asr" && segment.rawAsrText === undefined
+          ? { rawAsrText: segment.text }
+          : {}),
+        annotationType: segment.annotationType ?? "speech",
+      };
+    });
+    records.push({ ...metadata, segments });
   }
   return records;
 }
