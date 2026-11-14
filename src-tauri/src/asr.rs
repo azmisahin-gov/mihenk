@@ -1,6 +1,5 @@
 use reqwest::blocking::Client;
 use serde::Serialize;
-use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
@@ -26,40 +25,39 @@ pub const SEDA_MODEL_REVISION: &str = "b5cf32ae4936968b284df3f1c4c79714af71e1fe"
 const SEDA_MODEL_DIR: &str = "seda-v0.1";
 const MAX_MODEL_ASSET_BYTES: u64 = 96 * 1024 * 1024;
 const TOKEN_FILE_MAX_BYTES: u64 = 32 * 1024;
-const TOKEN_FILE_GIT_BLOB_SHA1: &str = "6ba58dd6a298eae17f7f1ac9a8e3ec714550926a";
 
 #[derive(Clone, Copy)]
 struct ModelAsset {
     name: &'static str,
     sha256: Option<&'static str>,
-    git_blob_sha1: Option<&'static str>,
     max_bytes: u64,
+    exact_bytes: u64,
 }
 
 const SEDA_ASSETS: [ModelAsset; 4] = [
     ModelAsset {
         name: "encoder.int8.onnx",
         sha256: Some("2596861911cec5ca1de31adc12a7fc983d05395434f92239f4e007eeae3a5dcc"),
-        git_blob_sha1: None,
         max_bytes: MAX_MODEL_ASSET_BYTES,
+        exact_bytes: 70_487_305,
     },
     ModelAsset {
         name: "decoder.onnx",
         sha256: Some("dc28b7ae3f5e67c0daa2d51886dae2ac8287a25333f46a363f3684b3cd1220c9"),
-        git_blob_sha1: None,
         max_bytes: 8 * 1024 * 1024,
+        exact_bytes: 2_093_081,
     },
     ModelAsset {
         name: "joiner.int8.onnx",
         sha256: Some("b4d1cff7c410d14c85c143885954be09a6a4a076cd35d22aeba58655665582bb"),
-        git_blob_sha1: None,
         max_bytes: 2 * 1024 * 1024,
+        exact_bytes: 259_417,
     },
     ModelAsset {
         name: "tokens.txt",
         sha256: None,
-        git_blob_sha1: Some(TOKEN_FILE_GIT_BLOB_SHA1),
         max_bytes: TOKEN_FILE_MAX_BYTES,
+        exact_bytes: u64::MAX,
     },
 ];
 
@@ -116,26 +114,6 @@ fn sha256_file(path: &Path, maximum: u64) -> Result<(String, u64), String> {
     Ok((format_hex(&hasher.finalize()), total))
 }
 
-/// SHA-1 is used only to compare a small text file with its immutable Git blob
-/// object identifier, not as the cryptographic integrity primitive for ONNX
-/// weights. The ONNX files are checked with SHA-256.
-fn git_blob_sha1_file(path: &Path, length: u64) -> Result<String, String> {
-    let mut file = File::open(path).map_err(|_| "Model token dosyası açılamadı.".to_string())?;
-    let mut hasher = Sha1::new();
-    hasher.update(format!("blob {length}\0").as_bytes());
-    let mut buffer = [0u8; 16 * 1024];
-    loop {
-        let read = file
-            .read(&mut buffer)
-            .map_err(|_| "Model token dosyası okunamadı.".to_string())?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    Ok(format_hex(&hasher.finalize()))
-}
-
 fn validate_token_file(path: &Path) -> Result<(), String> {
     let bytes = fs::read(path).map_err(|_| "Model token dosyası okunamadı.".to_string())?;
     let text = std::str::from_utf8(&bytes)
@@ -163,24 +141,26 @@ fn verify_asset(path: &Path, asset: ModelAsset) -> Result<u64, String> {
     }
 
     let (sha256, length) = sha256_file(path, asset.max_bytes)?;
-    if length == 0 {
-        return Err(format!("Model dosyası boş: {}", asset.name));
+    if length == 0 || (asset.exact_bytes != u64::MAX && length != asset.exact_bytes) {
+        return Err(format!("Model dosyasının boyutu sabit manifest ile eşleşmiyor: {}", asset.name));
     }
     if let Some(expected) = asset.sha256 {
         if sha256 != expected {
             return Err(format!("Model SHA-256 doğrulaması başarısız: {}", asset.name));
         }
     }
-    if let Some(expected) = asset.git_blob_sha1 {
-        if git_blob_sha1_file(path, length)? != expected {
-            return Err(format!("Model Git blob doğrulaması başarısız: {}", asset.name));
-        }
+    if asset.name == "tokens.txt" {
         validate_token_file(path)?;
     }
     Ok(length)
 }
 
 fn verify_model_dir(directory: &Path) -> Result<u64, String> {
+    let metadata = fs::symlink_metadata(directory)
+        .map_err(|_| "SEDA model klasörü bulunamadı.".to_string())?;
+    if !metadata.file_type().is_dir() {
+        return Err("SEDA model yolu normal bir klasör değil.".into());
+    }
     let mut total = 0u64;
     for asset in SEDA_ASSETS {
         total = total
@@ -293,13 +273,30 @@ fn download_asset(
 pub fn install_seda_model(app_data_dir: &Path) -> Result<SedaModelStatus, String> {
     let root = model_root(app_data_dir);
     fs::create_dir_all(&root).map_err(|_| "Yerel model klasörü oluşturulamadı.".to_string())?;
-    if get_seda_model_status(app_data_dir).installed {
-        return Ok(get_seda_model_status(app_data_dir));
-    }
-
     let staging = root.join(".seda-v0.1.installing");
     let active = model_dir(app_data_dir);
     let previous = root.join(".seda-v0.1.previous");
+
+    let current_status = get_seda_model_status(app_data_dir);
+    if current_status.installed {
+        remove_path_if_exists(&staging)?;
+        remove_path_if_exists(&previous)?;
+        return Ok(current_status);
+    }
+
+    // Recover the last known-good model if a process exited between the two
+    // atomic directory renames during a previous install/upgrade.
+    if verify_model_dir(&previous).is_ok() {
+        remove_path_if_exists(&active)?;
+        fs::rename(&previous, &active)
+            .map_err(|_| "Önceki sağlam SEDA modeli kurtarılamadı.".to_string())?;
+        let recovered = get_seda_model_status(app_data_dir);
+        if recovered.installed {
+            remove_path_if_exists(&staging)?;
+            return Ok(recovered);
+        }
+    }
+
     remove_path_if_exists(&staging)?;
     remove_path_if_exists(&previous)?;
     fs::create_dir(&staging).map_err(|_| "Geçici SEDA klasörü oluşturulamadı.".to_string())?;
@@ -481,6 +478,11 @@ fn finish_channel(
         }
         tail.zeroize();
     }
+    // The SEDA example uses a one-second zero tail to flush the last stream chunk.
+    let mut tail_padding = vec![0.0f32; 16_000];
+    channel.stream.accept_waveform(16_000, &tail_padding);
+    tail_padding.zeroize();
+
     channel.stream.input_finished();
     while recognizer.is_ready(&channel.stream) {
         recognizer.decode(&channel.stream);
@@ -650,22 +652,6 @@ mod tests {
         drop(file);
 
         assert!(validate_token_file(&path).is_err());
-        fs::remove_dir_all(directory).unwrap();
-    }
-
-    #[test]
-    fn checks_git_blob_sha1_with_git_header_not_plain_sha1() {
-        let directory = std::env::temp_dir().join(format!(
-            "mihenk-seda-git-blob-test-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&directory);
-        fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("tokens.txt");
-        fs::write(&path, b"hello\n").unwrap();
-
-        let digest = git_blob_sha1_file(&path, 6).unwrap();
-        assert_eq!(digest, "ce013625030ba8dba906f756967f9e9ca394464a");
         fs::remove_dir_all(directory).unwrap();
     }
 
