@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   findActiveTranscriptSegmentId,
   mergeAsrTranscriptSegments,
+  normalizeStoredTranscriptSegment,
   recordTranscriptEdit,
 } from "../src/domain/transcript.ts";
 
@@ -13,7 +14,9 @@ function segment(overrides = {}) {
     startSeconds: 1.25,
     endSeconds: 2.5,
     text: "yarın saat üç",
-    speaker: "Kanal 1",
+    channel: "Kanal 1",
+    speaker: "",
+    annotationType: "speech",
     status: "taslak",
     source: "asr",
     ...overrides,
@@ -78,7 +81,9 @@ test("konuşmacı, zaman aralığı ve inceleme durumu değişiklikleri geçmiş
     startSeconds: 1.25,
     endSeconds: 2.5,
     text: "yarın saat üç",
-    speaker: "Kanal 1",
+    channel: "Kanal 1",
+    speaker: "",
+    annotationType: "speech",
     status: "taslak",
   });
   assert.equal(edited.revisions[0].after.endSeconds, 3.25);
@@ -142,4 +147,51 @@ test("playback mapping respects explicit segment end times and leaves gaps unsel
   assert.equal(findActiveTranscriptSegmentId(segments, 3), null);
   assert.equal(findActiveTranscriptSegmentId(segments, 4.5), "second");
   assert.equal(findActiveTranscriptSegmentId(segments, 5), null);
+});
+
+test("kaynak kanal ve anotasyon türü değişiklikleri revizyon olayına girer", () => {
+  const original = segment();
+  const edited = recordTranscriptEdit(
+    original,
+    {
+      ...original,
+      channel: "Kanal 2",
+      annotationType: "partially_unintelligible",
+    },
+    { changedAt: "2026-11-14T19:00:00.000Z" },
+  );
+
+  assert.match(edited.revisions[0].reason, /Kaynak kanal/);
+  assert.match(edited.revisions[0].reason, /Anotasyon türü/);
+  assert.equal(edited.revisions[0].before.channel, "Kanal 1");
+  assert.equal(edited.revisions[0].after.channel, "Kanal 2");
+  assert.equal(edited.revisions[0].before.annotationType, "speech");
+  assert.equal(edited.revisions[0].after.annotationType, "partially_unintelligible");
+});
+
+test("eski ASR segmentindeki Kanal N etiketi konuşmacıdan kanala taşınır", () => {
+  const legacy = normalizeStoredTranscriptSegment(segment({
+    channel: undefined,
+    speaker: "Kanal 2",
+    annotationType: undefined,
+    rawAsrText: undefined,
+  }));
+
+  assert.equal(legacy.channel, "Kanal 2");
+  assert.equal(legacy.speaker, "");
+  assert.equal(legacy.annotationType, "speech");
+  assert.equal(legacy.rawAsrText, "yarın saat üç");
+});
+
+test("manuel konuşmacı etiketi ve önceden atanmış kanal migrasyonda korunur", () => {
+  const modern = normalizeStoredTranscriptSegment(segment({
+    channel: "Kanal 1",
+    speaker: "Konuşmacı 2",
+    annotationType: "vocalization",
+    source: "uzman",
+  }));
+
+  assert.equal(modern.channel, "Kanal 1");
+  assert.equal(modern.speaker, "Konuşmacı 2");
+  assert.equal(modern.annotationType, "vocalization");
 });
