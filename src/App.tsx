@@ -10,6 +10,7 @@ import {
   type SegmentStatus,
 } from "./domain/audio";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
+import { buildDocxReport, buildOdtReport } from "./domain/report";
 import { resolveActiveAssignment, type AssignmentProfileInput } from "./domain/assignment";
 import {
   createLocalVault,
@@ -49,10 +50,10 @@ function saveTextFile(fileName: string, content: string, mimeType: string): void
   window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
 }
 
-function saveBinaryFile(fileName: string, bytes: Uint8Array): void {
+function saveBinaryFile(fileName: string, bytes: Uint8Array, mimeType = "application/octet-stream"): void {
   const owned = new Uint8Array(bytes.byteLength);
   owned.set(bytes);
-  const blob = new Blob([owned.buffer], { type: "application/octet-stream" });
+  const blob = new Blob([owned.buffer], { type: mimeType });
   const downloadUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = downloadUrl;
@@ -771,6 +772,43 @@ export default function App() {
     setNotice("Transkript taslağı JSON olarak dışa aktarıldı.");
   }
 
+  function exportReportInput() {
+    if (!activeRecord || !activeAssignment) {
+      setNotice("Rapor taslağı için görev alanı ve ses kaydı seçin.");
+      return null;
+    }
+    return {
+      assignment: activeAssignment,
+      source: {
+        fileName: activeRecord.vaultMetadata?.fileName ?? activeRecord.file.name,
+        mediaType: activeRecord.vaultMetadata?.mediaType ?? activeRecord.file.type,
+        sizeBytes: activeRecord.vaultMetadata?.sizeBytes ?? activeRecord.file.size,
+        durationSeconds: activeRecord.durationSeconds,
+        sha256Preview: activeRecord.sha256 ?? activeRecord.vaultMetadata?.sha256Preview ?? null,
+      },
+      segments: activeRecord.segments,
+    };
+  }
+
+  function exportDocx(): void {
+    const input = exportReportInput();
+    if (!input) return;
+    const fileName = safeFileStem(activeAssignment?.name ?? "gorev") + "_" +
+      safeFileStem(activeRecord?.file.name ?? "ses") + "_taslak.docx";
+    saveBinaryFile(fileName, buildDocxReport(input),
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    setNotice("DOCX çalışma taslağı oluşturuldu; imzasızdır ve resmî teslim değildir.");
+  }
+
+  function exportOdt(): void {
+    const input = exportReportInput();
+    if (!input) return;
+    const fileName = safeFileStem(activeAssignment?.name ?? "gorev") + "_" +
+      safeFileStem(activeRecord?.file.name ?? "ses") + "_taslak.odt";
+    saveBinaryFile(fileName, buildOdtReport(input), "application/vnd.oasis.opendocument.text");
+    setNotice("ODT çalışma taslağı oluşturuldu; imzasızdır ve resmî teslim değildir.");
+  }
+
   const activeDuration = activeRecord?.durationSeconds ?? 0;
 
   async function installAvailableUpdate(): Promise<void> {
@@ -1384,6 +1422,8 @@ export default function App() {
                   </div>
                   <div className="export-actions">
                     <button className="secondary-button export-text" type="button" onClick={exportText}>TXT dışa aktar</button>
+                    <button className="secondary-button export-docx" type="button" onClick={exportDocx}>DOCX taslak</button>
+                    <button className="secondary-button export-odt" type="button" onClick={exportOdt}>ODT taslak</button>
                     <button className="primary-button export-json" type="button" onClick={exportJson}>JSON dışa aktar</button>
                   </div>
                 </>
