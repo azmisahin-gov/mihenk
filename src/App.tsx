@@ -11,7 +11,7 @@ import {
 } from "./domain/audio";
 import { buildTranscriptExport, buildTranscriptText } from "./domain/export";
 import { buildDocxReport, buildOdtReport } from "./domain/report";
-import { hasAssignmentProfileChanges, resolveActiveAssignment, type AssignmentProfileInput } from "./domain/assignment";
+import { hasAssignmentProfileChanges, resolveActiveAssignment } from "./domain/assignment";
 import {
   createLocalVault,
   createVaultAssignment,
