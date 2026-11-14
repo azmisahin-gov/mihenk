@@ -1,8 +1,24 @@
 export interface AssignmentRecord {
   id: string;
   name: string;
+  localReference: string;
+  authority: string;
+  appointedAt: string;
+  dueAt: string;
+  scope: string;
+  questions: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AssignmentProfileInput {
+  name: string;
+  localReference: string;
+  authority: string;
+  appointedAt: string;
+  dueAt: string;
+  scope: string;
+  questions: string[];
 }
 
 export const DEFAULT_ASSIGNMENT_NAME = "Genel çalışma";
@@ -25,6 +41,30 @@ export function normalizeAssignmentName(value: string): string {
   if (!normalized) throw new Error("Görev etiketi boş olamaz.");
   if (normalized.length > MAX_ASSIGNMENT_NAME_LENGTH) {
     throw new Error(`Görev etiketi en fazla ${MAX_ASSIGNMENT_NAME_LENGTH} karakter olabilir.`);
+  }
+  return normalized;
+}
+
+export function normalizeAssignmentField(value: string, label: string, maxLength = 4000): string {
+  if (typeof value !== "string") throw new Error(`${label} metin olmalıdır.`);
+  const normalized = value.normalize("NFC").replace(/\\r\\n?/gu, "\\n").trim();
+  if (/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/u.test(normalized)) {
+    throw new Error(`${label} kontrol karakteri içeremez.`);
+  }
+  if (normalized.length > maxLength) throw new Error(`${label} en fazla ${maxLength} karakter olabilir.`);
+  return normalized;
+}
+
+export function normalizeDateField(value: string, label: string): string {
+  const normalized = normalizeAssignmentField(value, label, 10);
+  if (normalized && !/^\\d{4}-\\d{2}-\\d{2}$/u.test(normalized)) {
+    throw new Error(`${label} YYYY-AA-GG biçiminde olmalıdır.`);
+  }
+  if (normalized) {
+    const parsed = new Date(`${normalized}T00:00:00.000Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized) {
+      throw new Error(`${label} geçerli bir tarih olmalıdır.`);
+    }
   }
   return normalized;
 }
@@ -70,7 +110,37 @@ export function createAssignmentRecord(
 ): AssignmentRecord {
   if (!isValidAssignmentId(id)) throw new Error("Görev alanı kimliği geçersiz.");
   const normalized = normalizeAssignmentName(name);
-  return { id, name: normalized, createdAt: now, updatedAt: now };
+  return {
+    id,
+    name: normalized,
+    localReference: "",
+    authority: "",
+    appointedAt: "",
+    dueAt: "",
+    scope: "",
+    questions: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function normalizeAssignmentProfile(
+  current: AssignmentRecord,
+  input: AssignmentProfileInput,
+): AssignmentRecord {
+  return {
+    ...current,
+    name: normalizeAssignmentName(input.name),
+    localReference: normalizeAssignmentField(input.localReference, "Yerel dosya referansı", 160),
+    authority: normalizeAssignmentField(input.authority, "Atama mercii", 240),
+    appointedAt: normalizeDateField(input.appointedAt, "Görevlendirme tarihi"),
+    dueAt: normalizeDateField(input.dueAt, "Son tarih"),
+    scope: normalizeAssignmentField(input.scope, "İnceleme kapsamı", 4000),
+    questions: input.questions.map((question, index) =>
+      normalizeAssignmentField(question, `İnceleme sorusu ${index + 1}`, 1000)
+    ).filter(Boolean).slice(0, 100),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export function filterByAssignment<T extends { assignmentId?: string }>(
