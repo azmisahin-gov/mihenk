@@ -755,7 +755,7 @@ export default function App() {
     if (!activeRecord) return;
     saveTextFile(
       `${safeFileStem(activeRecord.file.name)}_transkript_taslagi.txt`,
-      buildTranscriptText(activeRecord),
+      buildTranscriptText(activeRecord, activeAssignment),
       "text/plain;charset=utf-8",
     );
     setNotice("Transkript taslağı TXT olarak dışa aktarıldı.");
@@ -763,7 +763,7 @@ export default function App() {
 
   function exportJson(): void {
     if (!activeRecord) return;
-    const payload = buildTranscriptExport(activeRecord);
+    const payload = buildTranscriptExport(activeRecord, activeAssignment);
     saveTextFile(
       `${safeFileStem(activeRecord.file.name)}_transkript_taslagi.json`,
       JSON.stringify(payload, null, 2),
