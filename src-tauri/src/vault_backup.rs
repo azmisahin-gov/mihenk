@@ -32,6 +32,15 @@ struct BackupSource {
     size_bytes: u64,
 }
 
+fn is_interrupted_audio_part_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    bytes.len() == 37
+        && &bytes[32..] == b".part"
+        && bytes[..32]
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+}
+
 fn is_material_file_name(name: &str) -> bool {
     let bytes = name.as_bytes();
     bytes.len() == 36
@@ -103,6 +112,11 @@ fn collect_sources(vault_dir: &Path) -> Result<Vec<BackupSource>, String> {
                     .file_name()
                     .into_string()
                     .map_err(|_| "Kasa materyal dosya adı geçersiz.".to_string())?;
+                if is_interrupted_audio_part_name(&name) {
+                    // Yarım .part verisi indekslenmiş bir materyal değildir;
+                    // yedeğe alınmaz. Eski dosyalar uygulama açılışında temizlenir.
+                    continue;
+                }
                 if !is_material_file_name(&name) {
                     return Err("Kasa materyal klasöründe yedeklenmeye uygun olmayan bir dosya var.".into());
                 }
@@ -857,6 +871,21 @@ mod tests {
         fs::write(root.join("materials").join("temporary.part"), b"unfinished").unwrap();
 
         assert!(collect_sources(&root).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn excludes_interrupted_import_parts_from_backups() {
+        let root = fixture_directory();
+        let partial = root
+            .join("materials")
+            .join("0123456789abcdef0123456789abcdef.part");
+        fs::write(&partial, b"unfinished encrypted import").unwrap();
+
+        let sources = collect_sources(&root).unwrap();
+        assert_eq!(sources.len(), 3);
+        assert!(!sources.iter().any(|source| source.file_path == partial));
+
         fs::remove_dir_all(root).unwrap();
     }
 
