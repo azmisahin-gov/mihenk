@@ -46,24 +46,24 @@ export function normalizeAssignmentName(value: string): string {
 }
 
 export function normalizeAssignmentField(value: string, label: string, maxLength = 4000): string {
-  if (typeof value !== "string") throw new Error(`${label} metin olmalıdır.`);
-  const normalized = value.normalize("NFC").replace(/\\r\\n?/gu, "\\n").trim();
-  if (/[\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]/u.test(normalized)) {
-    throw new Error(`${label} kontrol karakteri içeremez.`);
+  if (typeof value !== "string") throw new Error(label + " metin olmalıdır.");
+  const normalized = value.normalize("NFC").replace(/\r\n?/gu, "\n").trim();
+  if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(normalized)) {
+    throw new Error(label + " kontrol karakteri içeremez.");
   }
-  if (normalized.length > maxLength) throw new Error(`${label} en fazla ${maxLength} karakter olabilir.`);
+  if (normalized.length > maxLength) throw new Error(label + " en fazla " + maxLength + " karakter olabilir.");
   return normalized;
 }
 
 export function normalizeDateField(value: string, label: string): string {
   const normalized = normalizeAssignmentField(value, label, 10);
-  if (normalized && !/^\\d{4}-\\d{2}-\\d{2}$/u.test(normalized)) {
-    throw new Error(`${label} YYYY-AA-GG biçiminde olmalıdır.`);
+  if (normalized && !/^\d{4}-\d{2}-\d{2}$/u.test(normalized)) {
+    throw new Error(label + " YYYY-AA-GG biçiminde olmalıdır.");
   }
   if (normalized) {
-    const parsed = new Date(`${normalized}T00:00:00.000Z`);
+    const parsed = new Date(normalized + "T00:00:00.000Z");
     if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized) {
-      throw new Error(`${label} geçerli bir tarih olmalıdır.`);
+      throw new Error(label + " geçerli bir tarih olmalıdır.");
     }
   }
   return normalized;
