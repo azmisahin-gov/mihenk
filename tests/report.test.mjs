@@ -200,3 +200,49 @@ test("rapor kalite kontrolünde dayanak bağlantıları yalnızca verilen görev
   });
   assert.equal(checklist.find((item) => item.id === "evidence-links").passed, false);
 });
+
+
+test("görev raporu dayanak aldığı tüm ses dosyalarını kaynak envanterine ekler", () => {
+  const multiSource = {
+    ...input,
+    sources: [
+      input.source,
+      {
+        fileName: "ek-kayit-02.mp3",
+        mediaType: "audio/mpeg",
+        sizeBytes: 4096,
+        durationSeconds: 75,
+        sha256Preview: "b".repeat(64),
+      },
+    ],
+  };
+  const entries = readLocalZipEntries(buildDocxReport(multiSource));
+  const document = new TextDecoder().decode(entries.find((entry) => entry.name === "word/document.xml").data);
+  assert.match(document, /Görev kaynak ses envanteri/);
+  assert.match(document, /kayit-01\.wav/);
+  assert.match(document, /ek-kayit-02\.mp3/);
+  assert.match(document, /SHA-256 ön kontrolü/);
+  const checklist = new Map(buildReportQualityChecklist(multiSource).map((item) => [item.id, item]));
+  assert.equal(checklist.get("source-inventory").passed, true);
+  assert.equal(checklist.get("duration").passed, true);
+});
+
+test("görevdeki ikinci ses kaydının hash veya süresi eksikse rapor kalite kontrolü bunu gösterir", () => {
+  const incomplete = {
+    ...input,
+    sources: [
+      input.source,
+      {
+        fileName: "ikinci-kayit.wav",
+        mediaType: "audio/wav",
+        sizeBytes: 4096,
+        durationSeconds: null,
+        sha256Preview: null,
+      },
+    ],
+  };
+  const checks = new Map(buildReportQualityChecklist(incomplete).map((item) => [item.id, item]));
+  assert.equal(checks.get("source-inventory").passed, false);
+  assert.match(checks.get("source-inventory").detail, /ikinci-kayit\.wav/);
+  assert.equal(checks.get("duration").passed, false);
+});
