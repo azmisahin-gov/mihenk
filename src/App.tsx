@@ -947,6 +947,16 @@ export default function App() {
 
   function removeSegment(segmentId: string): void {
     if (!activeRecord) return;
+    const evidenceRef = `${activeRecord.id}:${segmentId}`;
+    const isReferencedByActiveQuestion = Boolean(activeAssignment?.questions.some((question) =>
+      (activeAssignment.questionAnswers ?? []).some((answer) =>
+        answer.question === question && answer.supportingSegmentRefs.includes(evidenceRef)
+      )
+    ));
+    if (isReferencedByActiveQuestion) {
+      setNotice("Bu segment görev sorularında dayanak olarak kullanılıyor. Önce ilgili sorudaki dayanak bağlantısını kaldırın.");
+      return;
+    }
     if (repeatSegmentId === segmentId) setRepeatSegmentId(null);
     updateRecord(activeRecord.id, (record) => ({
       ...record,
@@ -1130,6 +1140,13 @@ export default function App() {
         durationSeconds: activeRecord.durationSeconds,
         sha256Preview: activeRecord.vaultMetadata?.sha256Preview ?? activeRecord.sha256 ?? null,
       },
+      sources: assignmentRecords.map((record) => ({
+        fileName: record.vaultMetadata?.fileName ?? record.file.name,
+        mediaType: record.vaultMetadata?.mediaType ?? record.file.type,
+        sizeBytes: record.vaultMetadata?.sizeBytes ?? record.file.size,
+        durationSeconds: record.durationSeconds,
+        sha256Preview: record.vaultMetadata?.sha256Preview ?? record.sha256 ?? null,
+      })),
       segments: activeRecord.segments,
       questionAnswers: activeAssignment.questionAnswers ?? [],
       supportingSegments: assignmentRecords.flatMap((record) => record.segments.map((segment) => ({

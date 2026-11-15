@@ -231,6 +231,45 @@ function normalizeQuestions(questions: string[]): string[] {
   ).filter(Boolean);
 }
 
+/**
+ * Kasa içindeki eski/yeni görev kaydını normalize ederken uzman yanıtlarını
+ * da korur. Eski kasalarda questionAnswers alanının bulunmaması geçerlidir;
+ * alan mevcutsa bozuk bir şekli sessizce boş listeye çevrilmez.
+ */
+export function normalizeStoredAssignmentRecord(
+  stored: Partial<AssignmentRecord>,
+  expectedId: string,
+): AssignmentRecord {
+  if (!stored || stored.id !== expectedId || typeof stored.name !== "string") {
+    throw new Error("Kasa görev alanı kaydı eksik veya bozuk.");
+  }
+  if (stored.questionAnswers !== undefined && !Array.isArray(stored.questionAnswers)) {
+    throw new Error("Kasa görev soru yanıt listesi bozuk.");
+  }
+
+  const base: AssignmentRecord = {
+    id: expectedId,
+    name: normalizeAssignmentName(stored.name),
+    localReference: typeof stored.localReference === "string" ? stored.localReference : "",
+    authority: typeof stored.authority === "string" ? stored.authority : "",
+    appointedAt: typeof stored.appointedAt === "string" ? stored.appointedAt : "",
+    dueAt: typeof stored.dueAt === "string" ? stored.dueAt : "",
+    scope: typeof stored.scope === "string" ? stored.scope : "",
+    questions: Array.isArray(stored.questions) && stored.questions.every((item) => typeof item === "string")
+      ? stored.questions
+      : [],
+    questionAnswers: (stored.questionAnswers ?? []) as AssignmentQuestionAnswer[],
+    createdAt: typeof stored.createdAt === "string" ? stored.createdAt : new Date(0).toISOString(),
+    updatedAt: typeof stored.updatedAt === "string" ? stored.updatedAt : new Date(0).toISOString(),
+  };
+  if (!Number.isFinite(Date.parse(base.createdAt)) || !Number.isFinite(Date.parse(base.updatedAt))) {
+    throw new Error("Kasa görev alanı tarih bilgileri geçersiz.");
+  }
+
+  const normalizedProfile = normalizeAssignmentProfile(base, base);
+  return { ...normalizedProfile, updatedAt: base.updatedAt };
+}
+
 export function normalizeAssignmentProfile(
   current: AssignmentRecord,
   input: AssignmentProfileInput,
