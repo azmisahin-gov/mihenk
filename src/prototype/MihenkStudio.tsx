@@ -343,7 +343,7 @@ export default function MihenkStudio() {
       <div className="st-nav-scroll">
         {navGroups.map(group => <div className="st-nav-group" key={group.label}>
           {!collapsed && <div className="st-nav-label">{group.label}</div>}
-          {group.items.map(item => <button type="button" key={item.id} title={collapsed ? item.label : undefined} aria-label={item.label} className={"st-nav-item" + (screen === item.id || (item.id === "modules" && moduleScreen) ? " active" : "")} onClick={() => navigate(item.id)}>
+          {group.items.map(item => <button type="button" key={item.id} title={item.label} aria-label={item.label} className={"st-nav-item" + (screen === item.id || (item.id === "tasks" && (screen === "new-assignment" || screen === "workspace")) || (item.id === "modules" && moduleScreen) ? " active" : "")} onClick={() => navigate(item.id)}>
             <Icon name={item.icon} size={18} />{!collapsed && <span>{item.label}</span>}
           </button>)}
           {group.label === "UZMANLIK" && !collapsed && moduleScreen && <div className="st-subnav">
