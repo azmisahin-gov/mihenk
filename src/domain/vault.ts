@@ -33,6 +33,7 @@ import {
 import { readFileChunks } from "./file-chunks.ts";
 import { Sha256 } from "./sha256.ts";
 import { normalizeStoredTranscriptSegment, type TranscriptAnnotationType, type TranscriptRevisionEvent } from "./transcript";
+import { assertQuestionEvidenceOwnership, assertSameTaskOwnership } from "./task-isolation";
 
 const VAULT_DIR = "mihenk-vault";
 const MATERIALS_DIR = `${VAULT_DIR}/materials`;
@@ -447,6 +448,17 @@ export async function updateVaultAssignment(
   if (!current) throw new Error("Görev alanı bulunamadı.");
   const updated = normalizeAssignmentProfile(current, input);
   assertUniqueAssignmentName(updated.name, assignments, assignmentId);
+
+  const taskAudio = (await listStoredAudio()).filter((item) => item.assignmentId === assignmentId);
+  const availableEvidenceRefs = new Set(taskAudio.flatMap((item) =>
+    item.segments.map((segment) => item.fileId + ":" + segment.id)
+  ));
+  assertQuestionEvidenceOwnership(
+    updated.questions,
+    updated.questionAnswers ?? [],
+    availableEvidenceRefs,
+  );
+
   await writeJson(store, assignmentMetaKey(assignmentId), updated);
   try {
     await stronghold.save();
@@ -478,6 +490,24 @@ export async function listStoredAudio(): Promise<VaultAudioMetadata[]> {
 export async function saveStoredAudioMetadata(metadata: VaultAudioMetadata): Promise<void> {
   const store = requireStore();
   validateMetadata(metadata);
+  const current = await readJson<VaultAudioMetadata>(store, audioMetaKey(metadata.fileId));
+  if (!current) throw new Error("Güncellenecek ses materyali kasada bulunamadı.");
+  validateMetadata(current);
+  assertSameTaskOwnership(current.assignmentId, metadata.assignmentId, "Ses materyali");
+  const immutableSourceMatches =
+    current.fileId === metadata.fileId &&
+    current.fileName === metadata.fileName &&
+    current.mediaType === metadata.mediaType &&
+    current.sizeBytes === metadata.sizeBytes &&
+    current.lastModified === metadata.lastModified &&
+    current.chunkSize === metadata.chunkSize &&
+    current.chunkCount === metadata.chunkCount &&
+    current.formatVersion === metadata.formatVersion &&
+    current.sha256Preview === metadata.sha256Preview &&
+    JSON.stringify(current.noncePrefix) === JSON.stringify(metadata.noncePrefix);
+  if (!immutableSourceMatches) {
+    throw new Error("Özgün ses materyalinin kimliği veya şifreli kaynak bilgileri değiştirilemez.");
+  }
   const assignments = await readAssignments(store, requireStronghold());
   if (!assignments.some((assignment) => assignment.id === metadata.assignmentId)) {
     throw new Error("Ses kaydının bağlı olduğu görev alanı bulunamadı.");
