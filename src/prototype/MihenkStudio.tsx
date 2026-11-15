@@ -518,6 +518,8 @@ export default function MihenkStudio() {
           setSegmentFilter("Öncelikli");
           setSegmentSearch("");
           setCurrentTime(timeToSeconds(nextSegments[0].start));
+          setLoopA(null);
+          setLoopB(null);
         }}><span className="st-recording-number">{String(index + 1).padStart(2, "0")}</span><span className="st-recording-main"><strong>{record.name}</strong><small>{record.duration} · {record.size}</small><Badge tone={record.tone}>{record.status}</Badge></span><span className="st-recording-markers">{record.markers > 0 ? record.markers + " işaret" : "✓"}</span></button>)}
                 <div className="st-recording-legend"><span><i className="amber" /> Kontrol gerektiriyor</span><span><i className="green" /> Kontrol edildi</span></div>
               </section>
