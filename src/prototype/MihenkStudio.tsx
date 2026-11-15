@@ -35,6 +35,73 @@ const initialSegments: Segment[] = [
   { id: "s6", start: "00:00:35.4", end: "00:00:39.0", speaker: "Konuşmacı B", text: "Uygun, o zaman bu şekilde ilerleyelim.", reason: "Kontrol edildi", priority: false, reviewed: true },
 ];
 
+const recordingText: Record<string, string[]> = {
+  "rec-b": [
+    "Arka plandaki konuşma nedeniyle bu bölüm yeniden dinlenmelidir.",
+    "Ana konuşmacı, toplantının ikinci gündem maddesine geçtiğini belirtiyor.",
+    "Diğer ses kaynağından gelen kısa ifade üst üste konuşmayla örtüşüyor.",
+    "Kayıt seviyesindeki değişim nedeniyle kelime sınırları kontrol edilmeli.",
+    "Konuşmanın devamında tarih ve saat bilgisi tekrar ediliyor.",
+    "Bu bölümdeki ifade uzman tarafından kontrol edilmiştir.",
+  ],
+  "rec-c": [
+    "Dosyayı bugün teslim aldığımızı teyit ediyorum.",
+    "Belgenin son sayfasını da ayrıca inceleyelim.",
+    "Anlaşıldı, kayıt burada sona eriyor.",
+    "Bu bölümde belirgin bir konuşma kesintisi yoktur.",
+    "Son cümle kısa ve anlaşılır biçimde duyuluyor.",
+    "Görüşme bu ifadeyle tamamlanıyor.",
+  ],
+  "rec-d": [
+    "Ortam kaydında birden fazla ses kaynağı duyulmaktadır.",
+    "Konuşmacı B, toplantı sırasındaki teknik durumu anlatıyor.",
+    "Arka plan gürültüsü nedeniyle seçili aralık ayrıca incelenmeli.",
+    "Ana konuşmacı bir önceki açıklamasını tekrar ediyor.",
+    "Uzak mesafedeki sesin kelime sınırları belirsiz.",
+    "Kayıt bütünlüğü korunarak sonraki bölüme geçiliyor.",
+  ],
+  "rec-e": [
+    "Görüşmenin başlangıcında taraflar gündemi belirliyor.",
+    "İkinci konuşmacı, dosyada yer alan tarihe atıf yapıyor.",
+    "Kısa süreli örtüşme nedeniyle konuşmacı geçişi kontrol edilmeli.",
+    "Bu bölümde ses seviyesi önceki aralığa göre daha düşük.",
+    "Ana konuşmacı inceleme kapsamını açıklıyor.",
+    "Son bölümde kapanış ifadesi duyuluyor.",
+  ],
+};
+
+function segmentsForRecording(recordId: string): Segment[] {
+  if (recordId === "rec-a") return initialSegments;
+  const texts = recordingText[recordId] || recordingText["rec-b"];
+  const offsets: Record<string, number> = { "rec-b": 78, "rec-c": 18, "rec-d": 214, "rec-e": 342 };
+  const base = offsets[recordId] ?? 60;
+  const reasons = [
+    "Düşük model güveni · ses seviyesi",
+    "Üst üste konuşma olasılığı",
+    "Elle kontrol işareti",
+    "Kontrol edildi",
+    "Düşük model güveni",
+    "Kontrol edildi",
+  ];
+  return initialSegments.map((segment, index) => {
+    const startSeconds = base + index * 5;
+    const endSeconds = startSeconds + 4;
+    const stamp = (seconds: number) => "00:" + String(Math.floor(seconds / 60)).padStart(2, "0") + ":" + String(seconds % 60).padStart(2, "0") + ".0";
+    const reviewed = index === 3 || index === 5;
+    return {
+      ...segment,
+      id: recordId + "-" + (index + 1),
+      start: stamp(startSeconds),
+      end: stamp(endSeconds),
+      text: texts[index],
+      speaker: index % 2 === 0 ? "Konuşmacı A" : "Konuşmacı B",
+      reason: reviewed ? "Kontrol edildi" : reasons[index],
+      priority: !reviewed && index < 4,
+      reviewed,
+    };
+  });
+}
+
 const questionsData = [
   "Sunulan kayıtların konuşma içeriğini, zaman damgalarını koruyarak yazıya aktarınız.",
   "Kayıtta birden fazla konuşmacı bulunup bulunmadığını, kayıt içi anonim etiketlerle belirtiniz.",
@@ -425,7 +492,16 @@ export default function MihenkStudio() {
             <div className="st-audio-filterbar"><div className="st-filter-pills">{["Öncelikli", "Tümü", "Kontrol edildi", "Belirsizler"].map(item => <button type="button" key={item} className={segmentFilter === item ? "active" : ""} onClick={() => setSegmentFilter(item)}>{item}{item === "Öncelikli" && <span>{segments.filter(s => s.priority && !s.reviewed).length}</span>}</button>)}</div><label className="st-inline-search"><Icon name="search" size={15} /><input placeholder="Metin, zaman veya konuşmacı ara" value={segmentSearch} onChange={event => setSegmentSearch(event.target.value)} /></label></div>
             <div className="st-audio-grid">
               <section className="st-panel st-recording-list"><div className="st-audio-panel-title"><div><h3>Kayıtlar</h3><span>5 materyal · toplam 2:14:16</span></div><button className="st-icon-button small" onClick={() => notify("Kayıt sıralama seçenekleri.")} type="button" aria-label="Kayıt listesi ayarları"><Icon name="sliders" size={16} /></button></div>
-                {recordingData.map((record, index) => <button type="button" key={record.id} className={"st-recording-row" + (selectedRecording === record.id ? " selected" : "")} onClick={() => setSelectedRecording(record.id)}><span className="st-recording-number">{String(index + 1).padStart(2, "0")}</span><span className="st-recording-main"><strong>{record.name}</strong><small>{record.duration} · {record.size}</small><Badge tone={record.tone}>{record.status}</Badge></span><span className="st-recording-markers">{record.markers > 0 ? record.markers + " işaret" : "✓"}</span></button>)}
+                {recordingData.map((record, index) => <button type="button" key={record.id} className={"st-recording-row" + (selectedRecording === record.id ? " selected" : "")} onClick={() => {
+          setSelectedRecording(record.id);
+          const nextSegments = segmentsForRecording(record.id);
+          setSegments(nextSegments);
+          setSelectedSegment(nextSegments[0].id);
+          setSegmentDraft(nextSegments[0].text);
+          setSegmentFilter("Öncelikli");
+          setSegmentSearch("");
+          setCurrentTime(Number(nextSegments[0].start.slice(6, 8)) || 0);
+        }}><span className="st-recording-number">{String(index + 1).padStart(2, "0")}</span><span className="st-recording-main"><strong>{record.name}</strong><small>{record.duration} · {record.size}</small><Badge tone={record.tone}>{record.status}</Badge></span><span className="st-recording-markers">{record.markers > 0 ? record.markers + " işaret" : "✓"}</span></button>)}
                 <div className="st-recording-legend"><span><i className="amber" /> Kontrol gerektiriyor</span><span><i className="green" /> Kontrol edildi</span></div>
               </section>
 
