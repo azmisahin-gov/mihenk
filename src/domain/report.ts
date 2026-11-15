@@ -22,6 +22,8 @@ export interface ReportSupportingSegment {
 export interface TranscriptReportInput {
   assignment: AssignmentRecord;
   source: TranscriptReportSource;
+  /** Complete task source inventory; source remains the focused recording for legacy callers. */
+  sources?: TranscriptReportSource[];
   segments: TranscriptSegment[];
   questionAnswers?: AssignmentQuestionAnswer[];
   supportingSegments?: ReportSupportingSegment[];
@@ -60,7 +62,13 @@ export function buildReportQualityChecklist(input: TranscriptReportInput): Repor
     : input.segments;
   const uniqueSegments = [...new Map(resolvedSegments.map((item) => [item.id, item])).values()];
   const unreviewed = uniqueSegments.filter((segment) => segment.status !== "uzman-onayli").length;
-  const unknownDuration = input.source.durationSeconds === null || !Number.isFinite(input.source.durationSeconds);
+  const sourceInventory = input.sources?.length ? input.sources : [input.source];
+  const sourcesMissingInventory = sourceInventory.filter((item) =>
+    !item.fileName || !Number.isFinite(item.sizeBytes) || item.sizeBytes <= 0 || !item.sha256Preview
+  );
+  const unknownDuration = sourceInventory.some((item) =>
+    item.durationSeconds === null || !Number.isFinite(item.durationSeconds)
+  );
   const checks: ReportQualityCheck[] = [
     {
       id: "question-answers",
@@ -94,10 +102,10 @@ export function buildReportQualityChecklist(input: TranscriptReportInput): Repor
     {
       id: "source-inventory",
       label: "Kaynak envanteri",
-      passed: Boolean(input.source.fileName && input.source.sizeBytes > 0 && input.source.sha256Preview),
-      detail: input.source.sha256Preview
-        ? "Kaynak adı, boyutu ve SHA-256 ön kontrolü mevcut; hash köken veya özgünlük kanıtı değildir."
-        : "Kaynak dosya bilgileri veya SHA-256 ön kontrolü eksik.",
+      passed: sourcesMissingInventory.length === 0,
+      detail: sourcesMissingInventory.length === 0
+        ? `${sourceInventory.length} kaynak ses dosyasının adı, boyutu ve SHA-256 ön kontrolü mevcut; hash köken veya özgünlük kanıtı değildir.`
+        : `${sourcesMissingInventory.length} kaynakta dosya adı, boyut veya SHA-256 ön kontrolü eksik: ${sourcesMissingInventory.map((item) => item.fileName || "Adsız kaynak").join(" · ")}`,
     },
     {
       id: "duration",
@@ -143,6 +151,7 @@ function xmlEscape(value: string): string {
 
 function linesForReport(input: TranscriptReportInput): ReportLine[] {
   const { assignment, source } = input;
+  const sourceInventory = input.sources?.length ? input.sources : [source];
   const lines: ReportLine[] = [
     { text: "MİHENK 56.12 — SES İNCELEME ÇALIŞMA TASLAĞI", style: "Title" },
     { text: "TASLAK · İMZASIZ · RESMÎ TESLİM DEĞİLDİR", style: "Subtitle" },
@@ -190,12 +199,15 @@ function linesForReport(input: TranscriptReportInput): ReportLine[] {
   }
 
   lines.push(
-    { text: "Kaynak ses bilgileri", style: "Heading1" },
-    { text: "Dosya adı: " + source.fileName },
-    { text: "Medya türü: " + (source.mediaType || "Bilinmiyor") },
-    { text: "Dosya boyutu: " + formatBytes(source.sizeBytes) },
-    { text: "Ses süresi: " + formatTime(source.durationSeconds) },
-    { text: "SHA-256 ön kontrolü: " + (source.sha256Preview || "Hesaplanmadı") },
+    { text: "Görev kaynak ses envanteri", style: "Heading1" },
+    ...sourceInventory.flatMap((item, index) => [
+      { text: (index + 1) + ". kaynak" , style: "Heading2" as const },
+      { text: "Dosya adı: " + item.fileName },
+      { text: "Medya türü: " + (item.mediaType || "Bilinmiyor") },
+      { text: "Dosya boyutu: " + formatBytes(item.sizeBytes) },
+      { text: "Ses süresi: " + formatTime(item.durationSeconds) },
+      { text: "SHA-256 ön kontrolü: " + (item.sha256Preview || "Hesaplanmadı") },
+    ]),
     { text: "Hash açıklaması: Bu değer MİHENK ön kontrolüdür; tek başına delil zinciri, köken veya özgünlük kanıtı değildir." },
     { text: "Zaman kodlu transkript bölümleri", style: "Heading1" },
   );
