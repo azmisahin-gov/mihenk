@@ -197,3 +197,115 @@ jobs:
               Stop-Process -Id $process.Id -Force
             }
           }
+
+  ui-prototype-packages:
+    name: v0.5 UI prototipi paketleri
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 46
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            bundles: "appimage,deb"
+            artifact: "mihenk-v0.5-ui-prototype-linux"
+          - os: windows-2022
+            bundles: "nsis,msi"
+            artifact: "mihenk-v0.5-ui-prototype-windows"
+    env:
+      VITE_UI_PROTOTYPE: "true"
+      VITE_APP_VERSION: "0.1.0-v0.5-prototype"
+    steps:
+      - name: Depoyu al
+        uses: actions/checkout@v4
+      - name: Node.js kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.16.0"
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Rust kur
+        uses: dtolnay/rust-toolchain@1.99.1
+      - name: Linux Sherpa native arşivini sabit SHA-256 ile hazırla
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_name="sherpa-onnx-v2.0.1-linux-x64-static-lib.tar.bz2"
+          archive_dir="$RUNNER_TEMP/sherpa-onnx-archives"
+          mkdir -p "$archive_dir"
+          curl --fail --location --retry 3 \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/$archive_name" \
+            --output "$archive_dir/$archive_name"
+          printf '%s  %s\n' \
+            "55cfadf65ba50d0afc1a802b7a337942819e51c94a5b5a384def1978f7c70871" \
+            "$archive_dir/$archive_name" | sha256sum --check
+          echo "SHERPA_ONNX_ARCHIVE_DIR=$archive_dir" >> "$GITHUB_ENV"
+      - name: Windows Sherpa native arşivini sabit SHA-256 ile hazırla
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $archiveName = "sherpa-onnx-v2.0.1-win-x64-static-MT-Release-lib.tar.bz2"
+          $archiveDir = Join-Path $env:RUNNER_TEMP "sherpa-onnx-archives"
+          New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
+          $archivePath = Join-Path $archiveDir $archiveName
+          $url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/$archiveName"
+          Invoke-WebRequest -Uri $url -OutFile $archivePath
+          $actual = (Get-FileHash -Algorithm SHA256 $archivePath).Hash.ToLowerInvariant()
+          $expected = "23e7b986b197eda0bbc47ff3d7d5c87afd6ef2b9077214ba26b0f1ec52ef0e66"
+          if ($actual -ne $expected) {
+            throw "Sherpa native Windows arşivi SHA-256 doğrulamasını geçemedi: $actual"
+          }
+          "SHERPA_ONNX_ARCHIVE_DIR=$archiveDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Windows için libsodium arşivini doğrulayarak hazırla
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/prepare-libsodium-windows.ps1
+      - name: Linux paketleme bağımlılıklarını kur
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            xvfb
+      - name: Kilitli bağımlılıkları kur
+        run: npm ci --no-audit --no-fund
+      - name: Masaüstü simgelerini hazırla
+        run: npx tauri icon src-tauri/icons/mihenk.svg --output src-tauri/icons
+      - name: v0.5 prototipini paketle (imzasız, yayın oluşturmadan)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx tauri build --ci \
+            --config src-tauri/tauri.ui-prototype.conf.json \
+            --bundles "${{ matrix.bundles }}"
+      - name: Paket dosyalarının oluştuğunu doğrula
+        shell: bash
+        run: |
+          set -euo pipefail
+          find src-tauri/target/release/bundle -type f -maxdepth 4 -print
+          test -d src-tauri/target/release/bundle
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            compgen -G "src-tauri/target/release/bundle/appimage/*.AppImage" >/dev/null
+            compgen -G "src-tauri/target/release/bundle/deb/*.deb" >/dev/null
+          else
+            compgen -G "src-tauri/target/release/bundle/nsis/*.exe" >/dev/null
+            compgen -G "src-tauri/target/release/bundle/msi/*.msi" >/dev/null
+          fi
+      - name: Deneme paketlerini workflow artifact olarak yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            src-tauri/target/release/bundle/**
+          if-no-files-found: error
+          retention-days: 14
