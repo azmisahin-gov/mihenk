@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import "./wireframe.css";
 
 type Screen = "tasks" | "new-assignment" | "workspace" | "profile" | "modules" | "engines";
@@ -48,11 +48,11 @@ const workspaceTabs: { id: WorkspaceTab; label: string; icon: string }[] = [
   { id: "report", label: "Tek Rapor", icon: "▥" },
 ];
 
-function StatusPill({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "green" | "amber" | "blue" }) {
+function StatusPill({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "green" | "amber" | "blue" }) {
   return <span className={"wf-status wf-status-" + tone}><i />{children}</span>;
 }
 
-function PrototypeNotice({ children }: { children: React.ReactNode }) {
+function PrototypeNotice({ children }: { children: ReactNode }) {
   return <div className="wf-prototype-note"><span className="wf-note-icon">i</span><div>{children}</div></div>;
 }
 
