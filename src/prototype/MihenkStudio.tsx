@@ -84,6 +84,11 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     mic: <><rect x="9" y="2" width="6" height="13" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v4M8 22h8" /></>,
     spark: <><path d="m12 3 1.5 6.5L20 12l-6.5 1.5L12 20l-1.5-6.5L4 12l6.5-2.5z" /><path d="m19 2 .6 2.4L22 5l-2.4.6L19 8l-.6-2.4L16 5l2.4-.6z" /></>,
     close: <><path d="m6 6 12 12M18 6 6 18" /></>,
+    info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
+    alert: <><path d="M10.3 3.9 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></>,
+    "corner-down-left": <><path d="M9 10 4 15l5 5" /><path d="M4 15h11a5 5 0 0 0 5-5V4" /></>,
+    users: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8" /></>,
+    cpu: <><rect x="5" y="5" width="14" height="14" rx="2" /><rect x="9" y="9" width="6" height="6" rx="1" /><path d="M9 1v4M15 1v4M9 19v4M15 19v4M1 9h4M1 15h4M19 9h4M19 15h4" /></>,
   };
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name] || paths.file}</svg>;
 }
@@ -169,9 +174,7 @@ export default function MihenkStudio() {
   const [reportReview, setReportReview] = useState(["done", "done", "done", "pending", "pending", "pending"]);
   const [sampleDocumentAdded, setSampleDocumentAdded] = useState(true);
   const [profileEditing, setProfileEditing] = useState(false);
-  const [moduleExpanded, setModuleExpanded] = useState(true);
   const [toast, setToast] = useState("");
-  const [notice, setNotice] = useState("Bu inceleme alanında yalnızca sentetik örnek veriler kullanılır.");
 
   const task = taskData.find(item => item.id === activeTaskId) || taskData[0];
   const selectedRecord = recordingData.find(item => item.id === selectedRecording) || recordingData[0];
@@ -261,10 +264,10 @@ export default function MihenkStudio() {
           {group.items.map(item => <button type="button" key={item.id} title={collapsed ? item.label : undefined} aria-label={item.label} className={"st-nav-item" + (screen === item.id || (item.id === "modules" && moduleScreen) ? " active" : "")} onClick={() => navigate(item.id)}>
             <Icon name={item.icon} size={18} />{!collapsed && <span>{item.label}</span>}
           </button>)}
-          {group.label === "UZMANLIK" && moduleExpanded && !collapsed && moduleScreen && <div className="st-subnav">
-            <button className={screen === "modules" ? "selected" : ""} onClick={() => navigate("modules")} type="button><span className="st-subnav-dot" />56.12 Genel Bakış</button>
-            <button className={screen === "engines" ? "selected" : ""} onClick={() => navigate("engines")} type="button><span className="st-subnav-dot" />Motorlar ve Modeller</button>
-            <button className={screen === "audio-tools" ? "selected" : ""} onClick={() => navigate("audio-tools")} type="button><span className="st-subnav-dot" />Ses Araçları</button>
+          {group.label === "UZMANLIK" && !collapsed && moduleScreen && <div className="st-subnav">
+            <button className={screen === "modules" ? "selected" : ""} onClick={() => navigate("modules")} type="button"><span className="st-subnav-dot" />56.12 Genel Bakış</button>
+            <button className={screen === "engines" ? "selected" : ""} onClick={() => navigate("engines")} type="button"><span className="st-subnav-dot" />Motorlar ve Modeller</button>
+            <button className={screen === "audio-tools" ? "selected" : ""} onClick={() => navigate("audio-tools")} type="button"><span className="st-subnav-dot" />Ses Araçları</button>
             <button className={screen === "language-tools" ? "selected" : ""} onClick={() => navigate("language-tools")} type="button"><span className="st-subnav-dot" />Dil ve Metin</button>
             <button className={screen === "test-history" ? "selected" : ""} onClick={() => navigate("test-history")} type="button"><span className="st-subnav-dot" />Test Geçmişi</button>
           </div>}
