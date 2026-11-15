@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import WireframePrototype from "./prototype/WireframePrototype";
+import MihenkStudio from "./prototype/MihenkStudio";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
@@ -11,7 +11,7 @@ if (!rootElement) {
 }
 
 const initialView = import.meta.env.VITE_UI_PROTOTYPE === "true"
-  ? <WireframePrototype />
+  ? <MihenkStudio />
   : <App />;
 
 ReactDOM.createRoot(rootElement).render(
