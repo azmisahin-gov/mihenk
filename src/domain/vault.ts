@@ -15,6 +15,7 @@ import {
   isValidAssignmentId,
   normalizeAssignmentName,
   normalizeAssignmentProfile,
+  normalizeStoredAssignmentRecord,
   resolveStoredAssignmentId,
   DEFAULT_ASSIGNMENT_NAME,
   type AssignmentRecord,
@@ -165,32 +166,7 @@ async function readAssignments(
     if (!stored || stored.id !== id || typeof stored.name !== "string") {
       throw new Error("Kasa görev alanı kaydı eksik veya bozuk.");
     }
-    const base: AssignmentRecord = {
-      id,
-      name: normalizeAssignmentName(stored.name),
-      localReference: typeof stored.localReference === "string" ? stored.localReference : "",
-      authority: typeof stored.authority === "string" ? stored.authority : "",
-      appointedAt: typeof stored.appointedAt === "string" ? stored.appointedAt : "",
-      dueAt: typeof stored.dueAt === "string" ? stored.dueAt : "",
-      scope: typeof stored.scope === "string" ? stored.scope : "",
-      questions: Array.isArray(stored.questions) && stored.questions.every((item) => typeof item === "string")
-        ? stored.questions
-        : [],
-      createdAt: typeof stored.createdAt === "string" ? stored.createdAt : new Date(0).toISOString(),
-      updatedAt: typeof stored.updatedAt === "string" ? stored.updatedAt : new Date(0).toISOString(),
-    };
-    if (
-      !Number.isFinite(Date.parse(base.createdAt)) ||
-      !Number.isFinite(Date.parse(base.updatedAt))
-    ) {
-      throw new Error("Kasa görev alanı tarih bilgileri geçersiz.");
-    }
-
-    const normalizedProfile = normalizeAssignmentProfile(base, base);
-    const assignment: AssignmentRecord = {
-      ...normalizedProfile,
-      updatedAt: base.updatedAt,
-    };
+    const assignment = normalizeStoredAssignmentRecord(stored, id);
     if (JSON.stringify(assignment) !== JSON.stringify(stored)) {
       await writeJson(store, assignmentMetaKey(id), assignment);
       migrated = true;
@@ -509,9 +485,24 @@ export async function saveStoredAudioMetadata(metadata: VaultAudioMetadata): Pro
     throw new Error("Özgün ses materyalinin kimliği veya şifreli kaynak bilgileri değiştirilemez.");
   }
   const assignments = await readAssignments(store, requireStronghold());
-  if (!assignments.some((assignment) => assignment.id === metadata.assignmentId)) {
+  const assignment = assignments.find((item) => item.id === metadata.assignmentId);
+  if (!assignment) {
     throw new Error("Ses kaydının bağlı olduğu görev alanı bulunamadı.");
   }
+  const otherTaskAudio = (await listStoredAudio()).filter((item) =>
+    item.assignmentId === metadata.assignmentId && item.fileId !== metadata.fileId
+  );
+  const availableEvidenceRefs = new Set([
+    ...otherTaskAudio.flatMap((item) =>
+      item.segments.map((segment) => item.fileId + ":" + segment.id)
+    ),
+    ...metadata.segments.map((segment) => metadata.fileId + ":" + segment.id),
+  ]);
+  assertQuestionEvidenceOwnership(
+    assignment.questions,
+    assignment.questionAnswers ?? [],
+    availableEvidenceRefs,
+  );
   if (!(await store.get(audioKeyKey(metadata.fileId)))) {
     throw new Error("Ses dosyasının kasa anahtarı bulunamadı.");
   }
@@ -812,6 +803,24 @@ export async function deleteStoredAudio(fileId: string): Promise<void> {
   const ids = await readJson<string[]>(store, STORE_AUDIO_INDEX_KEY);
   if (!Array.isArray(ids)) throw new Error("Kasa materyal listesi bozuk.");
   if (!ids.includes(fileId)) return;
+
+  const metadata = await readJson<VaultAudioMetadata>(store, audioMetaKey(fileId));
+  if (!metadata) throw new Error("Kasa materyal listesinde kaydı bulunmayan dosya var.");
+  validateMetadata(metadata);
+  const assignments = await readAssignments(store, stronghold);
+  const assignment = assignments.find((item) => item.id === metadata.assignmentId);
+  if (!assignment) throw new Error("Ses kaydının bağlı olduğu görev alanı bulunamadı.");
+  const remainingTaskAudio = (await listStoredAudio()).filter((item) =>
+    item.assignmentId === metadata.assignmentId && item.fileId !== fileId
+  );
+  const remainingEvidenceRefs = new Set(remainingTaskAudio.flatMap((item) =>
+    item.segments.map((segment) => item.fileId + ":" + segment.id)
+  ));
+  assertQuestionEvidenceOwnership(
+    assignment.questions,
+    assignment.questionAnswers ?? [],
+    remainingEvidenceRefs,
+  );
 
   await store.remove(audioKeyKey(fileId));
   await store.remove(audioMetaKey(fileId));
