@@ -8,6 +8,7 @@ import {
   formatAssignmentQuestions,
   hasAssignmentProfileChanges,
   normalizeAssignmentName,
+  normalizeStoredAssignmentRecord,
   normalizeAssignmentQuestionAnswers,
   reconcileAssignmentQuestionAnswers,
   parseAssignmentQuestions,
@@ -225,4 +226,45 @@ test("soru yanıtı ve dayanak referansları normalize edilir ve hatalı giriş 
   assert.throws(() => normalizeAssignmentQuestionAnswers(["Soru?"], [{
     question: "Soru?", answer: "x".repeat(10001), supportingSegmentRefs: [], updatedAt: "",
   }]), /en fazla 10000/);
+});
+
+
+test("kasa kaydı normalize edilirken kalıcı uzman yanıtları ve kanıt referansları korunur", () => {
+  const stored = {
+    ...first,
+    questionAnswers: [{
+      question: "İnceleme sorusu?",
+      answer: "Uzman tarafından kaydedilmiş yanıt",
+      supportingSegmentRefs: ["audio-a:segment-1"],
+      updatedAt: "2026-11-14T19:00:00.000Z",
+    }],
+    questions: ["İnceleme sorusu?"],
+  };
+  const restored = normalizeStoredAssignmentRecord(stored, first.id);
+
+  assert.equal(restored.questionAnswers?.[0].answer, "Uzman tarafından kaydedilmiş yanıt");
+  assert.deepEqual(restored.questionAnswers?.[0].supportingSegmentRefs, ["audio-a:segment-1"]);
+  assert.equal(restored.questionAnswers?.[0].updatedAt, "2026-11-14T19:00:00.000Z");
+  assert.equal(restored.updatedAt, stored.updatedAt);
+});
+
+test("eski kasalarda hiç bulunmayan soru yanıt alanı boş olarak geriye dönük uyumludur", () => {
+  const { questionAnswers: _ignored, ...legacy } = {
+    ...first,
+    questionAnswers: [{
+      question: "Eski?",
+      answer: "Yanıt",
+      supportingSegmentRefs: [],
+      updatedAt: "",
+    }],
+  };
+  const restored = normalizeStoredAssignmentRecord(legacy, first.id);
+  assert.deepEqual(restored.questionAnswers, []);
+});
+
+test("bozuk saklanmış soru yanıt listesi sessizce silinmez", () => {
+  assert.throws(
+    () => normalizeStoredAssignmentRecord({ ...first, questionAnswers: {} }, first.id),
+    /soru yanıt listesi bozuk/,
+  );
 });
