@@ -48,3 +48,16 @@ test("kaldırılmış soruların eski yanıtları korunur ancak etkin dayanak ko
     new Set(),
   ));
 });
+
+
+test("soru dayanağı olan bir segment silinecekse kayıt işlemi reddedilir", () => {
+  const citedRef = "audio-a:segment-to-remove";
+  assert.throws(
+    () => assertQuestionEvidenceOwnership(
+      ["İnceleme sorusu?"],
+      [{ question: "İnceleme sorusu?", supportingSegmentRefs: [citedRef] }],
+      new Set(),
+    ),
+    /seçili görevin kayıtlı transkript segmentleriyle eşleşmiyor/,
+  );
+});
