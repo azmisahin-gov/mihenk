@@ -70,6 +70,21 @@ const recordingText: Record<string, string[]> = {
   ],
 };
 
+function timeToSeconds(value: string): number {
+  const parts = (value.match(/\d+/g) || []).map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return parts[0] || 0;
+}
+
+function formatClock(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0");
+}
+
 function segmentsForRecording(recordId: string): Segment[] {
   if (recordId === "rec-a") return initialSegments;
   const texts = recordingText[recordId] || recordingText["rec-b"];
@@ -226,7 +241,7 @@ export default function MihenkStudio() {
   const [segmentSearch, setSegmentSearch] = useState("");
   const [playing, setPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState("1.0×");
-  const [currentTime, setCurrentTime] = useState(32);
+  const [currentTime, setCurrentTime] = useState(12);
   const [loopAB, setLoopAB] = useState(false);
   const [showSpectrogram, setShowSpectrogram] = useState(false);
   const [noiseReduction, setNoiseReduction] = useState(false);
@@ -291,8 +306,7 @@ export default function MihenkStudio() {
   function selectSegment(segment: Segment) {
     setSelectedSegment(segment.id);
     setSegmentDraft(segment.text);
-    const seconds = Number(segment.start.slice(6, 8)) || 12;
-    setCurrentTime(seconds);
+    setCurrentTime(timeToSeconds(segment.start));
   }
   function saveSegment() {
     setSegments(items => items.map(item => item.id === selectedSegment ? { ...item, text: segmentDraft, reviewed: true, priority: false, reason: "Uzman kontrolü tamamlandı" } : item));
@@ -312,6 +326,7 @@ export default function MihenkStudio() {
     setReportReview(items => items.map((item, i) => i === index ? (item === "done" ? "pending" : "done") : item));
   }
 
+  const selectedDuration = timeToSeconds(selectedRecord.duration);
   const waveform = Array.from({ length: 144 }, (_, i) => {
     const envelope = 0.34 + 0.43 * Math.abs(Math.sin(i * 0.071)) + 0.18 * Math.abs(Math.sin(i * 0.29));
     const height = Math.max(5, Math.round(envelope * (19 + 17 * Math.abs(Math.sin(i * 0.43)))));
@@ -500,7 +515,7 @@ export default function MihenkStudio() {
           setSegmentDraft(nextSegments[0].text);
           setSegmentFilter("Öncelikli");
           setSegmentSearch("");
-          setCurrentTime(Number(nextSegments[0].start.slice(6, 8)) || 0);
+          setCurrentTime(timeToSeconds(nextSegments[0].start));
         }}><span className="st-recording-number">{String(index + 1).padStart(2, "0")}</span><span className="st-recording-main"><strong>{record.name}</strong><small>{record.duration} · {record.size}</small><Badge tone={record.tone}>{record.status}</Badge></span><span className="st-recording-markers">{record.markers > 0 ? record.markers + " işaret" : "✓"}</span></button>)}
                 <div className="st-recording-legend"><span><i className="amber" /> Kontrol gerektiriyor</span><span><i className="green" /> Kontrol edildi</span></div>
               </section>
@@ -515,9 +530,9 @@ export default function MihenkStudio() {
                   selectSegment(segments[index]);
                 }} role="button" tabIndex={0} aria-label="Dalga biçimi üzerinde zaman aralığı seç">
                   <div className="st-wave-time"><span>00:00:00</span><span>00:04:21</span><span>00:08:42</span></div>
-                  <svg viewBox="0 0 620 56" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="28" x2="620" y2="28" className="wave-axis" />{waveform.map((bar, index) => <line key={index} x1={bar.x} y1={bar.y} x2={bar.x} y2={bar.y + bar.height} className={index > 42 && index < 61 ? "wave-bar selected" : "wave-bar"} />)}<rect x="182" y="3" width="76" height="50" rx="4" className="wave-selection" /></svg><div className="st-wave-playhead" style={{ left: Math.min(96, currentTime / 522 * 100) + "%" }} />
+                  <svg viewBox="0 0 620 56" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="28" x2="620" y2="28" className="wave-axis" />{waveform.map((bar, index) => <line key={index} x1={bar.x} y1={bar.y} x2={bar.x} y2={bar.y + bar.height} className={index > 42 && index < 61 ? "wave-bar selected" : "wave-bar"} />)}<rect x="182" y="3" width="76" height="50" rx="4" className="wave-selection" /></svg><div className="st-wave-playhead" style={{ left: Math.min(96, currentTime / Math.max(1, selectedDuration) * 100) + "%" }} />
                 </div>
-                <div className="st-player-controls"><button type="button" className="st-player-main" onClick={() => setPlaying(value => !value)} aria-label={playing ? "Duraklat" : "Oynat"}><Icon name={playing ? "pause" : "play"} size={17} /></button><button type="button" className="st-player-skip" onClick={() => setCurrentTime(Math.max(0, currentTime - 5))}>−5 sn</button><button type="button" className="st-player-skip" onClick={() => setCurrentTime(currentTime + 5)}>+5 sn</button><div className="st-player-time"><strong>00:00:{String(Math.floor(currentTime)).padStart(2, "0")}</strong><span>/ 00:08:42</span></div><select value={playbackRate} onChange={event => setPlaybackRate(event.target.value)} aria-label="Oynatma hızı"><option>0.75×</option><option>0.85×</option><option>1.0×</option><option>1.25×</option><option>1.5×</option></select><button type="button" className={"st-loop-button" + (loopAB ? " active" : "")} onClick={() => setLoopAB(value => !value)}><Icon name="rotate" size={14} />A–B</button></div>
+                <div className="st-player-controls"><button type="button" className="st-player-main" onClick={() => setPlaying(value => !value)} aria-label={playing ? "Duraklat" : "Oynat"}><Icon name={playing ? "pause" : "play"} size={17} /></button><button type="button" className="st-player-skip" onClick={() => setCurrentTime(Math.max(0, currentTime - 5))}>−5 sn</button><button type="button" className="st-player-skip" onClick={() => setCurrentTime(currentTime + 5)}>+5 sn</button><div className="st-player-time"><strong>{formatClock(currentTime)}</strong><span>/ {formatClock(selectedDuration)}</span></div><select value={playbackRate} onChange={event => setPlaybackRate(event.target.value)} aria-label="Oynatma hızı"><option>0.75×</option><option>0.85×</option><option>1.0×</option><option>1.25×</option><option>1.5×</option></select><button type="button" className={"st-loop-button" + (loopAB ? " active" : "")} onClick={() => setLoopAB(value => !value)}><Icon name="rotate" size={14} />A–B</button></div>
                 <div className="st-transcript-head"><div><h3>Transkript</h3><span>Tüm metin · zaman bağlantılı · uzman düzeltmesi</span></div><div className="st-transcript-tools"><button type="button" onClick={() => notify("Transkriptte arama alanı yukarıda kullanılabilir.")}><Icon name="search" size={14} /> Ara</button><button type="button" onClick={() => notify("Konuşmacı görünüm filtresi.")}><Icon name="users" size={14} /> Konuşmacılar</button></div></div>
                 <div className="st-segment-list">{filteredSegments.map(segment => <button type="button" key={segment.id} className={"st-segment-row" + (selectedSegment === segment.id ? " selected" : "") + (segment.reviewed ? " reviewed" : "")} onClick={() => selectSegment(segment)}><span className="st-segment-time">{segment.start}<small>{segment.end}</small></span><span className="st-segment-copy"><strong>{segment.speaker}</strong><span>{segment.text}</span>{segment.priority && !segment.reviewed && <em><Icon name="alert" size={12} /> {segment.reason}</em>}</span><span className={"st-segment-status " + (segment.reviewed ? "done" : "pending")}>{segment.reviewed ? <Icon name="check" size={14} /> : "!"}</span></button>)}
                   {filteredSegments.length === 0 && <div className="st-empty-mini">Bu filtrede segment yok. Tüm segmentleri seçerek tam metne dönebilirsiniz.</div>}
