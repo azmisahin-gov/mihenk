@@ -1,58 +1,90 @@
-# MİHENK v0.5 UI prototipi — deneme notları
+# MİHENK v0.5 — yüksek doğruluklu arayüz inceleme prototipi
 
-> **Amaç:** Kabul edilen Wireframe v0.5 ekranlarını tek bir masaüstü uygulamasında, birbirine bağlı gezinmeyle görsel olarak değerlendirmek.
+> **Amaç:** Proje sahibinin kabul ettiği [Wireframe v0.5](https://github.com/azmisahin-gov/mihenk-arge/blob/main/docs/02-urun/56-12-wireframe-v0.5.md) tasarımını, masaüstü uygulamasında gerçek ürüne yakın görsel hiyerarşi ve gezilebilir çalışma akışlarıyla incelemek.
 >
-> **Sınır:** Bu paket pilot yazılımı değildir. Gerçek vaka, kişi, dosya, ses veya transkript verisi kullanmayın.
+> **Önemli sınır:** Bu paket üretim sürümü, pilot kabulü, bilirkişi raporu üreticisi veya UYAP uyumluluk kanıtı değildir. Yalnızca sentetik örnek içerir. Gerçek dava, kişi, belge, ses veya transkript verisi kullanmayın.
 
-## Prototip kapsamı
+## Tasarım kapsamı
 
-Bu mod, ekranları sentetik örneklerle birbirine bağlar:
+Yeni inceleme arayüzü `src/prototype/MihenkStudio.tsx` ve `src/prototype/studio.css` dosyalarındadır. Var olan `WireframePrototype.tsx` ilk taslak referansı olarak korunur. Prototip, yalnızca `VITE_UI_PROTOTYPE=true` ile açılır; normal başlangıçta mevcut uygulama (`App`) çalışmaya devam eder.
 
-- Görevlerim ve görev listesi
-- Yeni görevlendirme / örnek taslak oluşturma
-- Görev özeti ve görevlendirme alanları
-- Materyal envanteri
-- Çoklu kayıt listesi, kontrol önceliği ve tam transkript görünümü
-- Örnek soru/yanıt ve dayanak bağlantısı
-- Tek raporun iki sayfalı A4 yerleşim önizlemesi
-- Bilirkişi Profili / Uzmanlık Alanlarım
-- Uzmanlık Modülleri / 56.12 Motorlar ve Modeller
-- Daraltılabilir ana menü
+### Ana gezinme ve ekranlar
 
-Etkileşimler yalnızca prototip ekranındaki görünümü değiştirir. Dosya seçimi/yüklemesi, OCR, gerçek ses oynatma, ASR, ses işleme, kasa kaydı, kalıcı görev kaydı, DOCX/ODT dışa aktarma, imza ve resmî teslim yapılmaz. Devre dışı araçlar bu nedenle çalışıyor gibi sunulmaz.
+| Wireframe alanı | İnceleme prototipindeki ekran | Görsel/etkileşim kapsamı |
+|---|---|---|
+| Ana menü / Genel Bakış | Genel Bakış | İş öncelikleri, açık görevler, teslim tarihleri, görev ilerlemesi ve işlem geçmişi |
+| Görevlerim | Görevlerim | Arama, durum filtreleri, görev tablosu, ilerleme ve göreve geçiş |
+| Yeni görevlendirme | Yeni görevlendirme | Sabit sihirbaz değil; belge kabulü, otomatik çıkarım örneği, kaynak sayfası, istisna teyidi, beklenen materyaller ve taslak görev alanı |
+| Görev çalışma alanı | Görev Özeti | Sonraki işler, ilerleme, materyal görünümü ve altı görev sekmesi |
+| Görevlendirme | Görevlendirme | Kaynak belgeye bağlı alanlar, kapsam ve teyit bekleyen istisnalar |
+| Materyaller | Materyaller | Beklenen/teslim alınan ayrımı, çoklu kayıt envanteri, teknik metadata ve bütünlük alanı |
+| Ana ses inceleme tezgâhı | Ses ve Transkript | Kayıt listesi, kontrol sırası, dalga biçimi, oynatıcı kontrol görünümü, tam transkript, uzman metin düzeltmesi, kontrol nedenleri, orijinal/işlenmiş kopya, kanal, A–B ve spektrogram kontrolleri |
+| Sorular ve Bulgular | Sorular ve Bulgular | Görevlendirme sıralı sorular, yanıt alanları, kaynak dayanağı, bulgu ve kayıt bağlantıları |
+| Tek rapor / A4 | Tek Rapor | Bölüm ağacı, iki sayfalı A4 önizleme, kalite kontrol listesi, engeller ve revizyon geçmişi |
+| Profil ≠ modül | Bilirkişi Profilim | Meslekî uzmanlık, sicil, yetkinlik ve belge alanları |
+| Modül kataloğu | Uzmanlık Modülleri | 56.12 modül özeti ve modül alt alanlarına geçiş |
+| Motorlar ve Modeller | Motorlar ve Modeller | Aday motorlar, etkin profil yok durumu, benchmark ve kabul kapıları |
+| Ses Araçları | Ses Araçları | Dinleme, kanal seçimi, gürültü azaltma, spektrogram, işlenmiş kopya ve işlem geçmişi tasarımı |
+| Dil ve Metin | Dil ve Metin | VAD, anonim konuşmacı gruplama, noktalama ve serbest LLM sınırı |
+| Test geçmişi | Test Geçmişi | Veri seti, WER/CER, kritik hata, donanım, lisans ve uzman kabul kapıları |
+| Kasa ve Güvenlik | Kasa ve Güvenlik | Yerel kasa, güvenlik yapılandırması ve denetim izi görünümü |
+| Uygulama ayarları | Uygulama Ayarları | Görünüm, erişilebilirlik ve yerel çalışma tercihleri |
 
-## Mevcut uygulamadan ayrım
+## Deneyim ve görsel tasarım kararları
 
-Varsayılan açılışta mevcut MİHENK uygulaması çalışmaya devam eder. Prototip yalnızca derleme sırasında VITE_UI_PROTOTYPE=true verildiğinde açılır. Bu seçim mevcut şifreli kasa, ses işleme, ASR, transkript revizyonları ve rapor kodunu silmez veya değiştirmez.
+- Sol menü, wireframe'deki ana hiyerarşiyi korur; daraltma aynı hedefleri aynı sırada bırakır.
+- Açık zemin, koyu yeşil gezinme alanı, sınırlı durum renkleri, tutarlı kart/alan/başlık hiyerarşisi ve daha geniş çalışma boşlukları kullanılır.
+- Ses ekranı üç çalışma sütununa ayrılır: kayıt kuyruğu, ses + tam transkript ve dinleme/teknik araçlar.
+- Kontrol önceliği, doğruluk yüzdesi olarak sunulmaz. Her işaretin nedeni açıklanır ve tüm kayıt/segmentlere erişim korunur.
+- Segment düzeltmesi, soru yanıtı ve rapor kontrol listesi prototip ekranında etkileşimlidir; gerçek kasaya yazılmaz.
+- Rapor görünümü A4 oranını ve sayfa akışını örnekler; gerçek DOCX/ODT çıktısı veya UYAP Editör uyumluluğu üretmez.
+- Dar masaüstü/tablet ve mobil genişliklerde menü, tablolar, üç sütunlu ses ekranı ve rapor önizlemesi yeniden akışa girer. Gerçek cihaz görsel kabulü ayrıca yapılmalıdır.
+- Tipografi sistem fontlarına dayanır; prototip uzaktan font veya görsel varlık indirmeye ihtiyaç duymaz.
 
-Yerel geliştirme:
+## Etkileşim sınırı — çalışan demo / gerçek işlev ayrımı
 
-- PowerShell: $env:VITE_UI_PROTOTYPE="true"; npm run dev
-- macOS/Linux: VITE_UI_PROTOTYPE=true npm run dev
+**Prototip içinde çalışan görsel davranışlar:** ana menü ve sekme geçişleri, görev araması ve filtreleri, sentetik görev açma, örnek belge kartını gösterme/gizleme, segment seçimi ve örnek metin düzenlemesi, kontrol edildi işaretleme, oynatıcı kontrollerinin görsel durumu, hız/A–B/kanal/işlenmiş kopya/spektrogram görünümlerinin değiştirilmesi, soru yanıt taslağı ve dayanak işaretleri, rapor sayfası seçimi, kalite kontrol kutuları ve yerel demo menü tercihi.
 
-Varsayılan uygulamayı açmak için değişkeni tanımlamayın veya false verin.
+**Gerçekleştirilmeyen üretim işlemleri:** dosya içeriğinin yüklenmesi veya okunması, OCR, gerçek ASR, ses oynatma/işleme, gürültü azaltma, kanal ayırma, VAD, diarization, model kurulumu, benchmark, Stronghold kasa kaydı, dosya hash hesaplama, gerçek revizyon/audit persistence, DOCX/ODT üretimi, elektronik imza, UYAP aktarımı veya gönderimi.
 
-## Deneme paketleri
+Görsel prototipte bir araç kontrolünün etkileşimli olması, ilgili ses/belge/AI işleminin gerçekten çalıştığı anlamına gelmez. Gerçek işlem gerektiren düğmeler ya yalnız görsel durumu değiştirir ya da açıkça devre dışıdır; kullanıcıya sahte bir başarı sonucu gösterilmez.
 
-PR #46 doğrulama iş akışı, yalnızca bu PR için branch artifact'ları üretir:
+## Çalıştırma
 
-- Linux: AppImage ve DEB
-- Windows: NSIS kurulum dosyası ve MSI
-- Artifact saklama süresi: 14 gün
-- İmza yoktur; GitHub Release, preview etiketi veya otomatik güncelleme kanalı oluşturulmaz.
+Gerekli Node sürümü proje `package.json` içinde tanımlıdır.
 
-Paketleri PR #46 sayfasındaki Actions / Checks bölümünde ilgili workflow run'ın Artifacts alanından indirin. Her platform paketi yalnızca kendi işletim sisteminde denenmelidir.
+**Windows PowerShell**
+```powershell
+$env:VITE_UI_PROTOTYPE="true"
+npm run dev
+```
 
-## Görsel inceleme ölçütleri
+**macOS / Linux**
+```bash
+VITE_UI_PROTOTYPE=true npm run dev
+```
 
-1. Menü açık/dar hâli ve her ana bölüme dönüş.
-2. Görev listesinden görev alanına geçiş ve altı görev sekmesi.
-3. Yeni görevlendirmenin sabit wizard olmadan taslak akışını anlatması.
-4. Beklenen/teslim alınan materyal ayrımı.
-5. Birden çok kayıt, öncelik kuyruğu ve tam transkriptin aynı tezgâhta yer alması.
-6. Konuşmacı etiketlerinin anonim kalması ve öncelik işaretlerinin doğruluk yüzdesi gibi sunulmaması.
-7. Soruların sıralı olması ve yanıt-dayanak ilişkisinin görünmesi.
-8. Tek rapor ve tüm A4 sayfalarının önizleme düzeni.
-9. Profil uzmanlık alanları ile yazılım modülü ve motor ayarlarının ayrılması.
+Normal uygulamayı başlatmak için `VITE_UI_PROTOTYPE` değişkenini tanımlamayın veya `false` yapın.
 
-Görsel onay, gerçek işlev kabulü, güvenlik incelemesi, uzman kabulü veya UYAP uyumluluğu değildir. Bu kapılar sonraki aşamada ayrı kanıtlarla tamamlanacaktır.
+## Görsel kabul kontrolü
+
+Aşağıdaki inceleme yerel/kurulu uygulamada proje sahibi tarafından tamamlanmalıdır. CI derlemesi tek başına görsel kabul değildir.
+
+- [ ] Geniş ve dar ana menüde aynı gezinme hedefleri ve aktif durum
+- [ ] Genel Bakış → Görevlerim → Yeni görevlendirme → görev alanına dönüş
+- [ ] Görevlendirme belgesi, kaynağa bağlı alanlar ve beklenen/teslim alınan materyal farkı
+- [ ] Görev içi altı sekme ve görevler listesine kesintisiz dönüş
+- [ ] Ses tezgâhında beş kayıt, filtreler, tam metin, zaman seçimi, düzeltme ve kontrol nedeni
+- [ ] Orijinal/işlenmiş kopya ayrımı ve görsel araçların gerçek ses işlemi yapmadığının anlaşılması
+- [ ] Soruların sırası, yanıt alanları ve kaynak dayanakları
+- [ ] Tek rapor A4 sayfaları, kalite kontrolü, revizyon izi ve UYAP iddiası bulunmaması
+- [ ] Profil, modül, motor, ses araçları ve dil yardımcıları hiyerarşisi
+- [ ] Kasa/güvenlik ve uygulama ayarları ekranları
+- [ ] Dar pencere, kaydırma alanları, Türkçe karakterler, okunabilirlik ve odak görünümü
+
+## Paket ve yayın sınırı
+
+- Bu çalışma PR #46 taslağında kalır; `main` dalına birleştirilmez.
+- Deneme paketleri yalnız PR'a bağlı GitHub Actions artifact'larıdır; GitHub Release veya updater paketi değildir.
+- Mevcut `preview` etiketi ve genel kullanıcı yayını değiştirilmez.
+- Görsel kabulden sonra gerçek işlevlerin entegrasyonu ayrı iş kalemleri ve test kapılarıyla yürütülür.
