@@ -152,6 +152,14 @@ export default function App() {
   const [assignmentProfileBusy, setAssignmentProfileBusy] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeNavigation, setActiveNavigation] = useState<"tasks" | "audio" | "transcripts" | "reports">("audio");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("mihenk.ui.sidebar-collapsed") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [currentTime, setCurrentTime] = useState(0);
   const [repeatSegmentId, setRepeatSegmentId] = useState<string | null>(null);
   const [notice, setNotice] = useState("Ses seçerek çalışma alanını başlatın.");
@@ -186,6 +194,14 @@ export default function App() {
   const saveRevisionRef = useRef(0);
   const allowWindowCloseRef = useRef(false);
   const windowCloseInProgressRef = useRef(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("mihenk.ui.sidebar-collapsed", String(sidebarCollapsed));
+    } catch {
+      // Menü tercihi kalıcılaştırılamazsa gezinme yine kullanılabilir kalır.
+    }
+  }, [sidebarCollapsed]);
 
   useLayoutEffect(() => {
     recordsRef.current = records;
@@ -1350,20 +1366,33 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand">
           <div className="brand-mark">M</div>
-          <div>
+          <div className="brand-copy">
             <div className="brand-name">MİHENK</div>
             <div className="brand-caption">Bilirkişi çalışma alanı</div>
           </div>
+          <button
+            className="sidebar-toggle"
+            type="button"
+            aria-label={sidebarCollapsed ? "Ana menüyü genişlet" : "Ana menüyü daralt"}
+            aria-controls="primary-navigation"
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? "Ana menüyü genişlet" : "Ana menüyü daralt"}
+            onClick={() => setSidebarCollapsed((current) => !current)}
+          >
+            <span aria-hidden="true">{sidebarCollapsed ? "»" : "«"}</span>
+          </button>
         </div>
 
         <div className="workspace-label">ÇALIŞMA ALANI</div>
-        <nav className="nav-list" aria-label="Ana menü">
+        <nav className="nav-list" id="primary-navigation" aria-label="Ana menü">
           <button
             className={`nav-item ${activeNavigation === "tasks" ? "active" : ""}`}
             type="button"
+            aria-label="Görevler"
+            title="Görevler"
             aria-current={activeNavigation === "tasks" ? "page" : undefined}
             onClick={() => navigateToWorkspaceSection("tasks")}
           >
@@ -1373,6 +1402,8 @@ export default function App() {
           <button
             className={`nav-item ${activeNavigation === "audio" ? "active" : ""}`}
             type="button"
+            aria-label="Ses çalışma alanı"
+            title="Ses çalışma alanı"
             aria-current={activeNavigation === "audio" ? "page" : undefined}
             onClick={() => navigateToWorkspaceSection("audio")}
           >
@@ -1382,6 +1413,8 @@ export default function App() {
           <button
             className={`nav-item ${activeNavigation === "transcripts" ? "active" : ""}`}
             type="button"
+            aria-label="Transkriptler"
+            title="Transkriptler"
             aria-current={activeNavigation === "transcripts" ? "page" : undefined}
             onClick={() => navigateToWorkspaceSection("transcripts")}
           >
@@ -1391,6 +1424,8 @@ export default function App() {
           <button
             className={`nav-item ${activeNavigation === "reports" ? "active" : ""}`}
             type="button"
+            aria-label="Raporlar"
+            title="Raporlar"
             aria-current={activeNavigation === "reports" ? "page" : undefined}
             onClick={() => navigateToWorkspaceSection("reports")}
           >
