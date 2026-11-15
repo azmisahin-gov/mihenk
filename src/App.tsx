@@ -947,6 +947,16 @@ export default function App() {
 
   function removeSegment(segmentId: string): void {
     if (!activeRecord) return;
+    const evidenceRef = `${activeRecord.id}:${segmentId}`;
+    const isReferencedByActiveQuestion = Boolean(activeAssignment?.questions.some((question) =>
+      (activeAssignment.questionAnswers ?? []).some((answer) =>
+        answer.question === question && answer.supportingSegmentRefs.includes(evidenceRef)
+      )
+    ));
+    if (isReferencedByActiveQuestion) {
+      setNotice("Bu segment görev sorularında dayanak olarak kullanılıyor. Önce ilgili sorudaki dayanak bağlantısını kaldırın.");
+      return;
+    }
     if (repeatSegmentId === segmentId) setRepeatSegmentId(null);
     updateRecord(activeRecord.id, (record) => ({
       ...record,
